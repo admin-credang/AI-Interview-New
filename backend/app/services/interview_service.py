@@ -5,6 +5,45 @@ from app.models.session import InterviewSession
 from app.models.question import Question
 
 
+def get_main_question(
+    db: Session,
+    question: Question
+) -> Question:
+    if question.parent_question_id is None:
+        return question
+
+    main_question = (
+        db.query(Question)
+        .filter(
+            Question.id == question.parent_question_id,
+            Question.session_id == question.session_id,
+        )
+        .first()
+    )
+
+    if main_question is None:
+        raise ValueError("Main question not found")
+
+    return main_question
+
+
+def get_main_question_number(
+    db: Session,
+    question: Question
+) -> int:
+    main_question = get_main_question(db=db, question=question)
+
+    return (
+        db.query(Question)
+        .filter(
+            Question.session_id == main_question.session_id,
+            Question.parent_question_id.is_(None),
+            Question.question_order <= main_question.question_order,
+        )
+        .count()
+    )
+
+
 def get_current_question(
     db: Session,
     session_id: UUID

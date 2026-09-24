@@ -30,6 +30,12 @@ class Question(Base):
         nullable=False
     )
 
+    parent_question_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("questions.id"),
+        nullable=True
+    )
+
     question: Mapped[str] = mapped_column(
         Text,
         nullable=False

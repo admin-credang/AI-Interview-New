@@ -10,6 +10,7 @@ from app.api.interview_configurations import (
 from app.api import answers
 from app.api import questions
 from app.api import reports
+from app.api import dialogflow_webhook
 app = FastAPI(
     title="AI Interview Agent API",
     version="1.0.0"
@@ -21,6 +22,7 @@ app.include_router(interview_configuration_router)
 app.include_router(answers.router)
 app.include_router(questions.router)
 app.include_router(reports.router)
+app.include_router(dialogflow_webhook.router)
 @app.get("/")
 def root():
     return {

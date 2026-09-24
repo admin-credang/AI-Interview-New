@@ -54,11 +54,24 @@ Calculate the overall score as the average of the five scores.
 
 Determine whether a follow-up question is required.
 
-A follow-up should be required when:
-- the answer is incomplete,
-- the answer contains a technical misunderstanding,
-- the answer is too shallow for the expected knowledge level,
-- or additional clarification is useful.
+A follow-up question should be required ONLY when the candidate's answer
+has a meaningful gap that prevents proper evaluation of the candidate's
+knowledge.
+
+Require a follow-up when:
+- the answer is substantially incomplete,
+- the answer contains a meaningful technical misunderstanding,
+- the answer is significantly too shallow for the expected knowledge level,
+- or an important part of the question is unanswered.
+
+Do NOT require a follow-up for:
+- minor wording issues,
+- small omissions that do not affect correctness,
+- grammar mistakes,
+- lack of code formatting when the explanation is otherwise sufficient.
+
+If the answer is reasonably correct and demonstrates the expected knowledge,
+set follow_up_required to false.
 
 If follow-up is not required, follow_up_question must be null.
 

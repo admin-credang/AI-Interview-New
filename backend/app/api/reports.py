@@ -44,14 +44,15 @@ def get_interview_report(
             detail="Interview session not found"
         )
 
-    # Candidate can only access their own report
-    if (
-        current_user.role == "candidate"
-        and session.candidate_id != current_user.id
-    ):
+    # Evaluation reports are for the hiring team only.
+    # Candidates are told the result by call / e-mail.
+    if current_user.role == "candidate":
         raise HTTPException(
             status_code=403,
-            detail="You can only access your own report"
+            detail=(
+                "Interview reports are shared by the "
+                "hiring team only"
+            )
         )
 
     try:

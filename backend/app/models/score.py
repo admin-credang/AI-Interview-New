@@ -1,7 +1,7 @@
 import uuid
 from decimal import Decimal
 
-from sqlalchemy import Numeric, ForeignKey
+from sqlalchemy import Numeric, ForeignKey, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -14,44 +14,42 @@ class Score(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         primary_key=True,
-        server_default=__import__(
-            "sqlalchemy"
-        ).func.gen_random_uuid()
+        server_default=func.gen_random_uuid(),
     )
 
     answer_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("answers.id", ondelete="CASCADE"),
         nullable=False,
-        unique=True
+        unique=True,
     )
 
     relevance: Mapped[Decimal | None] = mapped_column(
         Numeric(5, 2),
-        nullable=True
+        nullable=True,
     )
 
     accuracy: Mapped[Decimal | None] = mapped_column(
         Numeric(5, 2),
-        nullable=True
+        nullable=True,
     )
 
     technical_knowledge: Mapped[Decimal | None] = mapped_column(
         Numeric(5, 2),
-        nullable=True
+        nullable=True,
     )
 
     completeness: Mapped[Decimal | None] = mapped_column(
         Numeric(5, 2),
-        nullable=True
+        nullable=True,
     )
 
     communication: Mapped[Decimal | None] = mapped_column(
         Numeric(5, 2),
-        nullable=True
+        nullable=True,
     )
 
     overall_score: Mapped[Decimal | None] = mapped_column(
         Numeric(5, 2),
-        nullable=True
+        nullable=True,
     )

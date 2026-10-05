@@ -6,7 +6,11 @@ from app.config import settings
 
 engine = create_engine(
     settings.database_url,
-    pool_pre_ping=True
+    pool_pre_ping=True,
+    # keep a few connections warm instead of reconnecting
+    pool_size=10,
+    max_overflow=20,
+    pool_recycle=1800,
 )
 
 SessionLocal = sessionmaker(

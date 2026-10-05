@@ -24,7 +24,7 @@ router = APIRouter(
 
 @router.post(
     "",
-    response_model=EvaluationResponse,
+    response_model=None,
     status_code=status.HTTP_201_CREATED
 )
 def submit_answer(
@@ -47,8 +47,18 @@ def submit_answer(
             detail="Only candidates can submit answers"
         )
 
-    return process_answer(
+    result = process_answer(
         db=db,
         answer_data=answer_data,
         candidate_id=current_user.id
     )
+
+    # Candidates never receive scores or AI feedback. The
+    # evaluation is saved for the interviewer's report only.
+    return {
+        "answer_id": result.answer_id,
+        "follow_up_required": result.follow_up_required,
+        "follow_up_question": result.follow_up_question,
+        "next_action": result.next_action,
+        "next_question": result.next_question,
+    }

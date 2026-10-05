@@ -1,0 +1,3310 @@
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import {
+  FaceLandmarker,
+  FilesetResolver,
+} from "@mediapipe/tasks-vision";
+import api from "../api";
+
+/*
+ * ============================================================
+ * HELPERS
+ * ============================================================
+ */
+
+function isTrue(value) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    return value === 1;
+  }
+
+  if (typeof value === "string") {
+    return ["true", "1", "yes", "y"].includes(
+      value.trim().toLowerCase()
+    );
+  }
+
+  return false;
+}
+
+function normalizeAction(value) {
+  if (!value) {
+    return "";
+  }
+
+  return String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+function getParameterSources(data) {
+  return [
+    data?.parameters,
+    data?.sessionInfo?.parameters,
+    data?.session_info?.parameters,
+    data?.data?.parameters,
+    data?.result?.parameters,
+    data?.response?.parameters,
+  ].filter(
+    (value) =>
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value)
+  );
+}
+
+function getMergedParameters(data) {
+  const sources = getParameterSources(data);
+
+  return Object.assign({}, ...sources);
+}
+
+function normalizeValue(value) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed || null;
+  }
+
+  if (
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => normalizeValue(item))
+      .filter(
+        (item) =>
+          item !== null &&
+          item !== undefined &&
+          item !== ""
+      );
+  }
+
+  if (typeof value === "object") {
+    return (
+      normalizeValue(value.value) ??
+      normalizeValue(value.text) ??
+      normalizeValue(value.answer) ??
+      normalizeValue(value.question) ??
+      null
+    );
+  }
+
+  return String(value);
+}
+
+function normalizeQuestion(rawQuestion, fallback = {}) {
+  if (!rawQuestion) {
+    return null;
+  }
+
+  if (typeof rawQuestion === "string") {
+    const questionText = rawQuestion.trim();
+
+    if (!questionText) {
+      return null;
+    }
+
+    return {
+      id:
+        fallback.id ||
+        fallback.question_id ||
+        fallback.questionId ||
+        null,
+
+      question: questionText,
+
+      question_number:
+        Number(
+          fallback.question_number ??
+            fallback.questionNumber ??
+            1
+        ) || 1,
+
+      question_type:
+        fallback.question_type ||
+        fallback.questionType ||
+        "technical",
+
+      category:
+        fallback.category ||
+        "technical",
+
+      difficulty:
+        fallback.difficulty ||
+        null,
+
+      is_follow_up: isTrue(
+        fallback.is_follow_up ??
+          fallback.isFollowUp
+      ),
+
+      parent_question_id:
+        fallback.parent_question_id ||
+        fallback.parentQuestionId ||
+        null,
+    };
+  }
+
+  const questionText = String(
+    rawQuestion.question ||
+      rawQuestion.text ||
+      rawQuestion.question_text ||
+      rawQuestion.questionText ||
+      ""
+  ).trim();
+
+  if (!questionText) {
+    return null;
+  }
+
+  return {
+    id:
+      rawQuestion.id ||
+      rawQuestion.question_id ||
+      rawQuestion.questionId ||
+      fallback.id ||
+      fallback.question_id ||
+      fallback.questionId ||
+      null,
+
+    question: questionText,
+
+    question_number:
+      Number(
+        rawQuestion.question_number ??
+          rawQuestion.questionNumber ??
+          fallback.question_number ??
+          fallback.questionNumber ??
+          1
+      ) || 1,
+
+    question_type:
+      rawQuestion.question_type ||
+      rawQuestion.questionType ||
+      fallback.question_type ||
+      fallback.questionType ||
+      "technical",
+
+    category:
+      rawQuestion.category ||
+      fallback.category ||
+      "technical",
+
+    difficulty:
+      rawQuestion.difficulty ||
+      fallback.difficulty ||
+      null,
+
+    is_follow_up: isTrue(
+      rawQuestion.is_follow_up ??
+        rawQuestion.isFollowUp ??
+        fallback.is_follow_up ??
+        fallback.isFollowUp
+    ),
+
+    parent_question_id:
+      rawQuestion.parent_question_id ||
+      rawQuestion.parentQuestionId ||
+      fallback.parent_question_id ||
+      fallback.parentQuestionId ||
+      null,
+  };
+}
+
+/*
+ * ============================================================
+ * COMPONENT
+ * ============================================================
+ */
+
+export default function InterviewSession() {
+  const { interviewId, sessionId } = useParams();
+  const navigate = useNavigate();
+
+  /*
+   * ============================================================
+   * STATE
+   * ============================================================
+   */
+
+  const [phase, setPhase] = useState("loading");
+
+  const [currentQuestion, setCurrentQuestion] =
+    useState(null);
+
+  const [questionNumber, setQuestionNumber] =
+    useState(1);
+
+  const [answer, setAnswer] = useState("");
+
+  const [lastAnswer, setLastAnswer] =
+    useState("");
+
+  const [error, setError] = useState("");
+
+  const [processing, setProcessing] =
+    useState(false);
+
+  const [elapsedSeconds, setElapsedSeconds] =
+    useState(0);
+
+  const [followUpQuestion, setFollowUpQuestion] =
+    useState(null);
+
+  const [
+    followUpConfirmation,
+    setFollowUpConfirmation,
+  ] = useState(false);
+
+  const [isListening, setIsListening] =
+    useState(false);
+
+  const [isSpeaking, setIsSpeaking] =
+    useState(false);
+
+  const [voiceSupported, setVoiceSupported] =
+    useState(false);
+
+  const [autoSubmitVoice, setAutoSubmitVoice] =
+    useState(false);
+
+  const [cameraEnabled, setCameraEnabled] =
+    useState(false);
+
+  /*
+   * Face / Eye monitoring state
+   */
+
+  const [faceStatus, setFaceStatus] =
+    useState("Initializing");
+
+  const [faceCount, setFaceCount] =
+    useState(0);
+
+  const [eyeStatus, setEyeStatus] =
+    useState("Checking");
+
+  /*
+   * ============================================================
+   * REFS
+   * ============================================================
+   */
+
+  const mountedRef = useRef(true);
+
+  const processingRef = useRef(false);
+
+  const completedRef = useRef(false);
+
+  /*
+   * Prevent duplicate termination.
+   */
+  const terminatedRef = useRef(false);
+
+  const currentQuestionRef =
+    useRef(null);
+
+  const recognitionRef =
+    useRef(null);
+
+  const streamRef =
+    useRef(null);
+
+  const videoRef =
+    useRef(null);
+
+  const speechGenerationRef =
+    useRef(0);
+
+  const submitAnswerRef =
+    useRef(null);
+
+  /*
+   * Face monitoring refs
+   */
+  const faceLandmarkerRef =
+    useRef(null);
+
+  const faceMonitoringRef =
+    useRef(false);
+
+  const faceAnimationFrameRef =
+    useRef(null);
+
+  const eyesClosedSinceRef =
+    useRef(null);
+
+  /*
+   * ============================================================
+   * TERMINATE INTERVIEW
+   * ============================================================
+   */
+
+  const terminateInterview =
+    useCallback(
+      async (reason) => {
+        if (
+          terminatedRef.current ||
+          completedRef.current ||
+          !sessionId
+        ) {
+          return;
+        }
+
+        terminatedRef.current = true;
+
+        console.warn(
+          "=========================================="
+        );
+
+        console.warn(
+          "INTERVIEW TERMINATED"
+        );
+
+        console.warn(
+          "Reason:",
+          reason
+        );
+
+        console.warn(
+          "Session ID:",
+          sessionId
+        );
+
+        console.warn(
+          "=========================================="
+        );
+
+        /*
+         * Stop speech recognition.
+         */
+        if (recognitionRef.current) {
+          try {
+            recognitionRef.current.stop();
+          } catch {}
+        }
+
+        /*
+         * Stop speech synthesis.
+         */
+        window.speechSynthesis?.cancel();
+
+        /*
+         * Stop face monitoring.
+         */
+        faceMonitoringRef.current = false;
+
+        if (
+          faceAnimationFrameRef.current
+        ) {
+          cancelAnimationFrame(
+            faceAnimationFrameRef.current
+          );
+
+          faceAnimationFrameRef.current =
+            null;
+        }
+
+        /*
+         * Stop camera.
+         */
+        if (streamRef.current) {
+          streamRef.current
+            .getTracks()
+            .forEach((track) => {
+              track.stop();
+            });
+
+          streamRef.current = null;
+        }
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = null;
+        }
+
+        /*
+         * Backend termination.
+         */
+        try {
+          await api.post(
+            "/interview-monitoring/terminate",
+            {
+              session_id: sessionId,
+              reason,
+            }
+          );
+
+          console.log(
+            "Interview termination API success."
+          );
+        } catch (err) {
+          console.error(
+            "Interview termination API error:",
+            err
+          );
+        }
+
+        /*
+         * Prevent further interview actions.
+         */
+        completedRef.current = true;
+        processingRef.current = false;
+
+        if (mountedRef.current) {
+          setProcessing(false);
+          setCameraEnabled(false);
+
+          setPhase("terminated");
+
+          /*
+           * Existing route.
+           * No new /interview-ended route required.
+           */
+          navigate(
+            `/interviews/${interviewId}`,
+            {
+              replace: true,
+            }
+          );
+        }
+      },
+      [
+        interviewId,
+        sessionId,
+        navigate,
+      ]
+    );
+
+  /*
+   * ============================================================
+   * TAB / PAGE SWITCH MONITORING
+   * ============================================================
+   */
+
+  useEffect(() => {
+    if (!sessionId) {
+      return;
+    }
+
+    const handleVisibilityChange =
+      () => {
+        /*
+         * Candidate came back to the page.
+         * But if interview was already terminated,
+         * do nothing.
+         */
+        if (!document.hidden) {
+          return;
+        }
+
+        if (completedRef.current) {
+          return;
+        }
+
+        if (terminatedRef.current) {
+          return;
+        }
+
+        /*
+         * Candidate left interview page/tab.
+         */
+        terminateInterview(
+          "candidate_left_interview_page"
+        );
+      };
+
+    document.addEventListener(
+      "visibilitychange",
+      handleVisibilityChange
+    );
+
+    return () => {
+      document.removeEventListener(
+        "visibilitychange",
+        handleVisibilityChange
+      );
+    };
+  }, [
+    sessionId,
+    terminateInterview,
+  ]);
+
+  /*
+   * ============================================================
+   * FACE LANDMARKER INITIALIZATION
+   * ============================================================
+   */
+
+  const initializeFaceMonitoring =
+    useCallback(async () => {
+      try {
+        setFaceStatus(
+          "Loading face model..."
+        );
+
+        /*
+         * MediaPipe WASM.
+         */
+        const vision =
+          await FilesetResolver.forVisionTasks(
+            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm"
+          );
+
+        /*
+         * Face Landmarker.
+         *
+         * The model must exist at:
+         *
+         * public/models/face_landmarker.task
+         */
+        const faceLandmarker =
+          await FaceLandmarker.createFromOptions(
+            vision,
+            {
+              baseOptions: {
+                modelAssetPath:
+                  "/models/face_landmarker.task",
+
+                delegate: "GPU",
+              },
+
+              runningMode: "VIDEO",
+
+              numFaces: 2,
+
+              minFaceDetectionConfidence:
+                0.5,
+
+              minFacePresenceConfidence:
+                0.5,
+
+              minTrackingConfidence:
+                0.5,
+
+              outputFaceBlendshapes: true,
+
+              outputFacialTransformationMatrixes:
+                true,
+            }
+          );
+
+        faceLandmarkerRef.current =
+          faceLandmarker;
+
+        setFaceStatus(
+          "Face model ready"
+        );
+
+        console.log(
+          "Face Landmarker initialized."
+        );
+
+        return true;
+      } catch (err) {
+        console.error(
+          "Face Landmarker initialization error:",
+          err
+        );
+
+        setFaceStatus(
+          "Face model error"
+        );
+
+        setError(
+          "Face monitoring could not be initialized."
+        );
+
+        return false;
+      }
+    }, []);
+
+  /*
+   * ============================================================
+   * EYE STATUS
+   * ============================================================
+   */
+
+  const calculateEyeStatus =
+    useCallback(
+      (landmarks) => {
+        /*
+         * MediaPipe FaceLandmarker
+         * eye landmark indexes.
+         */
+
+        if (
+          !landmarks ||
+          landmarks.length < 478
+        ) {
+          return "Checking";
+        }
+
+        const leftTop =
+          landmarks[159];
+
+        const leftBottom =
+          landmarks[145];
+
+        const rightTop =
+          landmarks[386];
+
+        const rightBottom =
+          landmarks[374];
+
+        if (
+          !leftTop ||
+          !leftBottom ||
+          !rightTop ||
+          !rightBottom
+        ) {
+          return "Checking";
+        }
+
+        const leftEyeHeight =
+          Math.abs(
+            leftTop.y -
+              leftBottom.y
+          );
+
+        const rightEyeHeight =
+          Math.abs(
+            rightTop.y -
+              rightBottom.y
+          );
+
+        /*
+         * Smaller vertical distance
+         * means eyes are likely closed.
+         */
+        const leftClosed =
+          leftEyeHeight < 0.012;
+
+        const rightClosed =
+          rightEyeHeight < 0.012;
+
+        if (
+          leftClosed &&
+          rightClosed
+        ) {
+          return "Closed";
+        }
+
+        return "Open";
+      },
+      []
+    );
+
+  /*
+   * ============================================================
+   * FACE + EYE MONITORING LOOP
+   * ============================================================
+   */
+
+  const monitorFaceAndEyes =
+    useCallback(() => {
+      if (
+        !faceMonitoringRef.current ||
+        !videoRef.current ||
+        !faceLandmarkerRef.current ||
+        completedRef.current ||
+        terminatedRef.current
+      ) {
+        return;
+      }
+
+      /*
+       * Extra protection:
+       * If page becomes hidden,
+       * tab monitoring handles termination.
+       */
+      if (document.hidden) {
+        return;
+      }
+
+      const video =
+        videoRef.current;
+
+      if (
+        video.readyState <
+        HTMLMediaElement.HAVE_CURRENT_DATA
+      ) {
+        faceAnimationFrameRef.current =
+          requestAnimationFrame(
+            monitorFaceAndEyes
+          );
+
+        return;
+      }
+
+      try {
+        const now =
+          performance.now();
+
+        const result =
+          faceLandmarkerRef.current
+            .detectForVideo(
+              video,
+              now
+            );
+
+        const faces =
+          result?.faceLandmarks ||
+          [];
+
+        const count =
+          faces.length;
+
+        setFaceCount(count);
+
+        /*
+         * ========================================================
+         * NO FACE
+         * ========================================================
+         */
+
+        if (count === 0) {
+          setFaceStatus(
+            "No face detected"
+          );
+
+          setEyeStatus(
+            "Not detected"
+          );
+
+          terminateInterview(
+            "no_face_detected"
+          );
+
+          return;
+        }
+
+        /*
+         * ========================================================
+         * MULTIPLE FACES
+         * ========================================================
+         */
+
+        if (count > 1) {
+          setFaceStatus(
+            "Multiple faces detected"
+          );
+
+          setEyeStatus(
+            "Not monitored"
+          );
+
+          terminateInterview(
+            "multiple_faces_detected"
+          );
+
+          return;
+        }
+
+        /*
+         * ========================================================
+         * ONE FACE
+         * ========================================================
+         */
+
+        setFaceStatus(
+          "Face detected"
+        );
+
+        const landmarks =
+          faces[0];
+
+        const currentEyeStatus =
+          calculateEyeStatus(
+            landmarks
+          );
+
+        setEyeStatus(
+          currentEyeStatus
+        );
+
+        /*
+         * ========================================================
+         * EYES CLOSED
+         * ========================================================
+         */
+
+        if (
+          currentEyeStatus ===
+          "Closed"
+        ) {
+          if (
+            !eyesClosedSinceRef.current
+          ) {
+            eyesClosedSinceRef.current =
+              Date.now();
+          }
+
+          const closedDuration =
+            Date.now() -
+            eyesClosedSinceRef.current;
+
+          /*
+           * Normal blinking is allowed.
+           *
+           * 3 seconds continuously closed
+           * => terminate.
+           */
+          if (
+            closedDuration >=
+            3000
+          ) {
+            terminateInterview(
+              "eyes_closed_too_long"
+            );
+
+            return;
+          }
+        } else {
+          eyesClosedSinceRef.current =
+            null;
+        }
+      } catch (err) {
+        console.error(
+          "Face monitoring error:",
+          err
+        );
+      }
+
+      faceAnimationFrameRef.current =
+        requestAnimationFrame(
+          monitorFaceAndEyes
+        );
+    }, [
+      calculateEyeStatus,
+      terminateInterview,
+    ]);
+
+  /*
+   * ============================================================
+   * START PROCTOR CAMERA + FACE MONITORING
+   * ============================================================
+   */
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function startProctorMonitoring() {
+      if (
+        !sessionId ||
+        completedRef.current ||
+        terminatedRef.current
+      ) {
+        return;
+      }
+
+      try {
+        setFaceStatus(
+          "Starting camera..."
+        );
+
+        /*
+         * Initialize MediaPipe.
+         */
+        const initialized =
+          await initializeFaceMonitoring();
+
+        if (
+          cancelled ||
+          !initialized ||
+          completedRef.current ||
+          terminatedRef.current
+        ) {
+          return;
+        }
+
+        /*
+         * Ask for camera permission.
+         */
+        const stream =
+          await navigator.mediaDevices.getUserMedia(
+            {
+              video: {
+                facingMode: "user",
+                width: {
+                  ideal: 640,
+                },
+                height: {
+                  ideal: 480,
+                },
+              },
+
+              audio: false,
+            }
+          );
+
+        if (
+          cancelled ||
+          completedRef.current ||
+          terminatedRef.current
+        ) {
+          stream
+            .getTracks()
+            .forEach((track) => {
+              track.stop();
+            });
+
+          return;
+        }
+
+        streamRef.current =
+          stream;
+
+        if (videoRef.current) {
+          videoRef.current.srcObject =
+            stream;
+
+          await videoRef.current.play();
+        }
+
+        setCameraEnabled(true);
+
+        setFaceStatus(
+          "Checking face..."
+        );
+
+        faceMonitoringRef.current =
+          true;
+
+        /*
+         * Start monitoring.
+         */
+        faceAnimationFrameRef.current =
+          requestAnimationFrame(
+            monitorFaceAndEyes
+          );
+      } catch (err) {
+        console.error(
+          "Proctor camera error:",
+          err
+        );
+
+        setCameraEnabled(false);
+
+        setFaceStatus(
+          "Camera permission required"
+        );
+
+        setError(
+          "Camera access is required for the interview."
+        );
+      }
+    }
+
+    startProctorMonitoring();
+
+    return () => {
+      cancelled = true;
+
+      faceMonitoringRef.current =
+        false;
+
+      if (
+        faceAnimationFrameRef.current
+      ) {
+        cancelAnimationFrame(
+          faceAnimationFrameRef.current
+        );
+
+        faceAnimationFrameRef.current =
+          null;
+      }
+    };
+  }, [
+    sessionId,
+    initializeFaceMonitoring,
+    monitorFaceAndEyes,
+  ]);
+
+  /*
+   * ============================================================
+   * TIMER
+   * ============================================================
+   */
+
+  useEffect(() => {
+    if (phase !== "question") {
+      return;
+    }
+
+    const timer =
+      setInterval(() => {
+        setElapsedSeconds(
+          (previous) =>
+            previous + 1
+        );
+      }, 1000);
+
+    return () => {
+      clearInterval(timer);
+    };
+  }, [phase]);
+
+  /*
+   * ============================================================
+   * MOUNT / UNMOUNT
+   * ============================================================
+   */
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    return () => {
+      mountedRef.current = false;
+
+      faceMonitoringRef.current =
+        false;
+
+      if (
+        faceAnimationFrameRef.current
+      ) {
+        cancelAnimationFrame(
+          faceAnimationFrameRef.current
+        );
+
+        faceAnimationFrameRef.current =
+          null;
+      }
+
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch {}
+      }
+
+      if (streamRef.current) {
+        streamRef.current
+          .getTracks()
+          .forEach((track) => {
+            track.stop();
+          });
+
+        streamRef.current = null;
+      }
+
+      if (videoRef.current) {
+        videoRef.current.srcObject =
+          null;
+      }
+
+      if (
+        faceLandmarkerRef.current
+      ) {
+        try {
+          faceLandmarkerRef.current.close();
+        } catch {}
+
+        faceLandmarkerRef.current =
+          null;
+      }
+
+      window.speechSynthesis?.cancel();
+    };
+  }, []);
+
+  /*
+   * ============================================================
+   * TEXT TO SPEECH
+   * ============================================================
+   */
+
+  const speakQuestion =
+    useCallback(
+      (text) => {
+        if (
+          !text ||
+          !window.speechSynthesis
+        ) {
+          return;
+        }
+
+        speechGenerationRef.current +=
+          1;
+
+        const generation =
+          speechGenerationRef.current;
+
+        window.speechSynthesis.cancel();
+
+        const utterance =
+          new SpeechSynthesisUtterance(
+            text
+          );
+
+        utterance.rate = 0.95;
+        utterance.pitch = 1;
+        utterance.volume = 1;
+
+        utterance.onstart = () => {
+          if (
+            mountedRef.current &&
+            generation ===
+              speechGenerationRef.current
+          ) {
+            setIsSpeaking(true);
+          }
+        };
+
+        utterance.onend = () => {
+          if (
+            mountedRef.current &&
+            generation ===
+              speechGenerationRef.current
+          ) {
+            setIsSpeaking(false);
+          }
+        };
+
+        utterance.onerror = () => {
+          if (
+            mountedRef.current &&
+            generation ===
+              speechGenerationRef.current
+          ) {
+            setIsSpeaking(false);
+          }
+        };
+
+        window.speechSynthesis.speak(
+          utterance
+        );
+      },
+      []
+    );
+
+  /*
+   * ============================================================
+   * SHOW QUESTION
+   * ============================================================
+   */
+
+  const showQuestion =
+    useCallback(
+      (rawQuestion) => {
+        const question =
+          normalizeQuestion(
+            rawQuestion
+          );
+
+        if (
+          !question ||
+          !question.question
+        ) {
+          console.error(
+            "Invalid question received:",
+            rawQuestion
+          );
+
+          setError(
+            "Invalid question received from server."
+          );
+
+          setProcessing(false);
+
+          return;
+        }
+
+        console.log(
+          "=========================================="
+        );
+
+        console.log(
+          "DISPLAYING QUESTION"
+        );
+
+        console.log(
+          "Question ID:",
+          question.id
+        );
+
+        console.log(
+          "Question:",
+          question.question
+        );
+
+        console.log(
+          "Question Number:",
+          question.question_number
+        );
+
+        console.log(
+          "Is Follow-up:",
+          question.is_follow_up
+        );
+
+        console.log(
+          "Parent Question ID:",
+          question.parent_question_id
+        );
+
+        console.log(
+          "=========================================="
+        );
+
+        currentQuestionRef.current =
+          question;
+
+        setCurrentQuestion(
+          question
+        );
+
+        setQuestionNumber(
+          Number(
+            question.question_number
+          ) || 1
+        );
+
+        setAnswer("");
+
+        setLastAnswer("");
+
+        setFollowUpQuestion(
+          null
+        );
+
+        setFollowUpConfirmation(
+          false
+        );
+
+        setError("");
+
+        setProcessing(false);
+
+        setPhase("question");
+
+        if (
+          recognitionRef.current
+        ) {
+          try {
+            recognitionRef.current.stop();
+          } catch {}
+        }
+
+        speakQuestion(
+          question.question
+        );
+      },
+      [speakQuestion]
+    );
+
+  /*
+   * ============================================================
+   * COMPLETE INTERVIEW
+   * ============================================================
+   */
+
+  const completeInterview =
+    useCallback(() => {
+      if (completedRef.current) {
+        return;
+      }
+
+      completedRef.current = true;
+
+      processingRef.current = false;
+
+      faceMonitoringRef.current =
+        false;
+
+      if (
+        faceAnimationFrameRef.current
+      ) {
+        cancelAnimationFrame(
+          faceAnimationFrameRef.current
+        );
+
+        faceAnimationFrameRef.current =
+          null;
+      }
+
+      setProcessing(false);
+
+      setPhase("completed");
+
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch {}
+      }
+
+      if (streamRef.current) {
+        streamRef.current
+          .getTracks()
+          .forEach((track) => {
+            track.stop();
+          });
+
+        streamRef.current = null;
+      }
+
+      if (videoRef.current) {
+        videoRef.current.srcObject =
+          null;
+      }
+
+      setCameraEnabled(false);
+
+      window.speechSynthesis?.cancel();
+
+      setTimeout(() => {
+        if (!mountedRef.current) {
+          return;
+        }
+
+        navigate(
+          `/interviews/${interviewId}/sessions/${sessionId}/report`
+        );
+      }, 2500);
+    }, [
+      interviewId,
+      sessionId,
+      navigate,
+    ]);
+
+  /*
+   * ============================================================
+   * EXTRACT FOLLOW-UP QUESTION
+   * ============================================================
+   */
+
+  const extractFollowUpQuestion =
+    useCallback(
+      (data, parameters) => {
+        const candidates = [
+          parameters?.follow_up_question,
+          parameters?.followUpQuestion,
+
+          parameters?.follow_up_question_text,
+          parameters?.followUpQuestionText,
+
+          data?.follow_up_question,
+          data?.followUpQuestion,
+
+          data?.follow_up_question_text,
+          data?.followUpQuestionText,
+
+          data?.result?.follow_up_question,
+
+          data?.data?.follow_up_question,
+
+          data?.response?.follow_up_question,
+        ];
+
+        for (const candidate of candidates) {
+          const normalized =
+            normalizeValue(candidate);
+
+          if (
+            typeof normalized ===
+              "string" &&
+            normalized.trim()
+          ) {
+            return normalized.trim();
+          }
+        }
+
+        return null;
+      },
+      []
+    );
+
+  /*
+   * ============================================================
+   * EXTRACT NEXT QUESTION
+   * ============================================================
+   */
+
+  const extractNextQuestion =
+    useCallback(
+      (data, parameters) => {
+        const rawNextQuestion =
+          parameters?.next_question ||
+          parameters?.nextQuestion ||
+          data?.next_question ||
+          data?.nextQuestion ||
+          data?.result?.next_question ||
+          data?.result?.nextQuestion ||
+          data?.data?.next_question ||
+          data?.response?.next_question ||
+          null;
+
+        if (rawNextQuestion) {
+          return normalizeQuestion(
+            rawNextQuestion
+          );
+        }
+
+        const directQuestion =
+          parameters?.question ||
+          data?.question;
+
+        if (!directQuestion) {
+          return null;
+        }
+
+        return normalizeQuestion({
+          id:
+            parameters?.question_id ||
+            parameters?.questionId ||
+            data?.question_id ||
+            data?.questionId ||
+            null,
+
+          question:
+            directQuestion,
+
+          question_number:
+            parameters?.question_number ??
+            parameters?.questionNumber ??
+            data?.question_number ??
+            data?.questionNumber ??
+            1,
+
+          category:
+            parameters?.category ||
+            data?.category ||
+            "technical",
+
+          difficulty:
+            parameters?.difficulty ||
+            data?.difficulty ||
+            null,
+
+          question_type:
+            parameters?.question_type ||
+            parameters?.questionType ||
+            data?.question_type ||
+            data?.questionType ||
+            "technical",
+
+          is_follow_up:
+            parameters?.is_follow_up ??
+            parameters?.isFollowUp ??
+            data?.is_follow_up ??
+            data?.isFollowUp ??
+            false,
+
+          parent_question_id:
+            parameters?.parent_question_id ||
+            parameters?.parentQuestionId ||
+            data?.parent_question_id ||
+            data?.parentQuestionId ||
+            null,
+        });
+      },
+      []
+    );
+
+  /*
+   * ============================================================
+   * HANDLE DIALOGFLOW / BACKEND RESPONSE
+   * ============================================================
+   */
+
+  const handleDialogflowResponse =
+    useCallback(
+      (responseData) => {
+        if (!responseData) {
+          throw new Error(
+            "Empty response from backend."
+          );
+        }
+
+        const data =
+          responseData?.data &&
+          typeof responseData.data ===
+            "object"
+            ? responseData.data
+            : responseData;
+
+        const parameters =
+          getMergedParameters(data);
+
+        const nextAction =
+          normalizeAction(
+            parameters?.next_action ??
+              parameters?.nextAction ??
+              data?.next_action ??
+              data?.nextAction
+          );
+
+        console.log(
+          "DIALOGFLOW RESPONSE:",
+          data
+        );
+
+        console.log(
+          "PARAMETERS:",
+          parameters
+        );
+
+        console.log(
+          "Next Action:",
+          nextAction
+        );
+
+        /*
+         * Completion
+         */
+        const completed =
+          isTrue(
+            parameters?.completed
+          ) ||
+          isTrue(
+            parameters?.interview_completed
+          ) ||
+          isTrue(
+            parameters?.interviewCompleted
+          ) ||
+          isTrue(
+            data?.completed
+          ) ||
+          isTrue(
+            data?.interview_completed
+          ) ||
+          isTrue(
+            data?.interviewCompleted
+          ) ||
+          nextAction === "complete" ||
+          nextAction === "completed";
+
+        if (completed) {
+          completeInterview();
+          return;
+        }
+
+        /*
+         * Follow-up required
+         */
+        const followUpRequired =
+          isTrue(
+            parameters?.follow_up_required
+          ) ||
+          isTrue(
+            parameters?.followUpRequired
+          ) ||
+          isTrue(
+            parameters?.is_follow_up_required
+          ) ||
+          isTrue(
+            parameters?.isFollowUpRequired
+          ) ||
+          isTrue(
+            data?.follow_up_required
+          ) ||
+          isTrue(
+            data?.followUpRequired
+          );
+
+        /*
+         * Follow-up confirmation
+         */
+        if (
+          followUpRequired &&
+          (
+            nextAction ===
+              "ask_follow_up_confirmation" ||
+            nextAction ===
+              "follow_up_confirmation"
+          )
+        ) {
+          const generatedFollowUp =
+            extractFollowUpQuestion(
+              data,
+              parameters
+            );
+
+          if (!generatedFollowUp) {
+            setError(
+              "Follow-up question was not received from server."
+            );
+
+            setProcessing(false);
+
+            return;
+          }
+
+          setFollowUpQuestion(
+            generatedFollowUp
+          );
+
+          setFollowUpConfirmation(
+            true
+          );
+
+          setProcessing(false);
+
+          setPhase(
+            "followup-confirmation"
+          );
+
+          return;
+        }
+
+        /*
+         * Direct follow-up
+         */
+        if (
+          nextAction === "follow_up" ||
+          nextAction === "followup"
+        ) {
+          const backendFollowUp =
+            extractFollowUpQuestion(
+              data,
+              parameters
+            );
+
+          const followUpId =
+            parameters?.follow_up_question_id ||
+            parameters?.followUpQuestionId ||
+            data?.follow_up_question_id ||
+            data?.followUpQuestionId ||
+            null;
+
+          if (!backendFollowUp) {
+            setError(
+              "Follow-up question was not received from server."
+            );
+
+            setProcessing(false);
+
+            return;
+          }
+
+          const current =
+            currentQuestionRef.current;
+
+          const followUp =
+            normalizeQuestion({
+              id: followUpId,
+
+              question:
+                backendFollowUp,
+
+              question_number:
+                parameters?.question_number ??
+                parameters?.questionNumber ??
+                current?.question_number ??
+                questionNumber,
+
+              question_type:
+                parameters?.question_type ||
+                parameters?.questionType ||
+                "follow_up",
+
+              category:
+                parameters?.category ||
+                current?.category ||
+                "technical",
+
+              difficulty:
+                parameters?.difficulty ||
+                current?.difficulty ||
+                null,
+
+              is_follow_up: true,
+
+              parent_question_id:
+                parameters?.parent_question_id ||
+                parameters?.parentQuestionId ||
+                current?.id ||
+                null,
+            });
+
+          if (!followUp) {
+            setError(
+              "Invalid follow-up question received."
+            );
+
+            setProcessing(false);
+
+            return;
+          }
+
+          currentQuestionRef.current =
+            followUp;
+
+          setCurrentQuestion(
+            followUp
+          );
+
+          setQuestionNumber(
+            Number(
+              followUp.question_number
+            ) ||
+              questionNumber
+          );
+
+          setAnswer("");
+
+          setLastAnswer("");
+
+          setFollowUpQuestion(
+            null
+          );
+
+          setFollowUpConfirmation(
+            false
+          );
+
+          setError("");
+
+          setProcessing(false);
+
+          setPhase("question");
+
+          speakQuestion(
+            followUp.question
+          );
+
+          return;
+        }
+
+        /*
+         * Next main question
+         */
+        const nextQuestion =
+          extractNextQuestion(
+            data,
+            parameters
+          );
+
+        if (
+          nextAction ===
+            "next_question"
+        ) {
+          if (!nextQuestion) {
+            setError(
+              "Next question was not received from server."
+            );
+
+            setProcessing(false);
+
+            return;
+          }
+
+          showQuestion(
+            nextQuestion
+          );
+
+          return;
+        }
+
+        /*
+         * Fallback text
+         */
+        const fallbackText =
+          normalizeValue(
+            parameters?.text
+          ) ||
+          normalizeValue(
+            data?.text
+          ) ||
+          normalizeValue(
+            data?.fulfillment_text
+          ) ||
+          normalizeValue(
+            data?.fulfillmentText
+          ) ||
+          normalizeValue(
+            data?.fulfillmentResponse
+              ?.messages?.[0]
+              ?.text?.text?.[0]
+          );
+
+        if (fallbackText) {
+          console.log(
+            "Backend message:",
+            fallbackText
+          );
+        }
+
+        console.warn(
+          "No recognized Dialogflow action:",
+          {
+            nextAction,
+            parameters,
+            data,
+          }
+        );
+
+        setError(
+          "Unexpected response received from interview server."
+        );
+
+        setProcessing(false);
+      },
+      [
+        completeInterview,
+        extractFollowUpQuestion,
+        extractNextQuestion,
+        questionNumber,
+        showQuestion,
+        speakQuestion,
+      ]
+    );
+
+  /*
+   * ============================================================
+   * START INTERVIEW
+   * ============================================================
+   */
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function initializeInterview() {
+      try {
+        setPhase("loading");
+
+        setError("");
+
+        const response =
+          await api.post(
+            "/dialogflow/chat",
+            {
+              session_id:
+                sessionId,
+
+              text: "start",
+
+              parameters: {
+                session_id:
+                  sessionId,
+
+                interview_id:
+                  interviewId,
+
+                action: "start",
+              },
+            }
+          );
+
+        if (
+          cancelled ||
+          !mountedRef.current
+        ) {
+          return;
+        }
+
+        const data =
+          response?.data;
+
+        const parameters =
+          getMergedParameters(data);
+
+        const rawQuestion =
+          parameters?.next_question ||
+          parameters?.nextQuestion ||
+          data?.next_question ||
+          data?.nextQuestion ||
+          parameters?.question ||
+          data?.question;
+
+        if (rawQuestion) {
+          const question =
+            normalizeQuestion(
+              rawQuestion,
+              {
+                id:
+                  parameters?.question_id ||
+                  parameters?.questionId ||
+                  data?.question_id ||
+                  data?.questionId ||
+                  null,
+
+                question_number:
+                  parameters?.question_number ??
+                  parameters?.questionNumber ??
+                  data?.question_number ??
+                  data?.questionNumber ??
+                  1,
+
+                category:
+                  parameters?.category ||
+                  data?.category ||
+                  "technical",
+
+                difficulty:
+                  parameters?.difficulty ||
+                  data?.difficulty ||
+                  null,
+
+                question_type:
+                  parameters?.question_type ||
+                  parameters?.questionType ||
+                  data?.question_type ||
+                  data?.questionType ||
+                  "technical",
+
+                is_follow_up:
+                  parameters?.is_follow_up ??
+                  parameters?.isFollowUp ??
+                  data?.is_follow_up ??
+                  data?.isFollowUp ??
+                  false,
+
+                parent_question_id:
+                  parameters?.parent_question_id ||
+                  parameters?.parentQuestionId ||
+                  data?.parent_question_id ||
+                  data?.parentQuestionId ||
+                  null,
+              }
+            );
+
+          if (question) {
+            showQuestion(
+              question
+            );
+
+            return;
+          }
+        }
+
+        handleDialogflowResponse(
+          data
+        );
+      } catch (err) {
+        console.error(
+          "Interview initialization error:",
+          err
+        );
+
+        if (
+          !mountedRef.current
+        ) {
+          return;
+        }
+
+        setError(
+          err?.response?.data
+            ?.detail ||
+            err?.message ||
+            "Failed to start interview."
+        );
+
+        setPhase("error");
+      }
+    }
+
+    initializeInterview();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    interviewId,
+    sessionId,
+    handleDialogflowResponse,
+    showQuestion,
+  ]);
+
+  /*
+   * ============================================================
+   * SUBMIT ANSWER
+   * ============================================================
+   */
+
+  const submitAnswerWithText =
+    useCallback(
+      async (answerText) => {
+        if (
+          processingRef.current
+        ) {
+          return;
+        }
+
+        if (
+          completedRef.current ||
+          terminatedRef.current
+        ) {
+          return;
+        }
+
+        const cleanAnswer =
+          String(
+            answerText || ""
+          ).trim();
+
+        if (!cleanAnswer) {
+          setError(
+            "Please provide an answer before submitting."
+          );
+
+          return;
+        }
+
+        const question =
+          currentQuestionRef.current;
+
+        if (!question?.id) {
+          setError(
+            "Current question is missing."
+          );
+
+          return;
+        }
+
+        processingRef.current =
+          true;
+
+        setProcessing(true);
+
+        setError("");
+
+        setLastAnswer(
+          cleanAnswer
+        );
+
+        if (
+          recognitionRef.current
+        ) {
+          try {
+            recognitionRef.current.stop();
+          } catch {}
+        }
+
+        window.speechSynthesis?.cancel();
+
+        try {
+          const payload = {
+            interview_id:
+              interviewId,
+
+            session_id:
+              sessionId,
+
+            question_id:
+              question.id,
+
+            current_question_id:
+              question.id,
+
+            candidate_answer:
+              cleanAnswer,
+
+            parent_question_id:
+              question.parent_question_id ||
+              null,
+
+            is_follow_up:
+              Boolean(
+                question.is_follow_up
+              ),
+
+            question_number:
+              question.question_number,
+
+            question_type:
+              question.question_type ||
+              (
+                question.is_follow_up
+                  ? "follow_up"
+                  : "main"
+              ),
+          };
+
+          const response =
+            await api.post(
+              "/dialogflow/chat",
+              {
+                session_id:
+                  sessionId,
+
+                text:
+                  cleanAnswer,
+
+                parameters:
+                  payload,
+              }
+            );
+
+          if (
+            !mountedRef.current ||
+            completedRef.current ||
+            terminatedRef.current
+          ) {
+            return;
+          }
+
+          handleDialogflowResponse(
+            response?.data
+          );
+        } catch (err) {
+          console.error(
+            "Answer submission error:",
+            err
+          );
+
+          if (
+            !mountedRef.current
+          ) {
+            return;
+          }
+
+          setError(
+            err?.response?.data
+              ?.detail ||
+              err?.message ||
+              "Failed to process answer."
+          );
+
+          setProcessing(false);
+        } finally {
+          processingRef.current =
+            false;
+
+          if (
+            mountedRef.current &&
+            phase === "question"
+          ) {
+            setProcessing(false);
+          }
+        }
+      },
+      [
+        interviewId,
+        sessionId,
+        handleDialogflowResponse,
+        phase,
+      ]
+    );
+
+  submitAnswerRef.current =
+    submitAnswerWithText;
+
+  /*
+   * ============================================================
+   * FOLLOW-UP YES
+   * ============================================================
+   */
+
+  const handleFollowUpYes =
+    async () => {
+      if (
+        processingRef.current ||
+        completedRef.current ||
+        terminatedRef.current
+      ) {
+        return;
+      }
+
+      const question =
+        currentQuestionRef.current;
+
+      if (!question?.id) {
+        setError(
+          "Current question is missing."
+        );
+
+        return;
+      }
+
+      processingRef.current =
+        true;
+
+      setProcessing(true);
+
+      setError("");
+
+      try {
+        const response =
+          await api.post(
+            "/dialogflow/chat",
+            {
+              session_id:
+                sessionId,
+
+              text: "yes",
+
+              parameters: {
+                session_id:
+                  sessionId,
+
+                interview_id:
+                  interviewId,
+
+                question_id:
+                  question.id,
+
+                current_question_id:
+                  question.id,
+
+                candidate_answer:
+                  "yes",
+
+                follow_up_confirmation:
+                  "yes",
+
+                is_follow_up:
+                  false,
+
+                question_number:
+                  question.question_number,
+              },
+            }
+          );
+
+        if (
+          !mountedRef.current
+        ) {
+          return;
+        }
+
+        handleDialogflowResponse(
+          response?.data
+        );
+      } catch (err) {
+        console.error(
+          "Follow-up YES error:",
+          err
+        );
+
+        if (
+          mountedRef.current
+        ) {
+          setError(
+            err?.response?.data
+              ?.detail ||
+              err?.message ||
+              "Unable to generate follow-up question."
+          );
+        }
+      } finally {
+        processingRef.current =
+          false;
+
+        if (
+          mountedRef.current
+        ) {
+          setProcessing(false);
+        }
+      }
+    };
+
+  /*
+   * ============================================================
+   * FOLLOW-UP NO
+   * ============================================================
+   */
+
+  const handleFollowUpNo =
+    async () => {
+      if (
+        processingRef.current ||
+        completedRef.current ||
+        terminatedRef.current
+      ) {
+        return;
+      }
+
+      const question =
+        currentQuestionRef.current;
+
+      if (!question?.id) {
+        setError(
+          "Current question is missing."
+        );
+
+        return;
+      }
+
+      processingRef.current =
+        true;
+
+      setProcessing(true);
+
+      setError("");
+
+      try {
+        const response =
+          await api.post(
+            "/dialogflow/chat",
+            {
+              session_id:
+                sessionId,
+
+              text: "no",
+
+              parameters: {
+                session_id:
+                  sessionId,
+
+                interview_id:
+                  interviewId,
+
+                question_id:
+                  question.id,
+
+                current_question_id:
+                  question.id,
+
+                candidate_answer:
+                  "no",
+
+                follow_up_confirmation:
+                  "no",
+
+                is_follow_up:
+                  false,
+
+                question_number:
+                  question.question_number,
+              },
+            }
+          );
+
+        if (
+          !mountedRef.current
+        ) {
+          return;
+        }
+
+        handleDialogflowResponse(
+          response?.data
+        );
+      } catch (err) {
+        console.error(
+          "Follow-up NO error:",
+          err
+        );
+
+        if (
+          mountedRef.current
+        ) {
+          setError(
+            err?.response?.data
+              ?.detail ||
+              err?.message ||
+              "Unable to move to next question."
+          );
+        }
+      } finally {
+        processingRef.current =
+          false;
+
+        if (
+          mountedRef.current
+        ) {
+          setProcessing(false);
+        }
+      }
+    };
+
+  /*
+   * ============================================================
+   * VOICE RECOGNITION
+   * ============================================================
+   */
+
+  useEffect(() => {
+    const SpeechRecognition =
+      window.SpeechRecognition ||
+      window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      setVoiceSupported(false);
+      return;
+    }
+
+    setVoiceSupported(true);
+
+    const recognition =
+      new SpeechRecognition();
+
+    recognition.continuous = false;
+
+    recognition.interimResults = true;
+
+    recognition.lang = "en-US";
+
+    recognition.onstart = () => {
+      if (
+        mountedRef.current
+      ) {
+        setIsListening(true);
+      }
+    };
+
+    recognition.onresult = (
+      event
+    ) => {
+      let transcript = "";
+
+      for (
+        let i = event.resultIndex;
+        i < event.results.length;
+        i++
+      ) {
+        transcript +=
+          event.results[i][0]
+            .transcript;
+      }
+
+      transcript =
+        transcript.trim();
+
+      if (
+        transcript &&
+        mountedRef.current
+      ) {
+        setAnswer(
+          transcript
+        );
+      }
+
+      const lastResult =
+        event.results[
+          event.results.length - 1
+        ];
+
+      if (
+        lastResult?.isFinal &&
+        autoSubmitVoice &&
+        transcript
+      ) {
+        setTimeout(() => {
+          if (
+            mountedRef.current &&
+            !processingRef.current &&
+            !completedRef.current &&
+            !terminatedRef.current
+          ) {
+            submitAnswerRef.current?.(
+              transcript
+            );
+          }
+        }, 300);
+      }
+    };
+
+    recognition.onerror = (
+      event
+    ) => {
+      console.error(
+        "Speech recognition error:",
+        event
+      );
+
+      if (
+        mountedRef.current
+      ) {
+        setIsListening(false);
+      }
+    };
+
+    recognition.onend = () => {
+      if (
+        mountedRef.current
+      ) {
+        setIsListening(false);
+      }
+    };
+
+    recognitionRef.current =
+      recognition;
+
+    return () => {
+      try {
+        recognition.stop();
+      } catch {}
+
+      recognitionRef.current =
+        null;
+    };
+  }, [autoSubmitVoice]);
+
+  const startListening = () => {
+    if (
+      !recognitionRef.current ||
+      processingRef.current ||
+      completedRef.current ||
+      terminatedRef.current
+    ) {
+      return;
+    }
+
+    try {
+      recognitionRef.current.start();
+    } catch {
+      console.warn(
+        "Speech recognition already running."
+      );
+    }
+  };
+
+  const stopListening = () => {
+    if (
+      !recognitionRef.current
+    ) {
+      return;
+    }
+
+    try {
+      recognitionRef.current.stop();
+    } catch {}
+  };
+
+  /*
+   * ============================================================
+   * FORMAT TIME
+   * ============================================================
+   */
+
+  const formatTime = (
+    seconds
+  ) => {
+    const minutes =
+      Math.floor(
+        seconds / 60
+      );
+
+    const secs =
+      seconds % 60;
+
+    return `${String(
+      minutes
+    ).padStart(
+      2,
+      "0"
+    )}:${String(
+      secs
+    ).padStart(
+      2,
+      "0"
+    )}`;
+  };
+
+  /*
+   * ============================================================
+   * LOADING
+   * ============================================================
+   */
+
+  if (
+    phase === "loading"
+  ) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center relative overflow-hidden font-sans">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-indigo-500/20 rounded-full blur-[120px] pointer-events-none" />
+
+        <div className="bg-slate-900/60 border border-slate-800/80 backdrop-blur-2xl p-10 rounded-3xl text-center max-w-sm shadow-2xl relative z-10">
+          <div className="w-16 h-16 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin mx-auto mb-6" />
+
+          <h2 className="text-xl font-bold text-white mb-2">
+            Preparing Session
+          </h2>
+
+          <p className="text-xs text-slate-400 font-mono">
+            Preparing your interview...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  /*
+   * ============================================================
+   * ERROR
+   * ============================================================
+   */
+
+  if (
+    phase === "error"
+  ) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6 relative overflow-hidden font-sans">
+        <div className="max-w-lg w-full bg-slate-900/80 border border-rose-500/30 backdrop-blur-2xl rounded-3xl p-8 shadow-2xl space-y-4">
+          <div className="w-12 h-12 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-2xl flex items-center justify-center font-bold text-xl">
+            ⚠️
+          </div>
+
+          <h2 className="text-xl font-bold text-white">
+            Interview Error
+          </h2>
+
+          <p className="text-slate-300 text-sm leading-relaxed">
+            {error}
+          </p>
+
+          <button
+            onClick={() =>
+              window.location.reload()
+            }
+            className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs transition-all cursor-pointer border border-slate-700"
+          >
+            Retry Connection
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  /*
+   * ============================================================
+   * TERMINATED
+   * ============================================================
+   */
+
+  if (
+    phase === "terminated"
+  ) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-slate-900/80 border border-rose-500/30 backdrop-blur-2xl p-8 rounded-3xl text-center space-y-4 shadow-2xl">
+          <div className="w-16 h-16 bg-rose-500/10 border border-rose-500/30 text-rose-400 rounded-2xl flex items-center justify-center text-3xl mx-auto">
+            ⚠
+          </div>
+
+          <h1 className="text-2xl font-bold text-white">
+            Interview Ended
+          </h1>
+
+          <p className="text-slate-400 text-sm leading-relaxed">
+            The interview was ended because the
+            interview monitoring requirements were
+            not maintained.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  /*
+   * ============================================================
+   * COMPLETED
+   * ============================================================
+   */
+
+  if (
+    phase === "completed"
+  ) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6 relative overflow-hidden font-sans">
+        <div className="max-w-md w-full bg-slate-900/80 border border-emerald-500/30 backdrop-blur-2xl p-8 rounded-3xl text-center space-y-4 shadow-2xl">
+          <div className="w-16 h-16 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-2xl flex items-center justify-center text-3xl mx-auto shadow-lg shadow-emerald-500/10">
+            ✓
+          </div>
+
+          <h1 className="text-2xl font-bold text-white">
+            Interview Completed
+          </h1>
+
+          <p className="text-slate-400 text-sm leading-relaxed">
+            Your interview has been successfully
+            submitted to the server.
+          </p>
+
+          <p className="text-xs text-indigo-400 font-mono animate-pulse">
+            Opening your evaluation report...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  /*
+   * ============================================================
+   * MAIN UI
+   * ============================================================
+   */
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-fuchsia-500 selection:text-white flex flex-col justify-between p-3 md:p-6 relative overflow-hidden">
+
+      <div className="absolute -top-24 -left-24 w-96 h-96 bg-indigo-600/20 blur-[130px] rounded-full pointer-events-none" />
+
+      <div className="absolute top-1/3 right-0 w-96 h-96 bg-fuchsia-600/15 blur-[140px] rounded-full pointer-events-none" />
+
+      <div className="absolute bottom-0 left-1/3 w-[500px] h-[500px] bg-cyan-600/15 blur-[150px] rounded-full pointer-events-none" />
+
+      <div className="w-full max-w-7xl mx-auto flex-1 bg-slate-900/60 backdrop-blur-3xl border border-slate-800/80 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden relative z-10">
+
+        {/* HEADER */}
+
+        <header className="h-20 px-6 md:px-8 border-b border-slate-800/70 bg-slate-950/40 backdrop-blur-md flex items-center justify-between z-10">
+
+          <div className="flex items-center gap-3.5">
+
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-fuchsia-500 flex items-center justify-center font-black text-white text-xl shadow-lg shadow-purple-500/25">
+              AI
+            </div>
+
+            <div>
+              <div className="flex items-center gap-2.5">
+
+                <h1 className="font-bold text-base md:text-lg tracking-tight text-white">
+                  Interview Session
+                </h1>
+
+                <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-[10px] font-bold uppercase tracking-wider">
+                  Live
+                </span>
+
+              </div>
+
+              <p className="text-xs text-slate-400 hidden sm:block font-mono mt-0.5">
+                Session ID:{" "}
+                {sessionId ||
+                  "ACTIVE"}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+
+            <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-950/60 border border-slate-800 text-xs font-mono text-cyan-300 shadow-inner">
+
+              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+
+              <span>
+                ⏱{" "}
+                {formatTime(
+                  elapsedSeconds
+                )}
+              </span>
+
+            </div>
+
+          </div>
+        </header>
+
+        {/* PROGRESS */}
+
+        <div className="px-6 md:px-8 py-3 bg-slate-950/40 border-b border-slate-800/60 flex items-center justify-between gap-4">
+
+          <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
+
+            <span className="text-fuchsia-400 font-bold">
+              Progress
+            </span>
+
+            <span>•</span>
+
+            <span>
+              Question{" "}
+              {questionNumber}
+            </span>
+
+          </div>
+
+          <div className="flex-1 max-w-md h-2 bg-slate-950 rounded-full overflow-hidden p-0.5 border border-slate-800/60">
+
+            <div
+              className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-400 transition-all duration-500 rounded-full"
+              style={{
+                width: `${Math.min(
+                  Number(
+                    questionNumber
+                  ) || 1,
+                  5
+                ) /
+                  5 *
+                  100}%`,
+              }}
+            />
+
+          </div>
+
+          <span className="text-xs font-mono font-bold text-slate-300">
+            {Math.round(
+              Math.min(
+                Number(
+                  questionNumber
+                ) || 1,
+                5
+              ) /
+                5 *
+                100
+            )}
+            %
+          </span>
+
+        </div>
+
+        {/* MAIN GRID */}
+
+        <main className="flex-1 grid grid-cols-1 lg:grid-cols-12 min-h-[580px]">
+
+          {/* LEFT */}
+
+          <section className="lg:col-span-5 border-b lg:border-b-0 lg:border-r border-slate-800/80 bg-slate-950/20 p-6 flex flex-col justify-between gap-6">
+
+            {/* AI VOICE */}
+
+            <div className="flex-1 flex flex-col items-center justify-center text-center relative py-6">
+
+              <div
+                className={`absolute w-56 h-56 rounded-full transition-all duration-500 pointer-events-none -z-10 ${
+                  isSpeaking
+                    ? "bg-fuchsia-500/25 blur-3xl scale-125"
+                    : isListening
+                    ? "bg-cyan-500/25 blur-3xl scale-110"
+                    : "bg-indigo-500/10 blur-2xl scale-95"
+                }`}
+              />
+
+              <div className="relative w-36 h-36 md:w-44 md:h-44 mb-4">
+
+                <div
+                  className={`absolute inset-0 rounded-3xl border-2 transition-all ${
+                    isSpeaking
+                      ? "border-fuchsia-500 animate-pulse"
+                      : isListening
+                      ? "border-cyan-400 animate-pulse"
+                      : "border-slate-800"
+                  }`}
+                />
+
+                <div className="absolute inset-2 rounded-2xl bg-gradient-to-b from-slate-800 to-slate-950 border border-slate-700/70 flex items-center justify-center text-5xl md:text-6xl shadow-2xl">
+                  🤖
+                </div>
+
+                <div className="absolute -bottom-2 -right-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-700 text-[10px] font-bold text-slate-200 flex items-center gap-1.5 shadow-lg">
+
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      isSpeaking
+                        ? "bg-fuchsia-400 animate-pulse"
+                        : isListening
+                        ? "bg-cyan-400 animate-pulse"
+                        : "bg-emerald-400"
+                    }`}
+                  />
+
+                  <span>
+                    {isSpeaking
+                      ? "Speaking"
+                      : isListening
+                      ? "Listening"
+                      : "Active"}
+                  </span>
+
+                </div>
+
+              </div>
+
+              <h3 className="text-lg font-bold text-white tracking-wide">
+                AI Evaluator
+              </h3>
+
+              <p className="text-xs text-slate-400 mt-0.5">
+                Technical Interview Console
+              </p>
+
+            </div>
+
+            {/* CAMERA / PROCTOR */}
+
+            <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-3.5 relative overflow-hidden backdrop-blur-xl">
+
+              <div className="flex items-center justify-between mb-2 px-1">
+
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  Proctor Camera Feed
+                </span>
+
+                <div className="flex items-center gap-2">
+
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      cameraEnabled
+                        ? "bg-emerald-400 animate-pulse"
+                        : "bg-rose-400"
+                    }`}
+                  />
+
+                  <span className="text-[10px] text-slate-400">
+                    {cameraEnabled
+                      ? "Monitoring Active"
+                      : "Camera Required"}
+                  </span>
+
+                </div>
+
+              </div>
+
+              <div className="w-full h-32 md:h-36 bg-slate-950 rounded-xl border border-slate-800/80 relative overflow-hidden flex items-center justify-center">
+
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className={`w-full h-full object-cover rounded-xl ${
+                    cameraEnabled
+                      ? "block"
+                      : "hidden"
+                  }`}
+                />
+
+                {!cameraEnabled && (
+                  <div className="text-center p-4">
+
+                    <span className="text-2xl block mb-1">
+                      📷
+                    </span>
+
+                    <span className="text-xs text-slate-500">
+                      Camera initializing...
+                    </span>
+
+                  </div>
+                )}
+
+              </div>
+
+              {/* MONITORING STATUS */}
+
+              <div className="mt-2 grid grid-cols-3 gap-2">
+
+                <div className="rounded-lg bg-slate-950 border border-slate-800 p-2">
+
+                  <div className="text-[9px] text-slate-500 uppercase">
+                    Face
+                  </div>
+
+                  <div
+                    className={`text-[10px] mt-1 ${
+                      faceStatus ===
+                      "Face detected"
+                        ? "text-emerald-400"
+                        : "text-amber-400"
+                    }`}
+                  >
+                    {faceStatus}
+                  </div>
+
+                </div>
+
+                <div className="rounded-lg bg-slate-950 border border-slate-800 p-2">
+
+                  <div className="text-[9px] text-slate-500 uppercase">
+                    Faces
+                  </div>
+
+                  <div className="text-[11px] text-cyan-400 mt-1">
+                    {faceCount}
+                  </div>
+
+                </div>
+
+                <div className="rounded-lg bg-slate-950 border border-slate-800 p-2">
+
+                  <div className="text-[9px] text-slate-500 uppercase">
+                    Eyes
+                  </div>
+
+                  <div
+                    className={`text-[10px] mt-1 ${
+                      eyeStatus ===
+                      "Open"
+                        ? "text-emerald-400"
+                        : "text-amber-400"
+                    }`}
+                  >
+                    {eyeStatus}
+                  </div>
+
+                </div>
+
+              </div>
+
+            </div>
+
+          </section>
+
+          {/* RIGHT */}
+
+          <section className="lg:col-span-7 p-6 md:p-8 flex flex-col justify-between bg-slate-900/20">
+
+            {phase ===
+            "followup-confirmation" ? (
+
+              <div className="space-y-6 my-auto">
+
+                <div className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  Follow-up Opportunity
+                </div>
+
+                <div className="space-y-2">
+
+                  <h2 className="text-2xl font-bold text-white">
+                    Would you like a follow-up question?
+                  </h2>
+
+                  <p className="text-slate-400 text-xs md:text-sm leading-relaxed">
+                    The AI evaluation system identified that your response can be explored further.
+                  </p>
+
+                </div>
+
+                {followUpQuestion && (
+                  <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 text-slate-200 text-sm md:text-base leading-relaxed">
+
+                    <span className="text-xs font-bold text-indigo-400 block mb-1">
+                      Proposed Follow-up Preview:
+                    </span>
+
+                    {followUpQuestion}
+
+                  </div>
+                )}
+
+                {error && (
+                  <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs">
+                    {error}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+
+                  <button
+                    disabled={
+                      processing
+                    }
+                    onClick={
+                      handleFollowUpYes
+                    }
+                    className="w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs md:text-sm shadow-xl shadow-emerald-500/10 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {processing
+                      ? "Processing..."
+                      : "YES — Ask Follow-up"}
+                  </button>
+
+                  <button
+                    disabled={
+                      processing
+                    }
+                    onClick={
+                      handleFollowUpNo
+                    }
+                    className="w-full py-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs md:text-sm border border-slate-700 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    NO — Next Question
+                  </button>
+
+                </div>
+
+              </div>
+
+            ) : (
+
+              <>
+                <div>
+
+                  <div className="flex items-center justify-between mb-3.5">
+
+                    <span
+                      className={`text-[11px] font-bold tracking-wider uppercase px-3 py-1 rounded-md border ${
+                        currentQuestion?.is_follow_up
+                          ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                          : "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
+                      }`}
+                    >
+                      {currentQuestion?.is_follow_up
+                        ? "Follow-up Question"
+                        : "Main Question"}
+                    </span>
+
+                    {currentQuestion?.category && (
+                      <span className="text-xs font-mono text-slate-400">
+                        {
+                          currentQuestion.category
+                        }
+                      </span>
+                    )}
+
+                  </div>
+
+                  <h2 className="text-xl md:text-2xl font-semibold text-white leading-relaxed tracking-wide">
+                    {
+                      currentQuestion?.question
+                    }
+                  </h2>
+
+                </div>
+
+                {/* ANSWER AREA */}
+
+                <div className="mt-6 pt-6 border-t border-slate-800/80 space-y-4">
+
+                  <div className="flex items-center justify-between">
+
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                      Your Answer
+                    </label>
+
+                    <span className="text-[11px] text-slate-500 font-mono">
+                      Characters:{" "}
+                      {answer.length}
+                    </span>
+
+                  </div>
+
+                  <textarea
+                    value={answer}
+                    onChange={(event) =>
+                      setAnswer(
+                        event.target.value
+                      )
+                    }
+                    disabled={
+                      processing
+                    }
+                    placeholder="Type your answer here..."
+                    rows={6}
+                    className="w-full p-4 rounded-2xl bg-slate-950/80 border border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-slate-100 placeholder-slate-600 text-sm md:text-base leading-relaxed outline-none transition-all resize-none disabled:opacity-50"
+                  />
+
+                  {error && (
+                    <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs">
+                      {error}
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+
+                    <div className="flex items-center gap-2">
+
+                      {voiceSupported && (
+                        <>
+                          {!isListening ? (
+
+                            <button
+                              disabled={
+                                processing
+                              }
+                              onClick={
+                                startListening
+                              }
+                              className="px-4 py-2 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-cyan-300 border border-slate-700/80 text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer"
+                            >
+                              🎤 Speak
+                            </button>
+
+                          ) : (
+
+                            <button
+                              onClick={
+                                stopListening
+                              }
+                              className="px-4 py-2 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-semibold transition-all animate-pulse cursor-pointer"
+                            >
+                              ⏹ Stop
+                            </button>
+
+                          )}
+
+                          <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none ml-1">
+
+                            <input
+                              type="checkbox"
+                              checked={
+                                autoSubmitVoice
+                              }
+                              onChange={(
+                                event
+                              ) =>
+                                setAutoSubmitVoice(
+                                  event.target.checked
+                                )
+                              }
+                              className="w-3.5 h-3.5 rounded bg-slate-950 border-slate-700 text-indigo-600 focus:ring-0"
+                            />
+
+                            Auto submit voice
+
+                          </label>
+                        </>
+                      )}
+
+                    </div>
+
+                    <button
+                      disabled={
+                        processing ||
+                        !answer.trim()
+                      }
+                      onClick={() =>
+                        submitAnswerWithText(
+                          answer
+                        )
+                      }
+                      className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-fuchsia-600 hover:from-indigo-500 hover:to-fuchsia-500 text-white font-semibold text-xs md:text-sm shadow-xl shadow-purple-500/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      {processing
+                        ? "AI is evaluating..."
+                        : currentQuestion?.is_follow_up
+                        ? "Submit Follow-up Answer →"
+                        : "Submit Answer →"}
+                    </button>
+
+                  </div>
+
+                  {lastAnswer &&
+                    processing && (
+                      <div className="p-2.5 rounded-xl bg-slate-950/40 border border-slate-800/60 text-[11px] text-slate-400">
+
+                        <span className="font-semibold text-fuchsia-400">
+                          Submitted:
+                        </span>{" "}
+
+                        {lastAnswer}
+
+                      </div>
+                    )}
+
+                </div>
+              </>
+            )}
+
+          </section>
+        </main>
+
+        {/* FOOTER */}
+
+        <footer className="h-12 px-6 bg-slate-950/80 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-500 font-mono">
+
+          <div className="flex items-center gap-2">
+            🔒{" "}
+            <span>
+              Secure Evaluation Session
+            </span>
+          </div>
+
+          <div>
+            {formatTime(
+              elapsedSeconds
+            )}
+          </div>
+
+        </footer>
+
+      </div>
+    </div>
+  );
+}

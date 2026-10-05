@@ -13,6 +13,65 @@ client = OpenAI(
 )
 
 
+# =========================================================
+# ALLOWED QUESTION TYPES
+# =========================================================
+
+ALLOWED_QUESTION_TYPES = {
+    "technical",
+    "behavioral",
+    "situational",
+}
+
+
+# =========================================================
+# NORMALIZE QUESTION TYPE
+# =========================================================
+
+def normalize_question_type(
+    question_type: str | None,
+    category: str | None,
+) -> str:
+
+    if question_type:
+        normalized_type = question_type.strip().lower()
+
+        if normalized_type in ALLOWED_QUESTION_TYPES:
+            return normalized_type
+
+    # If AI returns category as type, infer a valid type.
+    category_value = (category or "").strip().lower()
+
+    if category_value in {
+        "technical",
+        "coding",
+        "programming",
+        "database",
+        "python",
+        "django",
+        "api",
+        "machine_learning",
+        "data_structures",
+        "algorithms",
+    }:
+        return "technical"
+
+    if category_value in {
+        "behavioral",
+        "communication",
+        "leadership",
+        "teamwork",
+        "collaboration",
+    }:
+        return "behavioral"
+
+    return "situational"
+
+
+# =========================================================
+# GENERATE QUESTIONS
+# =========================================================
+
 def generate_questions(
     interview_title: str,
     interview_description: str | None,
@@ -47,16 +106,63 @@ Additional configuration:
 {extra_config or "None"}
 
 Rules:
+
 - Questions must be relevant to the interview.
 - Questions must match the requested difficulty.
 - Questions must match the requested knowledge expectation.
 - Do not use a reusable question bank.
-- Questions are generated specifically for this interview.
+- Questions must be generated specifically for this interview.
 - Return exactly 5 questions.
 - Return ONLY valid JSON.
-- Do not include markdown or explanations.
+- Do not include markdown.
+- Do not include explanations.
+
+IMPORTANT:
+
+The "category" describes the topic or skill being tested.
+
+Examples of categories:
+- technical
+- problem_solving
+- communication
+- leadership
+- python
+- django
+- database
+- api
+- machine_learning
+- algorithms
+- data_structures
+
+The "type" MUST be exactly one of these values:
+
+- technical
+- behavioral
+- situational
+
+Do NOT use category names as the type.
+
+For example:
+
+[
+  {{
+    "question": "Explain how Django handles database migrations.",
+    "category": "django",
+    "difficulty": "{difficulty}",
+    "type": "technical"
+  }},
+  {{
+    "question": "Describe a time when you had to debug a complex Python program.",
+    "category": "problem_solving",
+    "difficulty": "{difficulty}",
+    "type": "behavioral"
+  }}
+]
+
+Return exactly 5 objects.
 
 JSON format:
+
 [
   {{
     "question": "Question text",
@@ -74,12 +180,46 @@ JSON format:
 
     questions = json.loads(response.output_text)
 
-    return [
-        {
-            "question": item["question"],
-            "category": item["category"],
-            "difficulty": item["difficulty"],
-            "type": item["type"],
-        }
-        for item in questions
-    ]
+    if not isinstance(questions, list):
+        raise ValueError(
+            "OpenAI returned an invalid question format."
+        )
+
+    if len(questions) != 5:
+        raise ValueError(
+            f"Expected exactly 5 questions, received {len(questions)}."
+        )
+
+    normalized_questions = []
+
+    for item in questions:
+
+        category = str(
+            item.get("category", "technical")
+        ).strip().lower()
+
+        question_type = normalize_question_type(
+            item.get("type"),
+            category,
+        )
+
+        normalized_questions.append(
+            {
+                "question": str(
+                    item["question"]
+                ).strip(),
+
+                "category": category,
+
+                "difficulty": str(
+                    item.get(
+                        "difficulty",
+                        difficulty,
+                    )
+                ).strip().lower(),
+
+                "type": question_type,
+            }
+        )
+
+    return normalized_questions

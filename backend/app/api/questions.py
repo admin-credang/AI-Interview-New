@@ -9,7 +9,7 @@ from app.api.auth.dependencies import get_current_user
 from app.models.user import User
 from app.models.interview import Interview
 from app.models.session import InterviewSession
-from app.models.interview_config import InterviewConfiguration
+from app.models.interview_configuration import InterviewConfiguration
 from app.models.question import Question
 
 from app.schemas.question import QuestionResponse

@@ -1,0 +1,237 @@
+// Login.scss — advanced effects that sit on top of Tailwind
+$accent: #f97316;
+$accent-soft: rgba(249, 115, 22, 0.35);
+$neon-pink: #ff3df2;
+$neon-violet: #7c3aed;
+$ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+@keyframes cardIn {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes floaty {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes pulseRing {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.55);
+  }
+  100% {
+    box-shadow: 0 0 0 10px rgba(34, 197, 94, 0);
+  }
+}
+
+@keyframes drift {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(30px, -20px);
+  }
+}
+
+.login-page {
+  position: relative;
+  overflow: hidden;
+  background: #09090f;
+
+  .blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(110px);
+    pointer-events: none;
+    animation: drift 14s ease-in-out infinite;
+
+    &--pink {
+      width: 420px;
+      height: 420px;
+      top: -120px;
+      right: -80px;
+      background: rgba($neon-pink, 0.28);
+    }
+
+    &--violet {
+      width: 480px;
+      height: 480px;
+      bottom: -160px;
+      left: -120px;
+      background: rgba($neon-violet, 0.3);
+      animation-delay: -6s;
+    }
+  }
+}
+
+.login-card {
+  animation: cardIn 0.8s $ease both;
+  box-shadow: 0 40px 120px -30px rgba(0, 0, 0, 0.8);
+}
+
+// Left form panel
+.login-form {
+  .field {
+    position: relative;
+
+    input {
+      transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+
+      &:focus {
+        border-color: $accent;
+        box-shadow: 0 0 0 4px rgba($accent, 0.15);
+        background: #fff;
+      }
+    }
+  }
+
+  .btn-primary {
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s $ease, box-shadow 0.2s;
+    box-shadow: 0 12px 28px -10px $accent-soft;
+
+    // light sweep on hover
+    &::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      transform: translateX(-120%);
+      background: linear-gradient(
+        110deg,
+        transparent 30%,
+        rgba(255, 255, 255, 0.35),
+        transparent 70%
+      );
+      transition: transform 0.7s $ease;
+    }
+
+    &:hover:not(:disabled) {
+      transform: translateY(-2px);
+
+      &::after {
+        transform: translateX(120%);
+      }
+    }
+
+    &:active:not(:disabled) {
+      transform: translateY(0);
+    }
+  }
+
+  .spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+// Right image panel
+.login-visual {
+  position: relative;
+  isolation: isolate;
+
+  background: #12081f;
+
+  // blurred copy of the same image fills the top/bottom space
+  .visual-bg {
+    filter: blur(32px) saturate(1.3) brightness(0.65);
+    transform: scale(1.3);
+  }
+
+  // sharp, full image — edges fade into the blurred backdrop
+  .visual-main {
+    z-index: 0;
+    transition: transform 1.2s $ease;
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0%,
+      #000 14%,
+      #000 86%,
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0%,
+      #000 14%,
+      #000 86%,
+      transparent 100%
+    );
+  }
+
+  &:hover .visual-main {
+    transform: scale(1.03);
+  }
+
+  // dark gradient at the bottom for the caption chip
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: linear-gradient(to top, rgba(9, 9, 15, 0.75), transparent 45%);
+    pointer-events: none;
+  }
+
+  .glass-chip {
+    position: absolute;
+    z-index: 2;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    animation: floaty 5s ease-in-out infinite;
+
+    &--bottom {
+      left: 1.5rem;
+      right: 1.5rem;
+      bottom: 1.5rem;
+    }
+
+    &--top {
+      top: 1.5rem;
+      right: 1.5rem;
+      animation-delay: -2.5s;
+    }
+  }
+
+  .live-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #22c55e;
+    animation: pulseRing 1.6s ease-out infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-page .blob,
+  .login-card,
+  .glass-chip,
+  .live-dot,
+  .login-visual .visual-main {
+    animation: none !important;
+    transition: none !important;
+  }
+}

@@ -8,3 +8,4 @@ from app.models.answer import Answer
 from app.models.score import Score
 from app.models.feedback import Feedback
 from app.models.report import Report
+from app.models.session_review import SessionReview

@@ -226,6 +226,30 @@ def get_configuration(
                 "extra_config": {
                     "question_count": extra.get("question_count"),
                     "categories": extra.get("categories"),
+                    # monitoring rules the interviewer chose for THIS
+                    # interview (the candidate screen needs them)
+                    "proctoring": {
+                        "enabled": bool(
+                            (extra.get("proctoring") or {}).get(
+                                "enabled", False
+                            )
+                        ),
+                        "face": bool(
+                            (extra.get("proctoring") or {}).get(
+                                "face", True
+                            )
+                        ),
+                        "eye": bool(
+                            (extra.get("proctoring") or {}).get(
+                                "eye", True
+                            )
+                        ),
+                        "phone": bool(
+                            (extra.get("proctoring") or {}).get(
+                                "phone", False
+                            )
+                        ),
+                    },
                 }
             }
         )

@@ -11,11 +11,21 @@ database migration is needed:
 
     extra_config = {
         "invited": ["a@x.com", ...],
+        "invitations": {
+            "a@x.com": {
+                "code": "INV-K7QM-4X9B",     # personal interview ID
+                "role": "Python Developer",  # role fixed by interviewer
+                "invited_at": "...", "opened_at": "...",
+            }
+        },
         "follow_ups": {"enabled": true, "count": 2},
         "proctoring": {...},
         "job": {...},
     }
 """
+
+import re
+import secrets
 
 from sqlalchemy.orm import Session
 
@@ -53,12 +63,84 @@ def _extra(configuration) -> dict:
     )
 
 
-def invited_emails(configuration) -> set[str]:
+def invitations(configuration) -> dict:
+    """email (lower case) -> invitation record."""
+
+    raw = _extra(configuration).get("invitations") or {}
+
     return {
+        str(email).strip().lower(): dict(record or {})
+        for email, record in raw.items()
+        if email
+    }
+
+
+def invited_emails(configuration) -> set[str]:
+    legacy = {
         str(e).strip().lower()
         for e in (_extra(configuration).get("invited") or [])
         if e
     }
+
+    return legacy | set(invitations(configuration).keys())
+
+
+def invitation_for(configuration, user: User) -> dict | None:
+    """The invitation (ID + fixed role) issued to this user, if any."""
+
+    return invitations(configuration).get(
+        (user.email or "").strip().lower()
+    )
+
+
+def invited_role(configuration, user: User) -> str:
+    record = invitation_for(configuration, user) or {}
+    return (record.get("role") or "").strip()
+
+
+# ---------------------------------------------------------
+# PERSONAL INTERVIEW ID   (INV-XXXX-XXXX)
+# No 0/O/1/I so it is easy to read and type.
+# ---------------------------------------------------------
+
+_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+
+def new_invite_code(existing: set[str] | None = None) -> str:
+
+    existing = existing or set()
+
+    while True:
+        raw = "".join(
+            secrets.choice(_CODE_ALPHABET) for _ in range(8)
+        )
+        code = f"INV-{raw[:4]}-{raw[4:]}"
+
+        if code not in existing:
+            return code
+
+
+def format_code(value) -> str | None:
+    """
+    'inv-k7qm-4x9b', 'INVK7QM4X9B', ' INV K7QM 4X9B ' -> 'INV-K7QM-4X9B'
+    Returns None when it cannot be an interview ID.
+    """
+
+    clean = re.sub(r"[^A-Z0-9]", "", str(value or "").upper())
+
+    if len(clean) != 11 or not clean.startswith("INV"):
+        return None
+
+    return f"INV-{clean[3:7]}-{clean[7:]}"
+
+
+def mask_email(email: str) -> str:
+    name, _, domain = (email or "").partition("@")
+
+    if not domain:
+        return "the invited email address"
+
+    return f"{name[:1]}***@{domain}"
 
 
 def is_invited(configuration, user: User) -> bool:

@@ -4,7 +4,8 @@ HIRING API
 Interviewer / admin side
     GET  /hiring/interviews                       interviews + monitoring + job settings
     POST /hiring/interviews/{id}/status           open / close for new candidates
-    POST /hiring/interviews/{id}/invite           e-mail invitation links
+    POST /hiring/interviews/{id}/invite           e-mail personal invitations
+                                                  (role fixed + interview ID)
     GET  /hiring/analytics                        funnel, score spread, per-interview stats
     PUT  /hiring/interviews/{id}/settings         change monitoring + job details
     GET  /hiring/candidates                       every candidate who attended
@@ -12,6 +13,7 @@ Interviewer / admin side
     POST /hiring/candidates/{session_id}/decision select / reject / hold (+ e-mail)
 
 Candidate side (own session only, never sees scores)
+    POST /hiring/invitations/{code}/open          check interview ID -> interview
     POST /hiring/sessions/{session_id}/submitted  "thanks" e-mail after completion
     GET  /hiring/sessions/{session_id}/status     under review / selected / not selected
     POST /hiring/sessions/{session_id}/monitoring-event
@@ -27,9 +29,11 @@ from fastapi import (
     BackgroundTasks,
     Depends,
     HTTPException,
+    Response,
     status,
 )
 from pydantic import BaseModel, Field
+from sqlalchemy import Text, cast, func
 from sqlalchemy.orm import Session
 
 from app.api.auth.auth import get_current_user
@@ -56,7 +60,18 @@ from app.services.email_service import (
     send_email,
 )
 from app.services.report_service import generate_interview_report
-from app.services.interview_policy import follow_up_policy
+from app.services.pdf_report_service import (
+    build_report_pdf_for_session,
+    candidate_feedback_for_session,
+)
+from app.services.interview_policy import (
+    follow_up_policy,
+    format_code,
+    invitation_for,
+    invitations as invitation_records,
+    mask_email,
+    new_invite_code,
+)
 
 
 router = APIRouter(
@@ -124,6 +139,7 @@ def _policy(configuration) -> dict:
         "enabled": enabled,
         "face": enabled and bool(raw.get("face", True)),
         "eye": enabled and bool(raw.get("eye", True)),
+        "phone": enabled and bool(raw.get("phone", False)),
     }
 
 
@@ -438,7 +454,24 @@ def notify_interviewer_task(session_id) -> None:
             ),
         )
 
-        send_email(interviewer.email, subject, text)
+        # PDF report (bullet points + feedback + improvement analysis)
+        attachments = []
+
+        try:
+            pdf_bytes, pdf_name = build_report_pdf_for_session(
+                db, session.id
+            )
+            attachments.append((pdf_name, pdf_bytes, "application/pdf"))
+
+        except Exception as exc:
+            print(f"PDF report could not be built: {exc}")
+
+        send_email(
+            interviewer.email,
+            subject,
+            text,
+            attachments=attachments,
+        )
 
     except Exception as exc:
         print(f"Could not notify interviewer: {exc}")
@@ -455,6 +488,7 @@ class ProctoringSettings(BaseModel):
     enabled: bool = False
     face: bool = True
     eye: bool = True
+    phone: bool = False
 
 
 class FollowUpSettings(BaseModel):
@@ -485,6 +519,10 @@ class StatusRequest(BaseModel):
 class InviteRequest(BaseModel):
     emails: list[str] = Field(..., min_length=1, max_length=50)
 
+    # The role the interviewer fixed for these candidates. It is sent
+    # in the e-mail and is the ONLY role they can open.
+    role: str | None = Field(None, max_length=120)
+
 
 class DecisionRequest(BaseModel):
     decision: Literal[
@@ -505,10 +543,108 @@ class MonitoringEventRequest(BaseModel):
         "face_not_found",
         "multiple_faces",
         "looking_away",
+        "looking_down",
+        "phone_detected",
         "eyes_closed",
         "tab_left",
     ]
     detail: str | None = Field(None, max_length=200)
+
+
+# =========================================================
+# INVITATION ROWS (interviewer view: who got which ID / role)
+# =========================================================
+
+def _users_by_email(db: Session, emails: set[str]) -> dict:
+
+    if not emails:
+        return {}
+
+    return {
+        (u.email or "").strip().lower(): u
+        for u in db.query(User)
+        .filter(func.lower(User.email).in_(list(emails)))
+        .all()
+    }
+
+
+def _all_invited_emails(configurations) -> set[str]:
+
+    emails: set[str] = set()
+
+    for configuration in configurations:
+
+        extra = (configuration.extra_config or {}) if configuration else {}
+
+        emails.update(invitation_records(configuration).keys())
+        emails.update(
+            str(e).strip().lower()
+            for e in (extra.get("invited") or [])
+            if e
+        )
+
+    return emails
+
+
+def _invitation_rows(
+    configuration,
+    sessions: list,
+    users_by_email: dict,
+) -> list[dict]:
+    """
+    status: sent -> opened (clicked the link / entered the ID)
+            -> started -> completed / ended
+    """
+
+    extra = (configuration.extra_config or {}) if configuration else {}
+
+    records = invitation_records(configuration)
+
+    # old invitations (before personal IDs existed) have no record
+    for email in extra.get("invited") or []:
+        records.setdefault(str(email).strip().lower(), {})
+
+    latest_session = {}
+
+    for s in sorted(
+        sessions,
+        key=lambda x: x.started_at.timestamp() if x.started_at else 0,
+    ):
+        latest_session[s.candidate_id] = s
+
+    rows = []
+
+    for email, record in records.items():
+
+        user = users_by_email.get(email)
+        session = latest_session.get(user.id) if user else None
+
+        if session is not None and session.status == "completed":
+            state = "completed"
+        elif session is not None and session.status == "terminated":
+            state = "ended"
+        elif session is not None:
+            state = "started"
+        elif record.get("opened_at"):
+            state = "opened"
+        else:
+            state = "sent"
+
+        rows.append(
+            {
+                "email": email,
+                "name": user.name if user else None,
+                "role": record.get("role") or "",
+                "code": record.get("code"),
+                "status": state,
+                "invited_at": record.get("invited_at"),
+                "opened_at": record.get("opened_at"),
+            }
+        )
+
+    rows.sort(key=lambda r: r["invited_at"] or "", reverse=True)
+
+    return rows
 
 
 # =========================================================
@@ -576,6 +712,10 @@ def list_my_interviews(
 
     result = []
 
+    users_by_email = _users_by_email(
+        db, _all_invited_emails(configs.values())
+    )
+
     for interview in interviews:
 
         configuration = configs.get(interview.id)
@@ -610,7 +750,13 @@ def list_my_interviews(
                 "status": interview.status,
                 "created_at": _iso(interview.created_at),
                 "accepting": interview.status != "closed",
-                "invited_count": len(extra.get("invited") or []),
+                "invited_count": len(
+                    set(extra.get("invited") or [])
+                    | set(invitation_records(configuration).keys())
+                ),
+                "invitations": _invitation_rows(
+                    configuration, sessions, users_by_email
+                ),
                 "has_configuration": configuration is not None,
                 "question_count": extra.get("question_count"),
                 "proctoring": _policy(configuration),
@@ -752,13 +898,20 @@ _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def _send_invite_task(
-    emails: list[str],
-    subject: str,
-    body: str,
+    messages: list[tuple[str, str, str]],
+    from_name: str | None,
+    reply_to: str | None,
 ) -> None:
+    """messages = [(to_email, subject, body), ...] - one per candidate."""
 
-    for address in emails:
-        send_email(address, subject, body)
+    for address, subject, body in messages:
+        send_email(
+            address,
+            subject,
+            body,
+            from_name=from_name,
+            reply_to=reply_to,
+        )
 
 
 @router.post("/interviews/{interview_id}/invite")
@@ -769,12 +922,26 @@ def invite_candidates(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    """
+    Invite candidates for ONE fixed role.
+
+    Every candidate gets their own e-mail with
+      * a personal Interview ID  (INV-XXXX-XXXX)
+      * a link that opens the interview straight away
+    and can open only this interview.
+    """
 
     _require_recruiter(current_user)
 
     interview = _owned_interview(db, current_user, interview_id)
 
     configuration = _get_configuration(db, interview_id)
+
+    if configuration is None:
+        raise HTTPException(
+            400,
+            "Configure the interview first, then invite candidates",
+        )
 
     valid = []
     invalid = []
@@ -794,48 +961,217 @@ def invite_candidates(
             422, "Enter at least one valid email address"
         )
 
-    link = (
-        f"{settings.frontend_url.rstrip('/')}"
-        f"/interviews/{interview.id}"
-    )
-
     job = _job(configuration)
+    policy = _policy(configuration)
 
-    subject, text = build_invite_email(
-        job["role"] or interview.title,
-        link,
-        _policy(configuration)["enabled"],
-        company=job["company"] or None,
-        duration=interview.duration,
-        question_count=(
-            (configuration.extra_config or {}).get("question_count")
-            if configuration
-            else None
-        ),
+    extra = dict(configuration.extra_config or {})
+
+    role = (
+        (body.role or "").strip()
+        or job["role"]
+        or interview.title
     )
+
+    company = job["company"] or settings.company_name
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    records = dict(extra.get("invitations") or {})
+    used_codes = {
+        (r or {}).get("code") for r in records.values()
+    }
+
+    base = settings.frontend_url.rstrip("/")
+
+    messages = []
+
+    for address in valid:
+
+        record = dict(records.get(address) or {})
+
+        # same person invited again -> same ID (just re-sent)
+        if not record.get("code"):
+            record["code"] = new_invite_code(used_codes)
+            used_codes.add(record["code"])
+            record["invited_at"] = now
+
+        record["email"] = address
+        record["role"] = role
+        record["last_sent_at"] = now
+        record["invited_by"] = str(current_user.id)
+
+        records[address] = record
+
+        subject, text = build_invite_email(
+            role,
+            f"{base}/invite/{record['code']}",
+            policy["enabled"],
+            company=company,
+            duration=interview.duration,
+            question_count=extra.get("question_count"),
+            access_code=record["code"],
+            interviewer_name=current_user.name,
+            candidate_email=address,
+        )
+
+        messages.append((address, subject, text))
+
+    extra["invitations"] = records
+
+    # keep the old list in sync (older code reads it)
+    extra["invited"] = sorted(
+        set(extra.get("invited") or []) | set(valid)
+    )
+
+    configuration.extra_config = extra
+
+    db.commit()
 
     background_tasks.add_task(
         _send_invite_task,
-        valid,
-        subject,
-        text,
+        messages,
+        company,
+        current_user.email,
     )
 
-    # remember who was invited
-    if configuration is not None:
-        extra = dict(configuration.extra_config or {})
-        invited = set(extra.get("invited") or [])
-        invited.update(valid)
-        extra["invited"] = sorted(invited)
-        configuration.extra_config = extra
-
-    db.commit()
+    sessions = (
+        db.query(InterviewSession)
+        .filter(InterviewSession.interview_id == interview_id)
+        .all()
+    )
 
     return {
         "success": True,
         "queued": len(valid),
         "invalid": invalid,
-        "link": link,
+        "role": role,
+        "link": f"{base}/interviews/{interview.id}",
+        "invitations": _invitation_rows(
+            configuration,
+            sessions,
+            _users_by_email(db, _all_invited_emails([configuration])),
+        ),
+    }
+
+
+# =========================================================
+# CANDIDATE: OPEN AN INVITATION WITH THE INTERVIEW ID
+# =========================================================
+
+@router.post("/invitations/{code}/open")
+def open_invitation(
+    code: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Called when the candidate clicks the e-mail button (/invite/<ID>)
+    or types the ID on the dashboard.
+
+    The ID only works for the e-mail address it was issued to.
+    Returns the ONE interview the candidate may open.
+    """
+
+    if current_user.role != "candidate":
+        raise HTTPException(
+            403,
+            "Interview links are for candidate accounts. "
+            "Please log in with the candidate account.",
+        )
+
+    canonical = format_code(code)
+
+    if canonical is None:
+        raise HTTPException(
+            404,
+            "This Interview ID is not valid. "
+            "Check the ID in your invitation email.",
+        )
+
+    candidates = (
+        db.query(InterviewConfiguration)
+        .filter(
+            cast(InterviewConfiguration.extra_config, Text).like(
+                f"%{canonical}%"
+            )
+        )
+        .all()
+    )
+
+    configuration = None
+    record = None
+
+    for item in candidates:
+        for rec in invitation_records(item).values():
+            if rec.get("code") == canonical:
+                configuration, record = item, rec
+                break
+        if configuration is not None:
+            break
+
+    if configuration is None:
+        raise HTTPException(
+            404,
+            "This Interview ID was not found. "
+            "Check the ID in your invitation email.",
+        )
+
+    invited_email = (record.get("email") or "").strip().lower()
+
+    # the ID belongs to ONE e-mail address
+    if invited_email != (current_user.email or "").strip().lower():
+        raise HTTPException(
+            403,
+            f"This Interview ID was issued to {mask_email(invited_email)}. "
+            "Please log in with that email address.",
+        )
+
+    interview = (
+        db.query(Interview)
+        .filter(Interview.id == configuration.interview_id)
+        .first()
+    )
+
+    if interview is None:
+        raise HTTPException(404, "This interview no longer exists.")
+
+    has_session = (
+        db.query(InterviewSession.id)
+        .filter(
+            InterviewSession.interview_id == interview.id,
+            InterviewSession.candidate_id == current_user.id,
+        )
+        .first()
+        is not None
+    )
+
+    if interview.status == "closed" and not has_session:
+        raise HTTPException(
+            400,
+            "This interview is no longer accepting candidates.",
+        )
+
+    if not record.get("opened_at"):
+
+        extra = dict(configuration.extra_config or {})
+        records = dict(extra.get("invitations") or {})
+
+        updated = dict(records.get(invited_email) or {})
+        updated["opened_at"] = datetime.now(timezone.utc).isoformat()
+        records[invited_email] = updated
+
+        extra["invitations"] = records
+        configuration.extra_config = extra
+
+        db.commit()
+
+    job = _job(configuration)
+
+    return {
+        "interview_id": str(interview.id),
+        "title": interview.title,
+        "role": record.get("role") or job["role"] or interview.title,
+        "company": job["company"] or settings.company_name,
     }
 
 
@@ -851,6 +1187,32 @@ def list_candidates(
 ):
 
     _require_recruiter(current_user)
+
+    # "View candidates" on one interview -> only that interview
+    scope = None
+
+    if interview_id:
+
+        scoped = _owned_interview(db, current_user, interview_id)
+        scoped_config = _get_configuration(db, interview_id)
+
+        scope = {
+            "id": str(scoped.id),
+            "title": scoped.title,
+            "role": _job(scoped_config)["role"] or scoped.title,
+            "invited": len(
+                set(invitation_records(scoped_config).keys())
+                | {
+                    str(e).strip().lower()
+                    for e in (
+                        (scoped_config.extra_config or {}).get("invited")
+                        or []
+                    )
+                }
+                if scoped_config
+                else []
+            ),
+        }
 
     query = (
         db.query(InterviewSession, Interview, User)
@@ -875,6 +1237,31 @@ def list_candidates(
     rows = query.order_by(
         InterviewSession.started_at.desc().nullslast()
     ).all()
+
+    # One candidate + one interview = ONE row, however many times
+    # the candidate resumed / reopened it. Keep the most useful
+    # session: completed > stopped > in progress, then the newest.
+    def _started_ts(session):
+        return session.started_at.timestamp() if session.started_at else 0
+
+    def _rank(session):
+        order = {"completed": 0, "terminated": 1}
+        return (order.get(session.status, 2), -_started_ts(session))
+
+    best = {}
+
+    for row in rows:
+        key = (row[2].id, row[1].id)
+        kept = best.get(key)
+
+        if kept is None or _rank(row[0]) < _rank(kept[0]):
+            best[key] = row
+
+    rows = sorted(
+        best.values(),
+        key=lambda row: _started_ts(row[0]),
+        reverse=True,
+    )
 
     session_ids = [s.id for s, _i, _u in rows]
     interview_ids = list({i.id for _s, i, _u in rows})
@@ -963,6 +1350,16 @@ def list_candidates(
                 "session_id": str(session.id),
                 "interview_id": str(interview.id),
                 "interview_title": interview.title,
+                "role": (
+                    (
+                        invitation_for(
+                            configs.get(interview.id), candidate
+                        )
+                        or {}
+                    ).get("role")
+                    or _job(configs.get(interview.id))["role"]
+                    or interview.title
+                ),
                 "candidate": {
                     "id": str(candidate.id),
                     "name": candidate.name,
@@ -995,6 +1392,7 @@ def list_candidates(
     return {
         "summary": summary,
         "candidates": candidates,
+        "interview": scope,
     }
 
 
@@ -1196,9 +1594,11 @@ def get_candidate_detail(
         is not None
     )
 
-    if has_answers and (
-        report is None or session.status == "completed"
-    ):
+    candidate_feedback = None
+
+    # Build it once. Rebuilding on every page open was the main
+    # reason this page felt slow.
+    if has_answers and report is None:
         try:
             report = generate_interview_report(
                 db=db,
@@ -1213,6 +1613,19 @@ def get_candidate_detail(
                 .filter(Report.session_id == session.id)
                 .first()
             )
+
+    # -----------------------------------------------------
+    # FEEDBACK THE CANDIDATE GETS (strengths / weak / improve)
+    # -----------------------------------------------------
+
+    if has_answers:
+        try:
+            candidate_feedback = candidate_feedback_for_session(
+                db, session.id
+            )
+        except Exception as exc:
+            print(f"Candidate feedback skipped: {exc}")
+            candidate_feedback = None
 
     # -----------------------------------------------------
     # QUESTIONS + ANSWERS + SCORES
@@ -1354,32 +1767,46 @@ def get_candidate_detail(
 
     history = []
 
-    for h_session, h_interview in history_query.all():
-        h_report = (
-            db.query(Report)
-            .filter(Report.session_id == h_session.id)
-            .first()
-        )
-        h_review = (
-            db.query(SessionReview)
-            .filter(SessionReview.session_id == h_session.id)
-            .first()
-        )
-        history.append(
-            {
-                "session_id": str(h_session.id),
-                "interview_title": h_interview.title,
-                "status": h_session.status,
-                "score": (
-                    _num(h_report.overall_score)
-                    if h_report
-                    else None
-                ),
-                "decision": (
-                    h_review.decision if h_review else "pending"
-                ),
-            }
-        )
+    history_rows = history_query.all()
+
+    if history_rows:
+
+        h_ids = [h_session.id for h_session, _i in history_rows]
+
+        h_reports = {
+            r.session_id: r
+            for r in db.query(Report)
+            .filter(Report.session_id.in_(h_ids))
+            .all()
+        }
+
+        h_reviews = {
+            r.session_id: r
+            for r in db.query(SessionReview)
+            .filter(SessionReview.session_id.in_(h_ids))
+            .all()
+        }
+
+        for h_session, h_interview in history_rows:
+
+            h_report = h_reports.get(h_session.id)
+            h_review = h_reviews.get(h_session.id)
+
+            history.append(
+                {
+                    "session_id": str(h_session.id),
+                    "interview_title": h_interview.title,
+                    "status": h_session.status,
+                    "score": (
+                        _num(h_report.overall_score)
+                        if h_report
+                        else None
+                    ),
+                    "decision": (
+                        h_review.decision if h_review else "pending"
+                    ),
+                }
+            )
 
     policy = _policy(configuration)
 
@@ -1417,6 +1844,15 @@ def get_candidate_detail(
             "categories": extra.get("categories") or [],
             "question_count": extra.get("question_count"),
             "job": _job(configuration),
+            "assigned_role": (
+                (
+                    invitation_for(configuration, candidate) or {}
+                ).get("role")
+                if candidate
+                else None
+            )
+            or _job(configuration)["role"]
+            or interview.title,
         },
         "analysis": {
             "overall_score": (
@@ -1426,6 +1862,7 @@ def get_candidate_detail(
             "skills": skills,
             "questions": qa,
         },
+        "candidate_feedback": candidate_feedback,
         "monitoring": {
             "required": policy["enabled"],
             "face": policy["face"],
@@ -1455,6 +1892,57 @@ def get_candidate_detail(
         },
         "history": history,
     }
+
+
+# =========================================================
+# INTERVIEWER: DOWNLOAD REPORT AS PDF
+# =========================================================
+
+@router.get("/candidates/{session_id}/report.pdf")
+def download_candidate_report_pdf(
+    session_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _require_recruiter(current_user)
+
+    session, _interview = _session_for_recruiter(
+        db, current_user, session_id
+    )
+
+    # build the report row once if answers exist but it is missing
+    has_report = (
+        db.query(Report.id)
+        .filter(Report.session_id == session.id)
+        .first()
+        is not None
+    )
+
+    if not has_report:
+        try:
+            generate_interview_report(db=db, session_id=session.id)
+            db.commit()
+        except Exception as exc:
+            db.rollback()
+            print(f"Report generation skipped: {exc}")
+
+    try:
+        pdf_bytes, pdf_name = build_report_pdf_for_session(db, session.id)
+
+    except Exception as exc:
+        print(f"PDF report failed: {exc}")
+        raise HTTPException(
+            status_code=500,
+            detail="Could not build the PDF report",
+        )
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{pdf_name}"'
+        },
+    )
 
 
 # =========================================================
@@ -1511,16 +1999,25 @@ def set_decision(
 
     if wants_email:
 
+        # strengths / weak points / how to improve for the candidate
+        try:
+            feedback = candidate_feedback_for_session(db, session.id)
+        except Exception as exc:
+            print(f"Candidate feedback skipped: {exc}")
+            feedback = None
+
         if body.decision == "selected":
             subject, text = build_selected_email(
                 candidate.name,
                 interview.title,
                 review.decision_note,
+                feedback,
             )
         else:
             subject, text = build_rejected_email(
                 candidate.name,
                 interview.title,
+                feedback,
             )
 
         review.notification_status = "queued"

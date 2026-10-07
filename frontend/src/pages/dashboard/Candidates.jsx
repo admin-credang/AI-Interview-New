@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import api from "../../services/api";
+import {
+  loadCandidateDetailPage,
+  prefetchCandidate,
+} from "../../services/prefetch";
 import StatCard from "../../components/dashboard/StatCard";
 import {
   DecisionBadge,
@@ -31,7 +35,13 @@ const TABS = [
 
 export default function Candidates() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { t } = useDashboard();
+
+  // "View candidates" on an interview opens  /dashboard/candidates?interview=<id>
+  // -> only the candidates of THAT interview are loaded and shown.
+  const scopeId = searchParams.get("interview") || "";
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -45,8 +55,14 @@ export default function Candidates() {
   useEffect(() => {
     let cancelled = false;
 
+    setLoading(true);
+    setError("");
+    setInterviewId("all");
+
     api
-      .get("/hiring/candidates")
+      .get("/hiring/candidates", {
+        params: scopeId ? { interview_id: scopeId } : undefined,
+      })
       .then((res) => {
         if (!cancelled) setData(res.data);
       })
@@ -62,10 +78,26 @@ export default function Candidates() {
     return () => {
       cancelled = true;
     };
+  }, [scopeId]);
+
+  // download the candidate page code in the background, so the
+  // first click on a candidate does not wait for it
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      loadCandidateDetailPage().catch(() => {});
+    }, 300);
+
+    return () => window.clearTimeout(id);
   }, []);
 
   const candidates = data?.candidates || [];
   const summary = data?.summary || {};
+  const scope = data?.interview || null;
+
+  const openCandidate = (sessionId) =>
+    navigate(`/dashboard/candidates/${sessionId}`, {
+      state: { back: `${location.pathname}${location.search}` },
+    });
 
   const interviewOptions = useMemo(() => {
     const map = new Map();
@@ -135,11 +167,41 @@ export default function Candidates() {
   return (
     <div className="space-y-10">
       <header className="px-1">
-        <h1 className="text-3xl md:text-4xl font-black tracking-tight">Candidates</h1>
-        <p className="opacity-70 mt-2 text-sm">
-          Everyone who attended your interviews. Open a candidate to read the AI
-          analysis, check monitoring and select or reject.
-        </p>
+        {scopeId && (
+          <button
+            onClick={() => navigate("/dashboard/controls")}
+            className="text-sm font-bold text-fuchsia-400 hover:underline mb-3"
+          >
+            ← Back to interview controls
+          </button>
+        )}
+
+        <h1 className="text-3xl md:text-4xl font-black tracking-tight">
+          {scopeId ? scope?.title || "Candidates" : "Candidates"}
+        </h1>
+
+        {scopeId ? (
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+            <span className="px-3 py-1 rounded-full border border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-300 text-xs font-bold">
+              {scope?.role || "This interview"}
+            </span>
+            <span className="opacity-70">
+              {scope ? `${scope.invited} invited · ` : ""}
+              only candidates of this interview
+            </span>
+            <button
+              onClick={() => setSearchParams({})}
+              className="text-xs font-bold underline opacity-80 hover:opacity-100"
+            >
+              Show all interviews
+            </button>
+          </div>
+        ) : (
+          <p className="opacity-70 mt-2 text-sm">
+            Everyone who attended your interviews. Open a candidate to read the AI
+            analysis, check monitoring and select or reject.
+          </p>
+        )}
       </header>
 
       <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
@@ -202,20 +264,22 @@ export default function Candidates() {
             <option value="name" className="text-black">Name A-Z</option>
           </select>
 
-          <select
-            value={interviewId}
-            onChange={(e) => setInterviewId(e.target.value)}
-            className={`px-4 py-3 rounded-2xl border ${t.input} outline-none focus:ring-2 focus:ring-fuchsia-500 md:max-w-xs w-full`}
-          >
-            <option value="all" className="text-black">
-              All interviews
-            </option>
-            {interviewOptions.map(([id, title]) => (
-              <option key={id} value={id} className="text-black">
-                {title}
+          {!scopeId && (
+            <select
+              value={interviewId}
+              onChange={(e) => setInterviewId(e.target.value)}
+              className={`px-4 py-3 rounded-2xl border ${t.input} outline-none focus:ring-2 focus:ring-fuchsia-500 md:max-w-xs w-full`}
+            >
+              <option value="all" className="text-black">
+                All interviews
               </option>
-            ))}
-          </select>
+              {interviewOptions.map(([id, title]) => (
+                <option key={id} value={id} className="text-black">
+                  {title}
+                </option>
+              ))}
+            </select>
+          )}
 
           <button
             onClick={exportCsv}
@@ -258,7 +322,9 @@ export default function Candidates() {
           <h3 className="text-2xl font-bold mb-2">No candidates found</h3>
           <p className="opacity-60 max-w-md mx-auto text-sm leading-relaxed">
             {candidates.length === 0
-              ? "Nobody has attended your interviews yet. Candidates appear here as soon as they start."
+              ? scopeId
+                ? "Nobody has attended this interview yet. Invited candidates appear here as soon as they start."
+                : "Nobody has attended your interviews yet. Candidates appear here as soon as they start."
               : "No candidates match these filters."}
           </p>
         </div>
@@ -282,7 +348,9 @@ export default function Candidates() {
                 {list.map((c) => (
                   <tr
                     key={c.session_id}
-                    onClick={() => navigate(`/dashboard/candidates/${c.session_id}`)}
+                    onClick={() => openCandidate(c.session_id)}
+                    onMouseEnter={() => prefetchCandidate(c.session_id)}
+                    onFocus={() => prefetchCandidate(c.session_id)}
                     className="hover:bg-white/5 cursor-pointer transition"
                   >
                     <td className="px-6 py-4">

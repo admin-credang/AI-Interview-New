@@ -19,6 +19,7 @@ the console (so the whole flow still works while developing).
 import smtplib
 import ssl
 from email.message import EmailMessage
+from email.utils import formataddr, parseaddr
 from html import escape
 
 from app.config import settings
@@ -46,9 +47,17 @@ def send_email(
     to_email: str,
     subject: str,
     body: str,
+    from_name: str | None = None,
+    reply_to: str | None = None,
+    attachments: list[tuple[str, bytes, str]] | None = None,
 ) -> tuple[bool, str]:
     """
     Returns (sent, status_text). Never raises.
+
+    from_name -> the name the candidate sees in the inbox
+                 ("Acme Technologies" <hr@acme.com>)
+    reply_to  -> where the candidate's reply goes (the interviewer)
+    attachments -> [(filename, bytes, "application/pdf"), ...]
     """
 
     if not to_email:
@@ -59,7 +68,13 @@ def send_email(
         print("=" * 70)
         print("EMAIL (SMTP not configured - printed only)")
         print(f"To      : {to_email}")
+        print(f"From    : {from_name or settings.company_name}")
         print(f"Subject : {subject}")
+        if attachments:
+            print(
+                "Attached: "
+                + ", ".join(f"{n} ({len(b)} bytes)" for n, b, _m in attachments)
+            )
         print(body)
         print("=" * 70)
 
@@ -73,9 +88,18 @@ def send_email(
             or "no-reply@localhost"
         )
 
+        _name, sender_address = parseaddr(sender)
+
+        if from_name and sender_address:
+            sender = formataddr((from_name, sender_address))
+
         message = EmailMessage()
         message["From"] = sender
         message["To"] = to_email
+
+        if reply_to:
+            message["Reply-To"] = reply_to
+
         message["Subject"] = subject
         message.set_content(str(body))
 
@@ -83,6 +107,15 @@ def send_email(
 
         if html_body:
             message.add_alternative(html_body, subtype="html")
+
+        for file_name, file_bytes, mime in attachments or []:
+            main_type, _, sub_type = mime.partition("/")
+            message.add_attachment(
+                file_bytes,
+                maintype=main_type or "application",
+                subtype=sub_type or "octet-stream",
+                filename=file_name,
+            )
 
         context = ssl.create_default_context()
 
@@ -259,9 +292,32 @@ def _button(label: str, url: str) -> str:
     )
 
 
-def _layout(title: str, preheader: str, inner: str) -> str:
+def _code_box(label: str, code: str) -> str:
+    """Big, easy-to-copy ID block (the candidate's personal interview ID)."""
 
-    team = _e(_team())
+    return (
+        '<table role="presentation" width="100%" cellpadding="0" '
+        'cellspacing="0" style="margin:6px 0 22px;"><tr>'
+        f'<td align="center" style="background:{_TONES["info"][0]};'
+        f'border:1px dashed {_ACCENT};border-radius:10px;'
+        'padding:16px 12px;">'
+        f'<div style="font:600 11px/1.4 {_FONT};letter-spacing:1.5px;'
+        f'text-transform:uppercase;color:{_MUTED};">{_e(label)}</div>'
+        f'<div style="margin-top:6px;font:700 26px/1.2 '
+        f"'Courier New',Courier,monospace;letter-spacing:3px;"
+        f'color:{_INK};">{_e(code)}</div>'
+        "</td></tr></table>"
+    )
+
+
+def _layout(
+    title: str,
+    preheader: str,
+    inner: str,
+    org: str | None = None,
+) -> str:
+
+    team = _e(org or _team())
 
     return (
         '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">'
@@ -307,9 +363,21 @@ def build_invite_email(
     company: str | None = None,
     duration: int | None = None,
     question_count: int | None = None,
+    *,
+    access_code: str | None = None,
+    interviewer_name: str | None = None,
+    candidate_email: str | None = None,
 ) -> tuple[str, str]:
+    """
+    Interview invitation sent to ONE candidate.
 
-    subject = f"You are invited to an AI interview - {job_title}"
+    The e-mail carries the candidate's personal interview ID and a
+    button that opens the interview straight away.
+    """
+
+    org = company or _team()
+
+    subject = f"Interview invitation from {org} - {job_title}"
 
     camera_text = (
         "This interview uses camera monitoring, so please use a "
@@ -318,25 +386,43 @@ def build_invite_email(
         else "You only need a working microphone."
     )
 
-    org = company or _team()
+    email_hint = (
+        f"({candidate_email}) " if candidate_email else ""
+    )
 
     # ---------- plain text (fallback) ----------
 
     text = (
         "Hello,\n\n"
-        f"{org} has invited you to take an AI interview for "
-        f"\"{job_title}\".\n\n"
-        f"Start here:\n{link}\n\n"
-        "Log in, or register with this same email address, then "
-        "open the interview and follow the steps.\n\n"
-        f"{camera_text}\n\n"
-        f"Good luck!\n{_team()}\n"
+        f"{org} has invited you to an AI interview for the "
+        f"position of \"{job_title}\".\n\n"
+        + (
+            f"YOUR INTERVIEW ID: {access_code}\n\n"
+            if access_code
+            else ""
+        )
+        + f"Start your interview here:\n{link}\n\n"
+        f"1. Open the link above.\n"
+        f"2. Log in, or register with this same email address "
+        f"{email_hint}- the interview opens only for the invited "
+        "address.\n"
+        "3. Complete the quick device check and start.\n\n"
+        + (
+            "If you open the platform yourself, enter your "
+            "Interview ID on your dashboard.\n\n"
+            if access_code
+            else ""
+        )
+        + f"{camera_text}\n\n"
+        "Good luck!\n"
+        f"{interviewer_name + chr(10) if interviewer_name else ''}"
+        f"{org}\n"
     )
 
     # ---------- designed HTML ----------
 
     facts = [
-        ("Role", _e(job_title)),
+        ("Position", _e(job_title)),
         ("Company", _e(company) if company else ""),
         (
             "Time allowed",
@@ -347,28 +433,35 @@ def build_invite_email(
             _e(question_count) if question_count else "",
         ),
         (
-            "Needs",
+            "You will need",
             "Camera and microphone" if monitoring else "Microphone",
         ),
     ]
 
     inner = (
         _h1("You are invited to an interview")
+        + _p("Hello,")
         + _p(
-            f"{_e(org)} would like you to take an AI interview for "
-            f"<strong>{_e(job_title)}</strong>. You can do it on your "
-            "own time, from your laptop, whenever you are ready."
+            f"<strong>{_e(org)}</strong> would like you to take an "
+            f"AI interview for the position of "
+            f"<strong>{_e(job_title)}</strong>. You can do it on "
+            "your own time, from your laptop, whenever you are ready."
+        )
+        + (
+            _code_box("Your personal Interview ID", access_code)
+            if access_code
+            else ""
         )
         + _facts(facts)
         + _p("<strong>How to start</strong>", bottom=12)
         + _steps(
             [
-                "Open the interview with the button below.",
+                "Click <strong>Start your interview</strong> below.",
                 "Log in. New here? Register with <strong>this same "
                 "email address</strong> - the interview only opens "
                 "for the address that was invited.",
-                "Finish the quick device check, then start. The "
-                "interview ends when you answer the last question.",
+                "Your Interview ID is checked automatically. Finish "
+                "the quick device check and start.",
             ]
         )
         + (
@@ -386,13 +479,38 @@ def build_invite_email(
                 "info",
             )
         )
-        + _button("Open the interview", link)
+        + _button("Start your interview", link)
+        + (
+            _p(
+                "Opened the platform yourself? Enter the Interview "
+                "ID above on your dashboard to begin.",
+                bottom=18,
+            )
+            if access_code
+            else ""
+        )
+        + _p(
+            "Your Interview ID is personal to you - please do not "
+            "share it.",
+            bottom=22,
+        )
+        + _p(
+            "Good luck!<br>"
+            + (
+                f"<strong>{_e(interviewer_name)}</strong><br>"
+                if interviewer_name
+                else ""
+            )
+            + f"{_e(org)}",
+            bottom=0,
+        )
     )
 
     html = _layout(
         subject,
         f"{org} invited you to interview for {job_title}.",
         inner,
+        org=org,
     )
 
     return subject, MailBody(text, html)
@@ -440,10 +558,78 @@ def build_ack_email(name: str, job_title: str) -> tuple[str, str]:
     return subject, MailBody(text, html)
 
 
+def _feedback_text(feedback: dict | None) -> str:
+    """Plain-text feedback block (strengths / weak points / improve)."""
+
+    if not feedback or not feedback.get("available"):
+        return ""
+
+    def block(title: str, items: list[str]) -> str:
+        if not items:
+            return ""
+        return f"{title}\n" + "\n".join(f"- {i}" for i in items) + "\n\n"
+
+    text = "Your interview feedback\n\n"
+    text += block("Your strengths", feedback.get("strengths") or [])
+    text += block("Where you were weaker", feedback.get("weaknesses") or [])
+    text += block("How to improve", feedback.get("improvements") or [])
+
+    notes = feedback.get("answer_notes") or []
+
+    if notes:
+        text += "Comments on your answers\n"
+        for n, item in enumerate(notes, start=1):
+            text += f"{n}. {item['question']}\n   {item['feedback']}\n"
+        text += "\n"
+
+    return text
+
+
+def _bullets(items: list[str]) -> str:
+    rows = "".join(
+        f'<li style="margin:0 0 6px;">{_e(i)}</li>' for i in items
+    )
+    return (
+        f'<ul style="margin:0 0 16px;padding-left:20px;font:400 15px/1.6 '
+        f'{_FONT};color:{_TEXT};">{rows}</ul>'
+    )
+
+
+def _feedback_html(feedback: dict | None) -> str:
+    """Strengths / weak points / improve / per-answer comments."""
+
+    if not feedback or not feedback.get("available"):
+        return ""
+
+    html = _h1("Your interview feedback")
+
+    for title, key in (
+        ("Your strengths", "strengths"),
+        ("Where you were weaker", "weaknesses"),
+        ("How to improve", "improvements"),
+    ):
+        items = feedback.get(key) or []
+
+        if items:
+            html += _p(f"<strong>{_e(title)}</strong>", bottom=6)
+            html += _bullets(items)
+
+    notes = feedback.get("answer_notes") or []
+
+    if notes:
+        html += _p("<strong>Comments on your answers</strong>", bottom=6)
+        html += _bullets(
+            [f"{n['question']} - {n['feedback']}" for n in notes]
+        )
+
+    return html
+
+
 def build_selected_email(
     name: str,
     job_title: str,
     note: str | None,
+    feedback: dict | None = None,
 ) -> tuple[str, str]:
 
     subject = f"Good news - you are selected for {job_title}"
@@ -456,6 +642,7 @@ def build_selected_email(
         f"for \"{job_title}\".\n\n"
         "Our team will contact you shortly with the details.\n"
         f"{extra}\n"
+        f"{_feedback_text(feedback)}"
         f"Regards,\n{_team()}\n"
     )
 
@@ -476,6 +663,7 @@ def build_selected_email(
             if note
             else ""
         )
+        + _feedback_html(feedback)
         + _p("Well done, and thank you for your time.", bottom=4)
     )
 
@@ -491,6 +679,7 @@ def build_selected_email(
 def build_rejected_email(
     name: str,
     job_title: str,
+    feedback: dict | None = None,
 ) -> tuple[str, str]:
 
     subject = f"Update on your application - {job_title}"
@@ -503,6 +692,7 @@ def build_rejected_email(
         "your application at this time. This is not a reflection "
         "of your potential, and we encourage you to apply again "
         "for future openings.\n\n"
+        f"{_feedback_text(feedback)}"
         f"Best wishes,\n{_team()}\n"
     )
 
@@ -519,6 +709,7 @@ def build_rejected_email(
             "of your potential, and we encourage you to apply again "
             "for future openings."
         )
+        + _feedback_html(feedback)
         + _p("We wish you all the best.", bottom=4)
     )
 
@@ -577,6 +768,8 @@ def build_interviewer_report_email(
         f"  Status        : {status_text}\n"
         f"  Overall score : {score_text}\n"
         f"  Monitoring    : {monitoring_text}\n\n"
+        "The full report is attached as a PDF (bullet points, feedback "
+        "and improvement analysis).\n"
         "Open the full report, answers and monitoring timeline, "
         "then select or reject the candidate:\n"
         f"{link}\n\n"
@@ -603,8 +796,10 @@ def build_interviewer_report_email(
             ]
         )
         + _p(
-            "Open the report to read the answers and the monitoring "
-            "timeline, then select or reject the candidate.",
+            "The PDF report (bullet points, feedback and improvement "
+            "analysis) is attached. Open the report online to read the "
+            "answers and the monitoring timeline, then select or reject "
+            "the candidate.",
             bottom=6,
         )
         + _button("Open the report", link)

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import api from "../../services/api";
+import { takePrefetchedCandidate } from "../../services/prefetch";
 import {
   DecisionBadge,
   SkillBar,
@@ -48,7 +49,11 @@ function Field({ label, children }) {
 export default function CandidateDetail() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { t, reloadHiring } = useDashboard();
+
+  // back to the list the interviewer came from (same interview filter)
+  const backTo = location.state?.back || "/dashboard/candidates";
 
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
@@ -60,7 +65,9 @@ export default function CandidateDetail() {
 
   const load = useCallback(async () => {
     try {
-      const res = await api.get(`/hiring/candidates/${sessionId}`);
+      // first open: use the request that started when the row was hovered
+      const res = await (takePrefetchedCandidate(sessionId) ||
+        api.get(`/hiring/candidates/${sessionId}`));
       setData(res.data);
       setNote((prev) => prev || res.data.review?.note || "");
       setError("");
@@ -109,10 +116,38 @@ export default function CandidateDetail() {
     }
   };
 
+  // download the bullet-point PDF report (same file the interviewer is e-mailed)
+  const downloadPdf = async () => {
+    setBusy("pdf");
+
+    try {
+      const res = await api.get(
+        `/hiring/candidates/${sessionId}/report.pdf`,
+        { responseType: "blob" }
+      );
+
+      const url = window.URL.createObjectURL(
+        new Blob([res.data], { type: "application/pdf" })
+      );
+
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `interview_report_${data?.candidate?.name || "candidate"}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setFeedback("Could not download the PDF report.");
+    } finally {
+      setBusy("");
+    }
+  };
+
   if (error) {
     return (
       <div className="space-y-6">
-        <button onClick={() => navigate("/dashboard/candidates")} className="text-sm font-bold text-fuchsia-400">
+        <button onClick={() => navigate(backTo)} className="text-sm font-bold text-fuchsia-400">
           ← Back to candidates
         </button>
         <div className="p-6 rounded-2xl border border-rose-500/30 bg-rose-500/10 text-sm text-rose-300">
@@ -147,18 +182,28 @@ export default function CandidateDetail() {
     <div className="space-y-8">
       <div className="flex items-center justify-between gap-4 print:hidden">
         <button
-          onClick={() => navigate("/dashboard/candidates")}
+          onClick={() => navigate(backTo)}
           className="text-sm font-bold text-fuchsia-400 hover:underline"
         >
           ← Back to candidates
         </button>
 
-        <button
-          onClick={() => window.print()}
-          className="px-4 py-2 rounded-xl border border-white/15 hover:bg-white/10 text-xs font-bold transition"
-        >
-          Print / Save as PDF
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={downloadPdf}
+            disabled={busy === "pdf"}
+            className="px-4 py-2 rounded-xl bg-fuchsia-600 hover:bg-fuchsia-500 disabled:opacity-60 text-white text-xs font-bold transition"
+          >
+            {busy === "pdf" ? "Preparing PDF..." : "Download PDF report"}
+          </button>
+
+          <button
+            onClick={() => window.print()}
+            className="px-4 py-2 rounded-xl border border-white/15 hover:bg-white/10 text-xs font-bold transition"
+          >
+            Print
+          </button>
+        </div>
       </div>
 
       {/* HEADER */}
@@ -173,7 +218,12 @@ export default function CandidateDetail() {
             <p className="opacity-75 mt-1 text-sm break-all">
               {candidate.email}
             </p>
-            <p className="opacity-60 mt-1 text-xs">Applied for {interview.title}</p>
+            <p className="opacity-60 mt-1 text-xs">
+              Applied for {interview.assigned_role || interview.title}
+              {interview.assigned_role && interview.assigned_role !== interview.title
+                ? ` · ${interview.title}`
+                : ""}
+            </p>
             {rec && (
               <span className={`inline-block mt-3 px-3 py-1 rounded-full border text-[11px] font-bold ${rec.cls}`}>
                 {rec.label} · based on AI score
@@ -228,6 +278,51 @@ export default function CandidateDetail() {
               </div>
             )}
           </Card>
+
+          {/* FEEDBACK THE CANDIDATE RECEIVES */}
+          {data.candidate_feedback?.available && (
+            <Card t={t} title="Feedback for the candidate">
+              <p className="text-xs opacity-60 mb-5">
+                This is sent to the candidate in the result e-mail (no scores).
+              </p>
+
+              {[
+                ["Strengths", "strengths", "text-emerald-400"],
+                ["Weak points", "weaknesses", "text-amber-400"],
+                ["How to improve", "improvements", "text-sky-400"],
+              ].map(([title, key, color]) =>
+                (data.candidate_feedback[key] || []).length > 0 ? (
+                  <div key={key} className="mb-5">
+                    <h4 className={`text-xs font-black uppercase tracking-wider mb-2 ${color}`}>
+                      {title}
+                    </h4>
+                    <ul className="list-disc pl-5 space-y-1.5 text-sm leading-relaxed opacity-90">
+                      {data.candidate_feedback[key].map((item, i) => (
+                        <li key={i}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null
+              )}
+
+              {(data.candidate_feedback.answer_notes || []).length > 0 && (
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-wider mb-2 text-fuchsia-400">
+                    Comments on the answers
+                  </h4>
+                  <ol className="list-decimal pl-5 space-y-2 text-sm leading-relaxed opacity-90">
+                    {data.candidate_feedback.answer_notes.map((n, i) => (
+                      <li key={i}>
+                        <span className="opacity-70">{n.question}</span>
+                        <br />
+                        {n.feedback}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+            </Card>
+          )}
 
           {/* Q&A */}
           <Card
@@ -328,6 +423,11 @@ export default function CandidateDetail() {
                       Eye / gaze detection
                     </span>
                   )}
+                  {monitoring.phone && (
+                    <span className="px-3 py-1 rounded-full text-[11px] font-bold border border-white/15 bg-white/5">
+                      Phone detection
+                    </span>
+                  )}
                 </div>
 
                 {monitoring.terminated_reason ? (
@@ -364,7 +464,7 @@ export default function CandidateDetail() {
           <section className={`rounded-[2rem] border ${t.card} p-6 md:p-8 xl:sticky xl:top-28 print:hidden`}>
             <h2 className="font-black text-lg tracking-tight mb-1">Your decision</h2>
             <p className="text-xs opacity-60 mb-5">
-              The candidate is emailed the result. They never see scores or analysis.
+              The candidate is emailed the result with feedback (strengths, weak points, how to improve). They never see scores.
             </p>
 
             <textarea

@@ -29,6 +29,7 @@ from app.services.interview_policy import (
     NOT_INVITED_MESSAGE,
     candidate_can_access,
     follow_up_policy,
+    invited_role,
     owns_interview,
 )
 
@@ -273,6 +274,13 @@ def get_interview_lobby(
     job = extra.get("job") or {}
     follow_ups = follow_up_policy(configuration)
 
+    # candidate sees the role the interviewer fixed for them
+    assigned_role = (
+        invited_role(configuration, current_user)
+        if current_user.role == "candidate"
+        else ""
+    ) or job.get("role") or ""
+
     return {
         "interview": {
             "id": str(interview.id),
@@ -281,7 +289,7 @@ def get_interview_lobby(
             "duration": interview.duration,
             "status": interview.status,
             "job": {
-                "role": job.get("role") or "",
+                "role": assigned_role,
                 "company": job.get("company") or "",
                 "location": job.get("location") or "",
                 "employment_type": job.get("employment_type") or "",
@@ -483,6 +491,58 @@ def create_session(
                     f"{str(e)}"
                 ),
             )
+
+    # =====================================================
+    # 6A. RESUME: one candidate + one interview = one session
+    # =====================================================
+    # Opening the interview again (refresh, closed tab, coming
+    # back later) must continue the SAME session. Creating a new
+    # one every time produced many rows for the same candidate and
+    # generated a new set of questions each time.
+
+    # Resume as many times as needed, but once the interview is
+    # COMPLETED the candidate cannot enter it again.
+    already_completed = (
+        db.query(InterviewSession.id)
+        .filter(
+            InterviewSession.interview_id == interview_id,
+            InterviewSession.candidate_id == current_user.id,
+            InterviewSession.status == "completed",
+        )
+        .first()
+    )
+
+    if already_completed is not None:
+
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "You have already completed this interview. "
+                "You cannot attend it again."
+            ),
+        )
+
+    existing_session = (
+        db.query(InterviewSession)
+        .filter(
+            InterviewSession.interview_id == interview_id,
+            InterviewSession.candidate_id == current_user.id,
+            InterviewSession.status == "in_progress",
+        )
+        .order_by(InterviewSession.started_at.desc().nullslast())
+        .first()
+    )
+
+    if existing_session is not None:
+
+        saved_questions = (
+            db.query(Question)
+            .filter(Question.session_id == existing_session.id)
+            .count()
+        )
+
+        if saved_questions > 0:
+            return existing_session
 
     # =====================================================
     # 7. CREATE FRESH SESSION

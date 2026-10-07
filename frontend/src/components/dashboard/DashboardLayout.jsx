@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../../context/AuthContext";
@@ -347,7 +347,18 @@ export default function DashboardLayout() {
 
         {/* ================= PAGE CONTENT ================= */}
         <main className="flex-1 min-w-0 p-4 sm:p-6 md:p-12">
-          <Outlet />
+          {/* Suspense here: opening a page that is still loading only
+              shows a small loader inside the content area, the sidebar
+              and header stay on screen. */}
+          <Suspense
+            fallback={
+              <div className="py-24 flex justify-center">
+                <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-fuchsia-400 animate-spin" />
+              </div>
+            }
+          >
+            <Outlet />
+          </Suspense>
 
           <footer className="mt-20 pt-8 border-t border-white/10 text-center text-xs opacity-50 font-medium">
             <p>&copy; 2026 AI Interview & Assessment Platform. All rights reserved.</p>

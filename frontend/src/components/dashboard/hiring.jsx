@@ -112,6 +112,11 @@ export const MONITOR_LABELS = {
   multiple_faces: "Multiple faces seen",
   looking_away: "Looking away from screen",
   eyes_closed: "Eyes closed for long",
+  looking_down: "Looking down (possible phone or notes)",
+  repeated_looking_down: "Repeatedly looking down (possible phone or notes)",
+  phone_detected: "Mobile phone detected",
+  no_face_detected: "No face in front of the camera",
+  multiple_faces_detected: "More than one person in view",
   tab_left: "Left the interview page",
   candidate_left_interview_page: "Left the interview page",
 };
@@ -131,7 +136,7 @@ export const processSteps = ({ monitoring, questionCount, followUps = true }) =>
   {
     title: monitoring ? "Camera check" : "Microphone check",
     text: monitoring
-      ? "This interview uses camera monitoring (face and eye tracking). It switches on automatically."
+      ? "This interview uses camera monitoring (face, eye and phone detection as set by the interviewer). It switches on automatically. Keep phones and notes out of view."
       : "Allow your microphone so you can answer by voice. No camera monitoring is used.",
   },
   {

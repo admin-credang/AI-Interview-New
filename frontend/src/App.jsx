@@ -32,6 +32,7 @@ const InterviewControls = lazy(() => import("./pages/dashboard/InterviewControls
 const CreateInterview = lazy(() => import("./pages/CreateInterview"));
 const InterviewConfiguration = lazy(() => import("./pages/InterviewConfiguration"));
 const InterviewLobby = lazy(() => import("./pages/InterviewLobby"));
+const InviteAccept = lazy(() => import("./pages/InviteAccept"));
 const InterviewSession = lazy(() => import("./pages/InterviewSession"));
 const MonitoringSetup = lazy(() => import("./pages/MonitoringSetup"));
 
@@ -163,6 +164,17 @@ function AppRoutes() {
       <Route
         path="/register"
         element={<Register />}
+      />
+
+      {/* ======================================================
+          INVITATION LINK  (button in the invitation e-mail)
+          /invite/INV-XXXX-XXXX -> checks the ID -> opens ONLY
+          that interview. Handles its own login redirect.
+      ====================================================== */}
+
+      <Route
+        path="/invite/:code"
+        element={<InviteAccept />}
       />
 
       {/* ======================================================

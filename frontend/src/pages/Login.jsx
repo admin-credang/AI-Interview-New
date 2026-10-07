@@ -13,6 +13,14 @@ function Login() {
   const [remember, setRemember] = useState(true);
   const [error, setError] = useState("");
 
+  const hasPendingInvite = (() => {
+    try {
+      return Boolean(sessionStorage.getItem("pending_invite"));
+    } catch {
+      return false;
+    }
+  })();
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -24,7 +32,21 @@ function Login() {
       return;
     }
 
-    navigate("/dashboard");
+    // Came from an invitation e-mail? Go straight back to that
+    // interview instead of the dashboard.
+    let pending = null;
+
+    try {
+      pending = sessionStorage.getItem("pending_invite");
+    } catch {
+      /* ignore */
+    }
+
+    navigate(
+      pending && result.user?.role === "candidate"
+        ? `/invite/${pending}`
+        : "/dashboard"
+    );
   };
 
   const handleGoogleLogin = async () => {
@@ -68,6 +90,17 @@ function Login() {
           </p>
 
           <form onSubmit={handleSubmit} className="mt-8">
+            {hasPendingInvite && (
+              <div
+                role="status"
+                className="mb-5 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-800"
+              >
+                You opened an interview invitation. Log in (or register)
+                with the <strong>same email address that received the
+                invitation</strong> and your interview will open.
+              </div>
+            )}
+
             {error && (
               <div
                 role="alert"

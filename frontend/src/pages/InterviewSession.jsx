@@ -372,6 +372,60 @@ function calculateIrisPosition(
  * ============================================================
  * Returns "yes", "no" or null (could not understand).
  */
+/*
+ * ============================================================
+ * MONITORING THRESHOLDS  (tune these without touching the logic)
+ * ============================================================
+ */
+const MEDIAPIPE_WASM_URL =
+  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm";
+
+// Phone detection (MediaPipe object detector, COCO "cell phone")
+const PHONE_MODEL_URL =
+  "https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite";
+const PHONE_SCORE_THRESHOLD = 0.4; // min confidence for a phone
+const PHONE_CHECK_INTERVAL_MS = 600; // run detector ~1.5x per second
+const PHONE_TERMINATE_MS = 3000; // phone must stay visible this long
+const PHONE_GRACE_MS = 1500; // tolerate missed frames before resetting
+
+// Looking down (eye-ball movement, via MediaPipe blendshapes)
+const LOOK_DOWN_SCORE = 0.5; // 0..1, average of both eyes
+const LOOK_DOWN_EPISODE_MS = 1000; // one "glance down" = at least this long
+const LOOK_DOWN_TERMINATE_MS = 4000; // one long continuous look down
+const LOOK_DOWN_REPEAT_COUNT = 4; // this many glances ...
+const LOOK_DOWN_REPEAT_WINDOW_MS = 90000; // ... within this window
+
+// Cheating / monitoring flags are NOT ending the interview any more.
+// They are saved for the interviewer's report (backend event types).
+const REASON_TO_EVENT = {
+  no_face_detected: "face_not_found",
+  multiple_faces_detected: "multiple_faces",
+  eyes_closed: "eyes_closed",
+  looking_away: "looking_away",
+  looking_down: "looking_down",
+  repeated_looking_down: "looking_down",
+  phone_detected: "phone_detected",
+  candidate_left_interview_page: "tab_left",
+};
+
+const VIOLATION_MESSAGES = {
+  face_not_found: "Face not visible - please stay in front of the camera.",
+  multiple_faces: "More than one person detected in the camera.",
+  eyes_closed: "Eyes closed for a long time.",
+  looking_away: "Please look at the screen.",
+  looking_down: "Please avoid looking down.",
+  phone_detected: "Phone detected - please keep it away.",
+  tab_left: "Please stay on the interview page.",
+};
+
+const VIOLATION_REPEAT_MS = 30000; // same flag saved at most every 30 s
+
+const GREETING_SPEECH =
+  "Hello! Welcome to the AI Interview. I will guide you through the interview and ask you a series of questions based on your interview configuration. Are you ready to start your interview?";
+
+const CLOSING_SPEECH =
+  "Thank you. Your interview is complete. The interviewer will review your answers.";
+
 const YES_WORDS =
   /\b(yes|yeah|yep|yup|yea|sure|ok|okay|please|definitely|absolutely|go ahead|of course|ask)\b/i;
 const NO_WORDS =
@@ -403,7 +457,36 @@ export default function InterviewSession() {
    */
 
   const [phase, setPhase] =
-    useState("loading");
+    useState("greeting");
+
+  // becomes true when the candidate says / clicks "Yes"
+  const [ready, setReady] =
+    useState(false);
+
+  // chat transcript shown on the right side ("Previous Questions")
+  const [chatLog, setChatLog] =
+    useState([]);
+
+  const chatEndRef = useRef(null);
+
+  // how many characters of the current question are shown so far
+  // (the text appears gradually while the AI voice is speaking)
+  const [typedLength, setTypedLength] =
+    useState(0);
+
+  // attaches the running camera stream as soon as <video> is mounted
+  const attachVideo = useCallback((element) => {
+    videoRef.current = element;
+
+    if (
+      element &&
+      streamRef.current &&
+      element.srcObject !== streamRef.current
+    ) {
+      element.srcObject = streamRef.current;
+      element.play().catch(() => {});
+    }
+  }, []);
 
   const [
     currentQuestion,
@@ -467,11 +550,6 @@ export default function InterviewSession() {
     setVoiceSupported,
   ] = useState(false);
 
-  const [
-    autoSubmitVoice,
-    setAutoSubmitVoice,
-  ] = useState(false);
-
   /*
    * ============================================================
    * MONITORING STATE
@@ -526,7 +604,15 @@ export default function InterviewSession() {
       enabled: false,
       face: false,
       eye: false,
+      phone: false,
     });
+
+  const [
+    phoneStatus,
+    setPhoneStatus,
+  ] = useState(
+    "Phone detection OFF"
+  );
 
   const [
     cameraBlocked,
@@ -577,9 +663,106 @@ export default function InterviewSession() {
 
   /*
    * ============================================================
+   * FLAG VIOLATION (replaces auto-termination)
+   * ============================================================
+   * Face / eye / phone / tab problems are saved to the report
+   * for the interviewer and a short warning is shown to the
+   * candidate. The interview itself keeps running.
+   */
+  const [
+    violationNotice,
+    setViolationNotice,
+  ] = useState("");
+
+  const violationThrottleRef =
+    useRef({});
+
+  const violationTimerRef =
+    useRef(null);
+
+  const flagViolationRef =
+    useRef(null);
+
+  flagViolationRef.current =
+    (reason) => {
+      if (
+        !sessionId ||
+        completedRef.current ||
+        terminatedRef.current
+      ) {
+        return;
+      }
+
+      const type =
+        REASON_TO_EVENT[reason] ||
+        null;
+
+      if (!type) {
+        return;
+      }
+
+      const now = Date.now();
+
+      if (
+        now -
+          (violationThrottleRef
+            .current[type] || 0) <
+        VIOLATION_REPEAT_MS
+      ) {
+        return;
+      }
+
+      violationThrottleRef.current[
+        type
+      ] = now;
+
+      api
+        .post(
+          `/hiring/sessions/${sessionId}/monitoring-event`,
+          {
+            type,
+            detail: String(reason).slice(
+              0,
+              200
+            ),
+          }
+        )
+        .catch(() => {});
+
+      setViolationNotice(
+        VIOLATION_MESSAGES[type] ||
+          "Please follow the interview rules."
+      );
+
+      if (violationTimerRef.current) {
+        clearTimeout(
+          violationTimerRef.current
+        );
+      }
+
+      violationTimerRef.current =
+        setTimeout(() => {
+          setViolationNotice("");
+        }, 6000);
+    };
+
+  /*
+   * ============================================================
    * REFS
    * ============================================================
    */
+
+  const wantListeningRef =
+    useRef(false);
+
+  const speechBaseRef =
+    useRef("");
+
+  const latestSpeechRef =
+    useRef("");
+
+  const answerValueRef =
+    useRef("");
 
   const mountedRef =
     useRef(true);
@@ -657,6 +840,26 @@ export default function InterviewSession() {
   const lookingAwaySinceRef =
     useRef(null);
 
+  // Looking down (phone / notes below the camera)
+  const lookDownSinceRef =
+    useRef(null);
+
+  const lookDownCountedRef =
+    useRef(false);
+
+  const downEpisodesRef =
+    useRef([]);
+
+  // Phone detection
+  const objectDetectorRef =
+    useRef(null);
+
+  const phoneSinceRef =
+    useRef(null);
+
+  const phoneLastSeenRef =
+    useRef(0);
+
   /*
    * ============================================================
    * TERMINATION REF
@@ -681,7 +884,8 @@ export default function InterviewSession() {
         recognitionRef.current
       ) {
         try {
-          recognitionRef.current.stop();
+          wantListeningRef.current = false;
+recognitionRef.current.stop();
         } catch {}
       }
 
@@ -748,6 +952,21 @@ export default function InterviewSession() {
 
       lookingAwaySinceRef.current =
         null;
+
+      lookDownSinceRef.current =
+        null;
+
+      lookDownCountedRef.current =
+        false;
+
+      downEpisodesRef.current =
+        [];
+
+      phoneSinceRef.current =
+        null;
+
+      phoneLastSeenRef.current =
+        0;
 
       /*
        * Disable states
@@ -865,7 +1084,7 @@ export default function InterviewSession() {
           return;
         }
 
-        terminateInterviewRef.current?.(
+        flagViolationRef.current?.(
           "candidate_left_interview_page"
         );
       };
@@ -1074,7 +1293,8 @@ export default function InterviewSession() {
           recognitionRef.current
         ) {
           try {
-            recognitionRef.current.stop();
+            wantListeningRef.current = false;
+recognitionRef.current.stop();
           } catch {}
         }
 
@@ -1111,6 +1331,14 @@ export default function InterviewSession() {
       setProcessing(false);
 
       setPhase("completed");
+
+      // spoken thank-you
+      try {
+        window.speechSynthesis?.cancel();
+        window.speechSynthesis?.speak(
+          new SpeechSynthesisUtterance(CLOSING_SPEECH)
+        );
+      } catch {}
 
       // Thank-you email + "we will contact you if selected".
       // The candidate does not get a report or scores.
@@ -1601,7 +1829,169 @@ export default function InterviewSession() {
    * ============================================================
    */
 
+  /*
+   * ============================================================
+   * GREETING  ("Are you ready?" -> candidate says / clicks Yes)
+   * ============================================================
+   * The AI speaks the welcome message, then listens for "yes".
+   * The first question is requested only after that.
+   */
   useEffect(() => {
+    if (phase !== "greeting") {
+      return;
+    }
+
+    let stopped = false;
+    let rec = null;
+
+    const SpeechRecognitionApi =
+      window.SpeechRecognition ||
+      window.webkitSpeechRecognition;
+
+    const listen = () => {
+      if (stopped || !SpeechRecognitionApi) {
+        return;
+      }
+
+      rec = new SpeechRecognitionApi();
+      rec.lang = "en-US";
+      rec.continuous = false;
+      rec.interimResults = false;
+
+      rec.onresult = (event) => {
+        const heard = Array.from(event.results)
+          .map((result) => result[0]?.transcript || "")
+          .join(" ");
+
+        if (YES_WORDS.test(heard) && !NO_WORDS.test(heard)) {
+          stopped = true;
+          setReady(true);
+        }
+      };
+
+      rec.onend = () => {
+        if (!stopped) {
+          setTimeout(() => {
+            try {
+              rec.start();
+            } catch {}
+          }, 300);
+        }
+      };
+
+      rec.onerror = () => {};
+
+      try {
+        rec.start();
+      } catch {}
+    };
+
+    if (window.speechSynthesis) {
+      const utterance = new SpeechSynthesisUtterance(
+        GREETING_SPEECH
+      );
+      utterance.onend = listen;
+      utterance.onerror = listen;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utterance);
+    } else {
+      listen();
+    }
+
+    return () => {
+      stopped = true;
+      try {
+        rec?.abort();
+      } catch {}
+      window.speechSynthesis?.cancel();
+    };
+  }, [phase]);
+
+  /*
+   * ============================================================
+   * QUESTION TEXT APPEARS WITH THE VOICE
+   * ============================================================
+   */
+  useEffect(() => {
+    const text = currentQuestion?.question || "";
+
+    setTypedLength(0);
+
+    if (!text) {
+      return;
+    }
+
+    const words = text.trim().split(/\s+/).length;
+
+    // speech runs at about 2.4 words / second
+    const totalMs = window.speechSynthesis
+      ? Math.max(1500, (words / 2.4) * 1000)
+      : 800;
+
+    const stepMs = 40;
+    const perStep = Math.max(
+      1,
+      Math.ceil(text.length / (totalMs / stepMs))
+    );
+
+    let shown = 0;
+
+    const timer = setInterval(() => {
+      shown = Math.min(text.length, shown + perStep);
+      setTypedLength(shown);
+
+      if (shown >= text.length) {
+        clearInterval(timer);
+      }
+    }, stepMs);
+
+    return () => clearInterval(timer);
+  }, [currentQuestion?.question]);
+
+  /*
+   * ============================================================
+   * CHAT TRANSCRIPT
+   * ============================================================
+   */
+  useEffect(() => {
+    const text = currentQuestion?.question;
+
+    if (!text) {
+      return;
+    }
+
+    setChatLog((log) => {
+      const last = log[log.length - 1];
+
+      if (last && last.role === "ai" && last.text === text) {
+        return log;
+      }
+
+      return [...log, { role: "ai", text }];
+    });
+  }, [currentQuestion]);
+
+  useEffect(() => {
+    if (!lastAnswer) {
+      return;
+    }
+
+    setChatLog((log) => [
+      ...log,
+      { role: "you", text: lastAnswer },
+    ]);
+  }, [lastAnswer]);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatLog]);
+
+  useEffect(() => {
+    // wait until the candidate says / clicks "Yes"
+    if (!ready) {
+      return;
+    }
+
     let cancelled = false;
 
     async function initializeInterview() {
@@ -1743,6 +2133,7 @@ export default function InterviewSession() {
       cancelled = true;
     };
   }, [
+    ready,
     interviewId,
     sessionId,
     handleDialogflowResponse,
@@ -1805,7 +2196,8 @@ export default function InterviewSession() {
           recognitionRef.current
         ) {
           try {
-            recognitionRef.current.stop();
+            wantListeningRef.current = false;
+recognitionRef.current.stop();
           } catch {}
         }
 
@@ -1922,6 +2314,8 @@ export default function InterviewSession() {
     submitAnswerWithText;
 
   phaseRef.current = phase;
+
+  answerValueRef.current = answer;
 
   /*
    * ============================================================
@@ -2168,7 +2562,7 @@ export default function InterviewSession() {
     const recognition =
       new SpeechRecognition();
 
-    recognition.continuous = false;
+    recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = "en-US";
 
@@ -2239,35 +2633,43 @@ export default function InterviewSession() {
         return;
       }
 
-      if (
-        transcript &&
-        mountedRef.current
+      /*
+       * The answer is only collected here. It is NEVER sent
+       * automatically - the candidate presses "Submit Answer"
+       * when the answer is really finished (thinking pauses
+       * are fine).
+       */
+      let spoken = "";
+
+      for (
+        let i = 0;
+        i < event.results.length;
+        i++
       ) {
-        setAnswer(transcript);
+        spoken +=
+          event.results[i][0]
+            .transcript;
       }
 
-      const lastResult =
-        event.results[
-          event.results.length - 1
-        ];
+      spoken = spoken.trim();
 
       if (
-        lastResult?.isFinal &&
-        autoSubmitVoice &&
-        transcript
+        spoken &&
+        mountedRef.current
       ) {
-        setTimeout(() => {
-          if (
-            mountedRef.current &&
-            !processingRef.current &&
-            !completedRef.current &&
-            !terminatedRef.current
-          ) {
-            submitAnswerRef.current?.(
-              transcript
-            );
-          }
-        }, 300);
+        const base =
+          speechBaseRef.current;
+
+        const full = (
+          base
+            ? base + " " + spoken
+            : spoken
+        ).trim();
+
+        latestSpeechRef.current =
+          full;
+
+        setAnswer(full);
       }
     };
 
@@ -2278,6 +2680,15 @@ export default function InterviewSession() {
         "Speech recognition error:",
         event
       );
+
+      if (
+        event?.error ===
+          "not-allowed" ||
+        event?.error ===
+          "service-not-allowed"
+      ) {
+        wantListeningRef.current = false;
+      }
 
       if (
         mountedRef.current
@@ -2291,6 +2702,42 @@ export default function InterviewSession() {
         mountedRef.current
       ) {
         setIsListening(false);
+      }
+
+      /*
+       * The browser ends recognition by itself after a short
+       * silence. If the candidate did not press Stop, keep
+       * listening and continue the same answer.
+       */
+      if (
+        mountedRef.current &&
+        wantListeningRef.current &&
+        phaseRef.current ===
+          "question" &&
+        !processingRef.current &&
+        !completedRef.current &&
+        !terminatedRef.current &&
+        !window.speechSynthesis?.speaking
+      ) {
+        speechBaseRef.current =
+          answerValueRef.current ||
+          latestSpeechRef.current ||
+          "";
+
+        setTimeout(() => {
+          if (
+            mountedRef.current &&
+            wantListeningRef.current &&
+            phaseRef.current ===
+              "question" &&
+            !processingRef.current &&
+            !terminatedRef.current
+          ) {
+            try {
+              recognition.start();
+            } catch {}
+          }
+        }, 250);
       }
 
       // Candidate stayed silent during the follow-up offer:
@@ -2330,7 +2777,7 @@ export default function InterviewSession() {
       recognitionRef.current =
         null;
     };
-  }, [autoSubmitVoice]);
+  }, []);
 
   /*
    * ============================================================
@@ -2348,6 +2795,22 @@ export default function InterviewSession() {
       ) {
         return;
       }
+
+      wantListeningRef.current =
+        phaseRef.current ===
+        "question";
+
+      speechBaseRef.current =
+        answerValueRef.current ||
+        "";
+
+      latestSpeechRef.current =
+        "";
+
+      // yes/no follow-up offer needs a short single phrase
+      recognitionRef.current.continuous =
+        phaseRef.current !==
+        "followup-confirmation";
 
       try {
         recognitionRef.current.start();
@@ -2373,7 +2836,8 @@ export default function InterviewSession() {
       }
 
       try {
-        recognitionRef.current.stop();
+        wantListeningRef.current = false;
+recognitionRef.current.stop();
       } catch {}
     };
 
@@ -2399,7 +2863,8 @@ export default function InterviewSession() {
         speechGenerationRef.current;
 
       try {
-        recognitionRef.current?.stop();
+        wantListeningRef.current = false;
+recognitionRef.current?.stop();
       } catch {}
 
       window.speechSynthesis.cancel();
@@ -2482,7 +2947,8 @@ export default function InterviewSession() {
       clearTimeout(timer);
 
       try {
-        recognitionRef.current?.stop();
+        wantListeningRef.current = false;
+recognitionRef.current?.stop();
       } catch {}
     };
   }, [phase]);
@@ -2721,7 +3187,7 @@ export default function InterviewSession() {
         );
       };
     }
-  }, [cameraEnabled]);
+  }, [cameraEnabled, phase]);
 
   /*
    * ============================================================
@@ -3091,11 +3557,16 @@ export default function InterviewSession() {
           face &&
           Boolean(raw.eye);
 
+        const phone =
+          enabled &&
+          Boolean(raw.phone);
+
         setPolicy({
           loaded: true,
           enabled,
           face,
           eye,
+          phone,
         });
       } catch (err) {
         console.warn(
@@ -3110,6 +3581,7 @@ export default function InterviewSession() {
             enabled: false,
             face: false,
             eye: false,
+            phone: false,
           });
         }
       }
@@ -3278,7 +3750,7 @@ export default function InterviewSession() {
 
         const vision =
           await FilesetResolver.forVisionTasks(
-            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm"
+            MEDIAPIPE_WASM_URL
           );
 
         if (cancelled) {
@@ -3317,8 +3789,9 @@ export default function InterviewSession() {
               minTrackingConfidence:
                 0.5,
 
+              // needed for the "looking down" check
               outputFaceBlendshapes:
-                false,
+                true,
 
               outputFacialTransformationMatrixes:
                 false,
@@ -3546,11 +4019,7 @@ export default function InterviewSession() {
               duration >= 3000 &&
               faceDetectionEnabled
             ) {
-              terminateInterviewRef.current?.(
-                "no_face_detected"
-              );
-
-              return;
+              flagViolationRef.current?.("no_face_detected");
             }
           } else {
             noFaceSinceRef.current =
@@ -3587,11 +4056,7 @@ export default function InterviewSession() {
               duration >= 2000 &&
               faceDetectionEnabled
             ) {
-              terminateInterviewRef.current?.(
-                "multiple_faces_detected"
-              );
-
-              return;
+              flagViolationRef.current?.("multiple_faces_detected");
             }
           } else {
             multipleFaceSinceRef.current =
@@ -3679,11 +4144,7 @@ export default function InterviewSession() {
                 duration >= 1800 &&
                 eyeGazeEnabled
               ) {
-                terminateInterviewRef.current?.(
-                  "eyes_closed"
-                );
-
-                return;
+                flagViolationRef.current?.("eyes_closed");
               }
             } else {
               eyesClosedSinceRef.current =
@@ -3761,11 +4222,7 @@ export default function InterviewSession() {
                 duration >= 1800 &&
                 eyeGazeEnabled
               ) {
-                terminateInterviewRef.current?.(
-                  "looking_away"
-                );
-
-                return;
+                flagViolationRef.current?.("looking_away");
               }
             } else {
               lookingAwaySinceRef.current =
@@ -3777,6 +4234,127 @@ export default function InterviewSession() {
                 );
               }
             }
+          }
+
+          /*
+           * ==================================================
+           * LOOKING DOWN (phone / notes below the camera)
+           * One long look down, or several short glances
+           * ==================================================
+           */
+
+          if (
+            eyeGazeEnabled &&
+            faces.length === 1
+          ) {
+            const shapes =
+              result
+                ?.faceBlendshapes?.[0]
+                ?.categories || [];
+
+            const shapeScore =
+              (name) =>
+                shapes.find(
+                  (s) =>
+                    s.categoryName ===
+                    name
+                )?.score || 0;
+
+            const downScore =
+              (shapeScore(
+                "eyeLookDownLeft"
+              ) +
+                shapeScore(
+                  "eyeLookDownRight"
+                )) /
+              2;
+
+            const blinkScore =
+              (shapeScore(
+                "eyeBlinkLeft"
+              ) +
+                shapeScore(
+                  "eyeBlinkRight"
+                )) /
+              2;
+
+            // blinking also raises the "down" score, so ignore it
+            const lookingDown =
+              shapes.length > 0 &&
+              downScore >=
+                LOOK_DOWN_SCORE &&
+              blinkScore < 0.6;
+
+            if (lookingDown) {
+              setEyeStatus(
+                "Looking down"
+              );
+
+              const nowMs =
+                Date.now();
+
+              if (
+                !lookDownSinceRef.current
+              ) {
+                lookDownSinceRef.current =
+                  nowMs;
+              }
+
+              const downFor =
+                nowMs -
+                lookDownSinceRef.current;
+
+              if (
+                downFor >=
+                  LOOK_DOWN_EPISODE_MS &&
+                !lookDownCountedRef.current
+              ) {
+                lookDownCountedRef.current =
+                  true;
+
+                logMonitoringEventRef.current?.(
+                  "looking_down"
+                );
+
+                const recent =
+                  downEpisodesRef.current.filter(
+                    (at) =>
+                      nowMs - at <
+                      LOOK_DOWN_REPEAT_WINDOW_MS
+                  );
+
+                recent.push(nowMs);
+
+                downEpisodesRef.current =
+                  recent;
+
+                if (
+                  recent.length >=
+                  LOOK_DOWN_REPEAT_COUNT
+                ) {
+                  flagViolationRef.current?.("repeated_looking_down");
+                }
+              }
+
+              if (
+                downFor >=
+                LOOK_DOWN_TERMINATE_MS
+              ) {
+                flagViolationRef.current?.("looking_down");
+              }
+            } else {
+              lookDownSinceRef.current =
+                null;
+
+              lookDownCountedRef.current =
+                false;
+            }
+          } else {
+            lookDownSinceRef.current =
+              null;
+
+            lookDownCountedRef.current =
+              false;
           }
 
           /*
@@ -3843,12 +4421,263 @@ export default function InterviewSession() {
 
       lookingAwaySinceRef.current =
         null;
+
+      lookDownSinceRef.current =
+        null;
+
+      lookDownCountedRef.current =
+        false;
     };
   }, [
     cameraEnabled,
     faceDetectionEnabled,
     eyeGazeEnabled,
     monitoringReady,
+  ]);
+
+  /*
+   * ============================================================
+   * PHONE DETECTION
+   * ============================================================
+   *
+   * Runs only when the interviewer turned "Phone detection" on.
+   * Independent of face detection: it only needs the camera.
+   * The model is loaded lazily, so interviews without phone
+   * detection never download it.
+   */
+
+  useEffect(() => {
+    if (!policy.phone) {
+      setPhoneStatus(
+        "Phone detection OFF"
+      );
+
+      return;
+    }
+
+    if (!cameraEnabled) {
+      setPhoneStatus(
+        "Waiting for camera..."
+      );
+
+      return;
+    }
+
+    let cancelled = false;
+    let timer = null;
+    let detector = null;
+
+    const check = () => {
+      if (
+        cancelled ||
+        !mountedRef.current ||
+        completedRef.current ||
+        terminatedRef.current
+      ) {
+        return;
+      }
+
+      const video =
+        videoRef.current;
+
+      if (
+        !detector ||
+        !video ||
+        video.readyState <
+          HTMLMediaElement.HAVE_CURRENT_DATA
+      ) {
+        return;
+      }
+
+      try {
+        const result =
+          detector.detectForVideo(
+            video,
+            performance.now()
+          );
+
+        const found = (
+          result?.detections || []
+        ).some((d) =>
+          (d.categories || []).some(
+            (cat) =>
+              cat.categoryName ===
+                "cell phone" &&
+              cat.score >=
+                PHONE_SCORE_THRESHOLD
+          )
+        );
+
+        const nowMs = Date.now();
+
+        if (found) {
+          phoneLastSeenRef.current =
+            nowMs;
+
+          if (
+            !phoneSinceRef.current
+          ) {
+            phoneSinceRef.current =
+              nowMs;
+
+            logMonitoringEventRef.current?.(
+              "phone_detected"
+            );
+          }
+
+          setPhoneStatus(
+            "Phone detected"
+          );
+
+          if (
+            nowMs -
+              phoneSinceRef.current >=
+            PHONE_TERMINATE_MS
+          ) {
+            flagViolationRef.current?.(
+              "phone_detected"
+            );
+          }
+        } else if (
+          phoneSinceRef.current &&
+          nowMs -
+            phoneLastSeenRef.current >
+            PHONE_GRACE_MS
+        ) {
+          phoneSinceRef.current =
+            null;
+
+          setPhoneStatus(
+            "No phone detected"
+          );
+        } else if (
+          !phoneSinceRef.current
+        ) {
+          setPhoneStatus(
+            "No phone detected"
+          );
+        }
+      } catch (err) {
+        console.error(
+          "Phone detection frame error:",
+          err
+        );
+      }
+    };
+
+    async function startPhoneDetection() {
+      try {
+        setPhoneStatus(
+          "Loading phone detection..."
+        );
+
+        const {
+          ObjectDetector,
+          FilesetResolver,
+        } = await import(
+          "@mediapipe/tasks-vision"
+        );
+
+        const vision =
+          await FilesetResolver.forVisionTasks(
+            MEDIAPIPE_WASM_URL
+          );
+
+        if (cancelled) {
+          return;
+        }
+
+        detector =
+          await ObjectDetector.createFromOptions(
+            vision,
+            {
+              baseOptions: {
+                modelAssetPath:
+                  PHONE_MODEL_URL,
+
+                delegate: "CPU",
+              },
+
+              runningMode: "VIDEO",
+
+              scoreThreshold:
+                PHONE_SCORE_THRESHOLD,
+
+              maxResults: 5,
+
+              categoryAllowlist: [
+                "cell phone",
+              ],
+            }
+          );
+
+        if (
+          cancelled ||
+          !mountedRef.current
+        ) {
+          try {
+            detector.close();
+          } catch {}
+
+          detector = null;
+
+          return;
+        }
+
+        objectDetectorRef.current =
+          detector;
+
+        setPhoneStatus(
+          "No phone detected"
+        );
+
+        timer = setInterval(
+          check,
+          PHONE_CHECK_INTERVAL_MS
+        );
+      } catch (err) {
+        console.error(
+          "Phone detection could not start:",
+          err
+        );
+
+        if (!cancelled) {
+          setPhoneStatus(
+            "Phone detection unavailable"
+          );
+        }
+      }
+    }
+
+    startPhoneDetection();
+
+    return () => {
+      cancelled = true;
+
+      if (timer) {
+        clearInterval(timer);
+      }
+
+      if (detector) {
+        try {
+          detector.close();
+        } catch {}
+      }
+
+      detector = null;
+
+      objectDetectorRef.current =
+        null;
+
+      phoneSinceRef.current =
+        null;
+
+      phoneLastSeenRef.current =
+        0;
+    };
+  }, [
+    policy.phone,
+    cameraEnabled,
   ]);
 
   /*
@@ -3885,6 +4714,45 @@ export default function InterviewSession() {
    * LOADING
    * ============================================================
    */
+
+  if (phase === "greeting") {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6 relative overflow-hidden font-sans">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-indigo-500/20 rounded-full blur-[120px] pointer-events-none" />
+
+        <div className="max-w-lg w-full bg-slate-900/80 border border-slate-800 backdrop-blur-2xl p-8 rounded-3xl text-center space-y-5 shadow-2xl relative z-10">
+          <div className="w-16 h-16 bg-indigo-500/10 border border-indigo-500/30 rounded-2xl flex items-center justify-center text-3xl mx-auto">
+            🤖
+          </div>
+
+          <h1 className="text-2xl font-bold text-white">
+            Hello! Welcome to the AI Interview.
+          </h1>
+
+          <p className="text-slate-300 text-sm leading-relaxed">
+            I'll guide you through the interview and ask you a series of
+            questions based on your interview configuration.
+          </p>
+
+          <p className="text-slate-100 font-semibold">
+            Are you ready to start your interview?
+          </p>
+
+          <button
+            type="button"
+            onClick={() => setReady(true)}
+            className="w-full py-3 rounded-2xl font-bold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-90 transition"
+          >
+            Yes, I'm ready
+          </button>
+
+          <p className="text-xs text-slate-500">
+            You can also just say "Yes".
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (phase === "loading") {
     return (
@@ -4031,580 +4899,415 @@ export default function InterviewSession() {
    * ============================================================
    */
 
+  /*
+   * Stop Recording = answer finished -> submit automatically.
+   * (small delay so the last spoken words are captured first)
+   */
+  const stopAndSubmit = () => {
+    wantListeningRef.current = false;
+
+    try {
+      recognitionRef.current?.stop();
+    } catch {}
+
+    setTimeout(() => {
+      const finalAnswer = String(
+        answerValueRef.current || ""
+      ).trim();
+
+      if (
+        finalAnswer &&
+        mountedRef.current &&
+        !processingRef.current &&
+        !completedRef.current &&
+        !terminatedRef.current
+      ) {
+        submitAnswerWithText(finalAnswer);
+      }
+    }, 600);
+  };
+
+  const lastAiIndex = chatLog.reduce(
+    (found, m, i) => (m.role === "ai" ? i : found),
+    -1
+  );
+
+  const previousMessages = chatLog.filter(
+    (_m, i) => i !== lastAiIndex
+  );
+
+  const questionText = currentQuestion?.question || "";
+  const typing = typedLength < questionText.length;
+
+  const assistantStatus = processing
+    ? "Evaluating..."
+    : isSpeaking
+    ? "Speaking..."
+    : isListening
+    ? "Listening..."
+    : "Your turn";
+
+  const TOTAL_QUESTIONS = 5;
+
+  const progress = Math.round(
+    (Math.min(Number(questionNumber) || 1, TOTAL_QUESTIONS) /
+      TOTAL_QUESTIONS) *
+      100
+  );
+
+  const statusColor = (value, good, bad) =>
+    bad
+      ? "text-rose-400"
+      : good
+      ? "text-emerald-400"
+      : "text-slate-400";
+
+  const monitorRows = [
+    {
+      label: "Camera",
+      value: cameraEnabled ? "On" : "Off",
+      good: cameraEnabled,
+    },
+    {
+      label: "Face detection",
+      value: faceStatus,
+      good: faceStatus === "Face detected",
+      bad:
+        faceStatus === "No face detected" ||
+        faceStatus === "Multiple faces detected",
+    },
+    {
+      label: "Eye / eyeball",
+      value: eyeStatus,
+      good:
+        eyeStatus === "Eyes focused" || eyeStatus === "Eyes open",
+      bad:
+        eyeStatus === "Looking away" ||
+        eyeStatus === "Looking down" ||
+        eyeStatus === "Eyes closed",
+    },
+    ...(policy.phone
+      ? [
+          {
+            label: "Phone",
+            value: phoneStatus,
+            good: phoneStatus === "No phone detected",
+            bad: phoneStatus === "Phone detected",
+          },
+        ]
+      : []),
+  ];
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col justify-between p-3 md:p-6 relative overflow-hidden">
-
-      {/* BACKGROUND */}
-
-      <div className="absolute -top-24 -left-24 w-96 h-96 bg-indigo-600/20 blur-[130px] rounded-full pointer-events-none" />
-
-      <div className="absolute top-1/3 right-0 w-96 h-96 bg-fuchsia-600/15 blur-[140px] rounded-full pointer-events-none" />
-
-      <div className="absolute bottom-0 left-1/3 w-[500px] h-[500px] bg-cyan-600/15 blur-[150px] rounded-full pointer-events-none" />
-
+    <div className="h-screen bg-[#1a2338] text-slate-100 font-sans overflow-hidden">
       {/* CAMERA REQUIRED (only when the interviewer turned monitoring on) */}
+      {policy.loaded && policy.enabled && !cameraEnabled && (
+        <div className="fixed inset-0 z-50 bg-[#1a2338]/95 flex items-center justify-center p-6">
+          <div className="max-w-md w-full bg-[#1c2740] border border-slate-600 rounded-xl p-8 text-center space-y-4">
+            <h2 className="text-xl font-bold text-white">
+              Camera required
+            </h2>
 
-      {policy.loaded &&
-        policy.enabled &&
-        !cameraEnabled && (
-          <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center p-6">
-            <div className="max-w-md w-full bg-slate-900 border border-rose-500/30 rounded-3xl p-8 text-center space-y-4 shadow-2xl">
-              <div className="w-16 h-16 bg-rose-500/10 border border-rose-500/30 text-rose-400 rounded-2xl flex items-center justify-center text-3xl mx-auto">
-                📷
+            <p className="text-sm text-slate-400 leading-relaxed">
+              {cameraBlocked
+                ? "The interviewer requires camera monitoring for this interview. Please allow camera access in your browser, then try again."
+                : "Starting your camera. Please allow access if your browser asks."}
+            </p>
+
+            {cameraBlocked && (
+              <button
+                type="button"
+                onClick={startMonitoring}
+                className="w-full py-3 rounded-lg font-semibold text-white bg-slate-600 hover:bg-slate-500"
+              >
+                Allow camera and continue
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="h-full grid grid-cols-1 lg:grid-cols-[60%_40%]">
+        {/* ================= LEFT ================= */}
+        <section className="h-full flex flex-col gap-3 p-4 md:p-8 min-h-0 overflow-y-auto">
+          {/* LOGO */}
+          <div className="h-[56px] shrink-0 rounded-lg border border-[#2a3550] bg-[#1c2740] flex items-center justify-center gap-2 text-xl font-black">
+            <span className="text-[#ea5b24]">VOLK</span>
+            <span>Ai</span>
+            <span className="text-sky-400">HR</span>
+          </div>
+
+          {/* VIDEO */}
+          <div className="relative flex-1 min-h-[220px] rounded-lg border border-[#2a3550] bg-[#0f1626] overflow-hidden">
+            {cameraEnabled ? (
+              <video
+                ref={attachVideo}
+                autoPlay
+                playsInline
+                muted
+                onLoadedMetadata={(event) => {
+                  event.currentTarget.play().catch(() => {});
+                }}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-slate-500 text-sm">
+                Camera is off
+              </div>
+            )}
+
+            {cameraEnabled && (
+              <span className="absolute top-3 left-3 px-2 py-1 rounded bg-black/60 text-[10px] font-semibold">
+                ● LIVE
+              </span>
+            )}
+
+            {/* warning (interview keeps running) */}
+            {violationNotice && (
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 max-w-[90%] px-3 py-2 rounded-md bg-amber-500/95 text-slate-900 text-xs font-semibold shadow-lg text-center">
+                ⚠ {violationNotice}
+              </div>
+            )}
+
+            {/* RECORDING BUTTONS ON TOP OF THE VIDEO */}
+            {phase !== "followup-confirmation" && (
+              <div className="absolute bottom-3 left-0 right-0 z-10 flex flex-wrap items-center justify-center gap-3 px-3">
+                {isListening && (
+                  <span className="px-2 py-1 rounded bg-rose-600/90 text-[10px] font-bold animate-pulse">
+                    ● REC
+                  </span>
+                )}
+
+                {voiceSupported && (
+                  <button
+                    type="button"
+                    disabled={processing}
+                    onClick={isListening ? stopAndSubmit : startListening}
+                    className={`px-4 py-2 rounded-md text-sm font-semibold shadow-lg backdrop-blur disabled:opacity-50 ${
+                      isListening
+                        ? "bg-rose-600 hover:bg-rose-500 text-white"
+                        : "bg-emerald-600 hover:bg-emerald-500 text-white"
+                    }`}
+                  >
+                    🎤 {processing ? "Submitting..." : isListening ? "Stop Recording" : "Start Recording"}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* INTERVIEWER + MONITORING */}
+          <div className="shrink-0 grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-3">
+            <div className="rounded-lg border border-[#2a3550] bg-[#1c2740] p-4 flex flex-col items-center justify-center gap-2">
+              <div
+                className={`w-14 h-14 rounded-full flex items-center justify-center text-2xl bg-[#2a3550] border-2 ${
+                  isSpeaking
+                    ? "border-[#ea5b24] animate-pulse"
+                    : "border-[#3a4660]"
+                }`}
+              >
+                🤖
+              </div>
+              <div className="text-sm font-bold">AI Interviewer</div>
+              <div className="text-[11px] text-slate-400">
+                {assistantStatus}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-[#2a3550] bg-[#1c2740] p-4">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+                Monitoring
               </div>
 
-              <h2 className="text-xl font-bold text-white">
-                Camera required
-              </h2>
+              <div className="space-y-1.5">
+                {monitorRows.map((row) => (
+                  <div
+                    key={row.label}
+                    className="flex items-center justify-between text-xs"
+                  >
+                    <span className="text-slate-400">{row.label}</span>
+                    <span
+                      className={`font-semibold ${statusColor(
+                        row.value,
+                        row.good,
+                        row.bad
+                      )}`}
+                    >
+                      {row.value}
+                    </span>
+                  </div>
+                ))}
+              </div>
 
-              <p className="text-sm text-slate-400 leading-relaxed">
-                {cameraBlocked
-                  ? "The interviewer requires camera monitoring for this interview. Please allow camera access in your browser, then try again."
-                  : "Starting your camera. Please allow access if your browser asks."}
-              </p>
-
-              {cameraBlocked && (
-                <button
-                  type="button"
-                  onClick={startMonitoring}
-                  className="w-full py-3 rounded-2xl font-bold text-white bg-gradient-to-r from-rose-600 to-fuchsia-600 hover:opacity-90 transition"
-                >
-                  Allow camera and continue
-                </button>
+              {!policy.enabled && (
+                <p className="mt-2 text-[10px] text-slate-500 leading-relaxed">
+                  Face / eye detection is OFF because the interviewer has not
+                  turned monitoring on for this interview.
+                </p>
               )}
             </div>
           </div>
-        )}
 
-      {/* SHELL */}
+          {/* CONTROLS */}
+          <div className="shrink-0 rounded-lg border border-[#2a3550] bg-[#1c2740] px-4 py-3 flex flex-wrap items-center justify-center gap-3">
+            <button
+              type="button"
+              disabled={policy.enabled}
+              onClick={toggleCamera}
+              className="px-4 py-2 rounded-md text-sm bg-slate-600/60 hover:bg-slate-600 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              📹{" "}
+              {cameraEnabled
+                ? policy.enabled
+                  ? "Video On"
+                  : "Stop Video"
+                : "Start Video"}
+            </button>
 
-      <div className="w-full max-w-7xl mx-auto flex-1 bg-slate-900/60 backdrop-blur-3xl border border-slate-800/80 rounded-3xl shadow-2xl flex flex-col overflow-hidden relative z-10">
-
-        {/* HEADER */}
-
-        <header className="h-20 px-6 md:px-8 border-b border-slate-800/70 bg-slate-950/40 backdrop-blur-md flex items-center justify-between">
-          <div className="flex items-center gap-3.5">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-fuchsia-500 flex items-center justify-center font-black text-white text-xl">
-              AI
-            </div>
-
-            <div>
-              <div className="flex items-center gap-2.5">
-                <h1 className="font-bold text-base md:text-lg text-white">
-                  Interview Session
-                </h1>
-
-                <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-[10px] font-bold uppercase tracking-wider">
-                  Live
-                </span>
-              </div>
-
-              <p className="text-xs text-slate-400 hidden sm:block font-mono mt-0.5">
-                Session ID:{" "}
-                {sessionId ||
-                  "ACTIVE"}
-              </p>
-            </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-950/60 border border-slate-800 text-xs font-mono text-cyan-300">
-              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+          {policy.enabled && (
+            <p className="shrink-0 text-[10px] text-slate-500 text-center leading-relaxed">
+              Keep your face visible, keep phones and notes away, look at
+              the screen and stay on this page. Anything unusual is noted
+              in the interviewer's report; the interview keeps running.
+            </p>
+          )}
+        </section>
 
+        {/* ================= RIGHT ================= */}
+        <section className="h-full min-h-0 flex flex-col border-l border-[#2a3550]">
+          <div className="h-[64px] shrink-0 flex items-center justify-center">
+            <h1 className="text-xl font-bold text-white">
+              AI Interview Assistant 🤖
+            </h1>
+          </div>
+
+          <div className="flex-1 min-h-0 mx-5 mb-5 rounded-lg border border-[#2a3550] bg-[#1c2740] flex flex-col p-4 gap-3">
+            {/* progress */}
+            <div className="shrink-0 flex items-center gap-3 text-xs text-slate-400">
               <span>
-                ⏱{" "}
-                {formatTime(
-                  elapsedSeconds
-                )}
+                Question {Math.min(Number(questionNumber) || 1, TOTAL_QUESTIONS)} of{" "}
+                {TOTAL_QUESTIONS}
+              </span>
+              <div className="flex-1 h-1.5 rounded bg-[#141c2e] overflow-hidden">
+                <div
+                  className="h-full bg-slate-400 transition-all duration-500"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <span className="font-mono">⏱ {formatTime(elapsedSeconds)}</span>
+            </div>
+
+            {/* current question (text appears with the voice) */}
+            <div className="shrink-0 min-h-[96px] rounded-md bg-[#141c2e] px-5 py-4 text-center text-[15px] leading-relaxed">
+              {currentQuestion?.is_follow_up && (
+                <div className="text-[10px] font-bold uppercase tracking-wider text-amber-400 mb-1">
+                  Follow-up question
+                </div>
+              )}
+              Interviewer: "{questionText.slice(0, typedLength)}
+              {typing ? "▍" : ""}"
+            </div>
+
+            {/* status + repeat */}
+            <div className="shrink-0 flex justify-end items-center gap-2">
+              <span className="px-4 py-2 rounded-md bg-[#141c2e] text-sm">
+                {assistantStatus}
               </span>
             </div>
-          </div>
-        </header>
 
-        {/* PROGRESS */}
+            <h3 className="shrink-0 text-[#ea5b24] font-bold text-sm">
+              Previous Questions:
+            </h3>
 
-        <div className="px-6 md:px-8 py-3 bg-slate-950/40 border-b border-slate-800/60 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
-            <span className="text-fuchsia-400 font-bold">
-              Progress
-            </span>
-
-            <span>•</span>
-
-            <span>
-              Question{" "}
-              {questionNumber}
-            </span>
-          </div>
-
-          <div className="flex-1 max-w-md h-2 bg-slate-950 rounded-full overflow-hidden border border-slate-800/60">
-            <div
-              className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-400 transition-all duration-500 rounded-full"
-              style={{
-                width: `${
-                  (Math.min(
-                    Number(
-                      questionNumber
-                    ) || 1,
-                    5
-                  ) /
-                    5) *
-                  100
-                }%`,
-              }}
-            />
-          </div>
-
-          <span className="text-xs font-mono font-bold text-slate-300">
-            {Math.round(
-              (Math.min(
-                Number(
-                  questionNumber
-                ) || 1,
-                5
-              ) /
-                5) *
-                100
-            )}
-            %
-          </span>
-        </div>
-
-        {/* MAIN */}
-
-        <main className="flex-1 grid grid-cols-1 lg:grid-cols-12 min-h-[580px]">
-
-          {/* LEFT */}
-
-          <section className="lg:col-span-5 border-b lg:border-b-0 lg:border-r border-slate-800/80 bg-slate-950/20 p-6 flex flex-col justify-between gap-6">
-
-            {/* AI */}
-
-            <div className="flex-1 flex flex-col items-center justify-center text-center relative py-6">
-              <div
-                className={`absolute w-56 h-56 rounded-full blur-3xl pointer-events-none ${
-                  isSpeaking
-                    ? "bg-fuchsia-500/25 scale-125"
-                    : isListening
-                    ? "bg-cyan-500/25 scale-110"
-                    : "bg-indigo-500/10 scale-95"
-                }`}
-              />
-
-              <div className="relative w-36 h-36 md:w-44 md:h-44 mb-4">
-                <div
-                  className={`absolute inset-0 rounded-3xl border-2 ${
-                    isSpeaking
-                      ? "border-fuchsia-500 animate-pulse"
-                      : isListening
-                      ? "border-cyan-400 animate-pulse"
-                      : "border-slate-800"
-                  }`}
-                />
-
-                <div className="absolute inset-2 rounded-2xl bg-gradient-to-b from-slate-800 to-slate-950 border border-slate-700/70 flex items-center justify-center text-5xl md:text-6xl">
-                  🤖
-                </div>
-
-                <div className="absolute -bottom-2 -right-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-700 text-[10px] font-bold text-slate-200 flex items-center gap-1.5">
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      isSpeaking
-                        ? "bg-fuchsia-400 animate-pulse"
-                        : isListening
-                        ? "bg-cyan-400 animate-pulse"
-                        : "bg-emerald-400"
-                    }`}
-                  />
-
-                  <span>
-                    {isSpeaking
-                      ? "Speaking"
-                      : isListening
-                      ? "Listening"
-                      : "Active"}
-                  </span>
-                </div>
-              </div>
-
-              <h3 className="text-lg font-bold text-white">
-                AI Evaluator
-              </h3>
-
-              <p className="text-xs text-slate-400 mt-0.5">
-                Technical Interview Console
-              </p>
-            </div>
-
-            {/* MONITORING (required by the interviewer, cannot be switched off) */}
-
-            {policy.enabled && (
-            <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-4 relative overflow-hidden backdrop-blur-xl">
-
-              {/* TITLE */}
-
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                    Interview Monitoring
-                  </span>
-
-                  <p className="text-[10px] text-slate-600 mt-1">
-                    Required by the interviewer for this interview.
-                  </p>
-                </div>
-
-                <div
-                  className={`px-2.5 py-1 rounded-lg border text-[9px] font-bold ${
-                    cameraEnabled ||
-                    faceDetectionEnabled ||
-                    eyeGazeEnabled
-                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                      : "bg-slate-800 text-slate-500 border-slate-700"
-                  }`}
-                >
-                  {cameraEnabled ||
-                  faceDetectionEnabled ||
-                  eyeGazeEnabled
-                    ? "ACTIVE"
-                    : "OFF"}
-                </div>
-              </div>
-
-              {/* CAMERA PREVIEW */}
-
-              {cameraEnabled && (
-                <div className="mt-3">
-                  <div className="w-full h-32 md:h-36 bg-black rounded-xl border border-slate-800 overflow-hidden relative">
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      onLoadedMetadata={(
-                        event
-                      ) => {
-                        event.currentTarget
-                          .play()
-                          .catch(
-                            () => {}
-                          );
-                      }}
-                      className="w-full h-full object-cover"
-                    />
-
-                    <div className="absolute top-2 left-2 px-2 py-1 rounded-lg bg-black/60 text-[8px] text-white">
-                      CAMERA ON
+            {/* transcript */}
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-1">
+              {previousMessages.map((m, i) =>
+                m.role === "you" ? (
+                  <div key={i} className="flex justify-end">
+                    <div className="max-w-[85%] rounded-lg border border-[#3a4660] bg-[#202c47] px-4 py-2.5 text-sm">
+                      <b>You:</b> {m.text}
                     </div>
-
-                    {monitoringReady && (
-                      <div className="absolute top-2 right-2 px-2 py-1 rounded-lg bg-emerald-500/80 text-[8px] text-white font-bold">
-                        AI READY
-                      </div>
-                    )}
                   </div>
-                </div>
+                ) : (
+                  <div key={i} className="flex justify-start">
+                    <div className="max-w-[85%] rounded-lg border border-[#3a4660] bg-[#202c47] px-4 py-2.5 text-sm leading-relaxed">
+                      <b>Interviewer:</b> {m.text}
+                    </div>
+                  </div>
+                )
               )}
 
-              {/* STATUS */}
-
-              <div className="grid grid-cols-2 gap-2 mt-3">
-
-                <div className="px-2.5 py-2 rounded-lg bg-slate-950/70 border border-slate-800">
-                  <div className="text-[8px] text-slate-500 uppercase">
-                    Face
-                  </div>
-
-                  <div
-                    className={`text-[9px] font-semibold mt-1 ${
-                      faceStatus ===
-                      "Face detected"
-                        ? "text-emerald-400"
-                        : faceDetectionEnabled
-                        ? "text-amber-400"
-                        : "text-slate-500"
-                    }`}
-                  >
-                    {faceStatus}
-                  </div>
-                </div>
-
-                <div className="px-2.5 py-2 rounded-lg bg-slate-950/70 border border-slate-800">
-                  <div className="text-[8px] text-slate-500 uppercase">
-                    Eye / Gaze
-                  </div>
-
-                  <div
-                    className={`text-[9px] font-semibold mt-1 ${
-                      eyeStatus ===
-                        "Eyes focused" ||
-                      eyeStatus ===
-                        "Eyes open"
-                        ? "text-emerald-400"
-                        : eyeGazeEnabled
-                        ? "text-amber-400"
-                        : "text-slate-500"
-                    }`}
-                  >
-                    {eyeStatus}
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-3 text-[8px] text-slate-600 leading-relaxed">
-                Keep your face visible and stay on this page. Leaving the page ends the interview.
-              </div>
+              <div ref={chatEndRef} />
             </div>
+
+            {error && (
+              <div className="shrink-0 p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs">
+                {error}
+              </div>
             )}
-          </section>
 
-          {/* RIGHT */}
-
-          <section className="lg:col-span-7 p-6 md:p-8 flex flex-col justify-between bg-slate-900/20">
-
-            {phase ===
-            "followup-confirmation" ? (
-              <div className="space-y-6 my-auto">
-
-                <div className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                  Follow-up Opportunity
-                </div>
-
-                <div className="space-y-2">
-                  <h2 className="text-2xl font-bold text-white">
-                    Would you like a follow-up question?
-                  </h2>
-
-                  <p className="text-slate-400 text-xs md:text-sm leading-relaxed">
-                    The AI evaluation system identified that your response can be explored further.
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 text-slate-300 text-sm flex items-center gap-3">
-                  <span
-                    className={`w-2.5 h-2.5 rounded-full ${
-                      isListening
-                        ? "bg-emerald-400 animate-ping"
-                        : isSpeaking
-                        ? "bg-indigo-400 animate-pulse"
-                        : "bg-slate-600"
-                    }`}
-                  />
+            {/* follow-up offer OR typed answer */}
+            {phase === "followup-confirmation" ? (
+              <div className="shrink-0 space-y-3">
+                <p className="text-sm text-slate-300 text-center">
+                  Would you like a follow-up question?{" "}
                   {isSpeaking
-                    ? "AI is asking..."
+                    ? "(AI is asking...)"
                     : isListening
-                    ? "Listening... say \"yes\" or \"no\""
-                    : "Say \"yes\" or \"no\", or use the buttons below."}
-                </div>
-                {error && (
-                  <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs">
-                    {error}
-                  </div>
-                )}
+                    ? '(Listening... say "yes" or "no")'
+                    : '(Say "yes" or "no", or use the buttons)'}
+                </p>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                <div className="grid grid-cols-2 gap-3">
                   <button
-                    disabled={
-                      processing
-                    }
-                    onClick={
-                      handleFollowUpYes
-                    }
-                    className="w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold text-xs md:text-sm disabled:opacity-50"
+                    disabled={processing}
+                    onClick={handleFollowUpYes}
+                    className="py-3 rounded-md bg-emerald-700 hover:bg-emerald-600 text-white font-semibold text-sm disabled:opacity-50"
                   >
-                    {processing
-                      ? "Processing..."
-                      : "YES — Ask Follow-up"}
+                    {processing ? "Processing..." : "YES — Ask Follow-up"}
                   </button>
 
                   <button
-                    disabled={
-                      processing
-                    }
-                    onClick={
-                      handleFollowUpNo
-                    }
-                    className="w-full py-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs md:text-sm border border-slate-700 disabled:opacity-50"
+                    disabled={processing}
+                    onClick={handleFollowUpNo}
+                    className="py-3 rounded-md bg-slate-700 hover:bg-slate-600 text-slate-100 font-semibold text-sm disabled:opacity-50"
                   >
                     NO — Next Question
                   </button>
                 </div>
               </div>
             ) : (
-              <>
-                {/* QUESTION */}
-
-                <div>
-                  <div className="flex items-center justify-between mb-3.5">
-                    <span
-                      className={`text-[11px] font-bold tracking-wider uppercase px-3 py-1 rounded-md border ${
-                        currentQuestion?.is_follow_up
-                          ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
-                          : "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
-                      }`}
-                    >
-                      {currentQuestion?.is_follow_up
-                        ? "Follow-up Question"
-                        : "Main Question"}
-                    </span>
-
-                    {currentQuestion?.category && (
-                      <span className="text-xs font-mono text-slate-400">
-                        {
-                          currentQuestion.category
-                        }
-                      </span>
-                    )}
-                  </div>
-
-                  <h2 className="text-xl md:text-2xl font-semibold text-white leading-relaxed">
-                    {
-                      currentQuestion?.question
+              <div className="shrink-0 flex gap-2">
+                <input
+                  value={answer}
+                  onChange={(event) => setAnswer(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (
+                      event.key === "Enter" &&
+                      answer.trim() &&
+                      !processing
+                    ) {
+                      submitAnswerWithText(answer);
                     }
-                  </h2>
-                </div>
+                  }}
+                  disabled={processing}
+                  placeholder="Speak, or type your answer here..."
+                  className="flex-1 px-4 py-3 rounded-md bg-[#141c2e] border border-[#2a3550] focus:border-slate-400 outline-none text-sm placeholder-slate-500 disabled:opacity-50"
+                />
 
-                {/* ANSWER */}
-
-                <div className="mt-6 pt-6 border-t border-slate-800/80 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                      Your Answer
-                    </label>
-
-                    <span className="text-[11px] text-slate-500 font-mono">
-                      Characters:{" "}
-                      {answer.length}
-                    </span>
-                  </div>
-
-                  <textarea
-                    value={answer}
-                    onChange={(
-                      event
-                    ) =>
-                      setAnswer(
-                        event.target
-                          .value
-                      )
-                    }
-                    disabled={
-                      processing
-                    }
-                    placeholder="Type your answer here..."
-                    rows={6}
-                    className="w-full p-4 rounded-2xl bg-slate-950/80 border border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-slate-100 placeholder-slate-600 text-sm md:text-base leading-relaxed outline-none resize-none disabled:opacity-50"
-                  />
-
-                  {error && (
-                    <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs">
-                      {error}
-                    </div>
-                  )}
-
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-
-                    <div className="flex items-center gap-2">
-                      {voiceSupported && (
-                        <>
-                          {!isListening ? (
-                            <button
-                              disabled={
-                                processing
-                              }
-                              onClick={
-                                startListening
-                              }
-                              className="px-4 py-2 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-cyan-300 border border-slate-700/80 text-xs font-semibold disabled:opacity-50"
-                            >
-                              🎤 Speak
-                            </button>
-                          ) : (
-                            <button
-                              onClick={
-                                stopListening
-                              }
-                              className="px-4 py-2 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-semibold animate-pulse"
-                            >
-                              ⏹ Stop
-                            </button>
-                          )}
-
-                          <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none ml-1">
-                            <input
-                              type="checkbox"
-                              checked={
-                                autoSubmitVoice
-                              }
-                              onChange={(
-                                event
-                              ) =>
-                                setAutoSubmitVoice(
-                                  event
-                                    .target
-                                    .checked
-                                )
-                              }
-                              className="w-3.5 h-3.5"
-                            />
-
-                            Auto submit voice
-                          </label>
-                        </>
-                      )}
-                    </div>
-
-                    <button
-                      disabled={
-                        processing ||
-                        !answer.trim()
-                      }
-                      onClick={() =>
-                        submitAnswerWithText(
-                          answer
-                        )
-                      }
-                      className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-fuchsia-600 text-white font-semibold text-xs md:text-sm disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      {processing
-                        ? "AI is evaluating..."
-                        : currentQuestion?.is_follow_up
-                        ? "Submit Follow-up Answer →"
-                        : "Submit Answer →"}
-                    </button>
-                  </div>
-
-                  {lastAnswer &&
-                    processing && (
-                      <div className="p-2.5 rounded-xl bg-slate-950/40 border border-slate-800/60 text-[11px] text-slate-400">
-                        <span className="font-semibold text-fuchsia-400">
-                          Submitted:
-                        </span>{" "}
-                        {lastAnswer}
-                      </div>
-                    )}
-                </div>
-              </>
-            )}
-          </section>
-        </main>
-
-        {/* FOOTER */}
-
-        <footer className="h-12 px-6 bg-slate-950/80 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-500 font-mono">
-          <div className="flex items-center gap-2">
-            🔒
-            <span>
-              Secure Evaluation Session
-            </span>
-          </div>
-
-          <div>
-            {formatTime(
-              elapsedSeconds
+                <button
+                  disabled={processing || !answer.trim()}
+                  onClick={() => submitAnswerWithText(answer)}
+                  className="px-5 rounded-md bg-slate-600 hover:bg-slate-500 text-white font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {processing ? "..." : "Send"}
+                </button>
+              </div>
             )}
           </div>
-        </footer>
+        </section>
       </div>
     </div>
   );

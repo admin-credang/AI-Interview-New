@@ -29,6 +29,7 @@ export default function InterviewSettingsForm({
     enabled: Boolean(initialProctoring?.enabled),
     face: initialProctoring?.enabled ? Boolean(initialProctoring?.face) : true,
     eye: initialProctoring?.enabled ? Boolean(initialProctoring?.eye) : true,
+    phone: initialProctoring?.enabled ? Boolean(initialProctoring?.phone) : true,
   });
 
   // Follow-up questions: the interviewer decides (default = on, 2).
@@ -65,6 +66,7 @@ export default function InterviewSettingsForm({
           enabled: proctoring.enabled,
           face: proctoring.enabled && proctoring.face,
           eye: proctoring.enabled && proctoring.face && proctoring.eye,
+          phone: proctoring.enabled && proctoring.phone,
         },
         follow_ups: {
           enabled: followUps.enabled,
@@ -157,7 +159,8 @@ export default function InterviewSettingsForm({
               <div>
                 <p className="font-semibold text-sm">Eye / gaze detection</p>
                 <p className="text-xs opacity-60">
-                  Watches closed eyes and looking away. Needs face detection.
+                  Watches closed eyes, looking sideways and repeatedly looking down
+                  (for example at a phone on the desk). Needs face detection.
                 </p>
               </div>
             </div>
@@ -166,6 +169,25 @@ export default function InterviewSettingsForm({
               disabled={!proctoring.enabled || !proctoring.face}
               checked={proctoring.enabled && proctoring.face && proctoring.eye}
               onChange={(v) => setProctoring((p) => ({ ...p, eye: v }))}
+            />
+          </div>
+
+          <div
+            className={`flex items-center justify-between gap-4 px-5 py-4 ${
+              proctoring.enabled ? "" : "opacity-40"
+            }`}
+          >
+            <div>
+              <p className="font-semibold text-sm">Phone detection</p>
+              <p className="text-xs opacity-60">
+                Ends the interview if a mobile phone stays visible on the camera.
+              </p>
+            </div>
+            <Toggle
+              label="Phone detection"
+              disabled={!proctoring.enabled}
+              checked={proctoring.enabled && proctoring.phone}
+              onChange={(v) => setProctoring((p) => ({ ...p, phone: v }))}
             />
           </div>
         </div>

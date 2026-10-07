@@ -114,32 +114,53 @@ function JobCard({ item, t }) {
   );
 }
 
+// The invitation email contains a personal Interview ID (INV-XXXX-XXXX).
+// Typing it here does the same as clicking the button in the email.
+function InterviewIdBox({ t }) {
+  const navigate = useNavigate();
+  const [code, setCode] = useState("");
+
+  const submit = (e) => {
+    e.preventDefault();
+    const clean = code.trim();
+    if (clean) navigate(`/invite/${encodeURIComponent(clean)}`);
+  };
+
+  return (
+    <section className={`rounded-[2rem] border ${t.card} p-6 md:p-8`}>
+      <h2 className="text-lg font-bold">Have an Interview ID?</h2>
+      <p className="text-xs opacity-60 mt-1 mb-4">
+        Find it in the invitation email, for example INV-K7QM-4X9B.
+      </p>
+
+      <form onSubmit={submit} className="flex flex-col sm:flex-row gap-3">
+        <input
+          value={code}
+          onChange={(e) => setCode(e.target.value.toUpperCase())}
+          placeholder="INV-XXXX-XXXX"
+          maxLength={20}
+          className={`flex-1 px-4 py-3 rounded-xl border ${t.input} outline-none focus:ring-2 focus:ring-fuchsia-500 font-mono tracking-widest text-sm`}
+        />
+        <button
+          type="submit"
+          disabled={!code.trim()}
+          className="px-6 py-3 rounded-xl bg-gradient-to-r from-fuchsia-600 to-purple-600 text-white font-bold text-sm disabled:opacity-40"
+        >
+          Open my interview
+        </button>
+      </form>
+    </section>
+  );
+}
+
 export default function CandidateHome() {
   const { t, userName, interviews, stats } = useDashboard();
 
-  // Fallback demo candidate data if dynamic interviews are empty
-  const defaultInterviews = interviews && interviews.length > 0 ? interviews : [
-    {
-      id: "demo-1",
-      title: "Full-Stack AI Developer Interview",
-      status: "active",
-      duration: 30,
-      question_count: 5,
-      monitoring_required: true,
-      job: {
-        company: "Pydun Technology / Techmango",
-        role: "Full-Stack & AI Developer",
-        location: "Madurai, Tamil Nadu (Remote/Hybrid)",
-        employment_type: "Full-time / Internship",
-        experience: "2+ Years",
-        responsibilities: "Develop scalable web applications using Django, integrate conversational AI agents via LangChain, RAG pipelines, and handle intelligent database operations.",
-        skills: ["Python", "Django", "React", "LangChain", "XGBoost", "Tailwind CSS"]
-      },
-      session: { status: "not_started" }
-    }
-  ];
+  // Only interviews the interviewer invited THIS candidate to
+  // (each with the role the interviewer fixed). Nothing else is shown.
+  const assigned = interviews || [];
 
-  const open = defaultInterviews.filter((i) => getSessionState(i.session) !== "completed");
+  const open = assigned.filter((i) => getSessionState(i.session) !== "completed");
   const anyMonitoring = open.some((i) => i.monitoring_required);
 
   const steps = processSteps({
@@ -161,7 +182,7 @@ export default function CandidateHome() {
             <h1 className="text-4xl md:text-5xl font-black mb-3 tracking-tight">
               Welcome back,{" "}
               <span className="bg-gradient-to-r from-fuchsia-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">
-                {userName || "Packiyalakshmi"}
+                {userName || "Candidate"}
               </span>
             </h1>
             <p className="text-base md:text-lg opacity-85 max-w-2xl leading-relaxed">
@@ -169,16 +190,27 @@ export default function CandidateHome() {
             </p>
           </div>
           <div className="shrink-0 bg-white/5 border border-white/10 rounded-2xl p-5 backdrop-blur-md">
-            <p className="text-xs uppercase tracking-wider opacity-60 font-bold mb-1">Target Role</p>
-            <p className="text-sm font-bold text-fuchsia-300">Full-Stack & AI Engineer</p>
-            <p className="text-xs opacity-50 mt-1">Location: Madurai, IN</p>
+            <p className="text-xs uppercase tracking-wider opacity-60 font-bold mb-1">
+              {open.length > 1 ? "Your roles" : "Your role"}
+            </p>
+            <p className="text-sm font-bold text-fuchsia-300">
+              {open.length === 0
+                ? "No interview assigned yet"
+                : open
+                    .map((i) => i.job?.role || i.title)
+                    .slice(0, 2)
+                    .join(" · ")}
+            </p>
+            {open[0]?.job?.company && (
+              <p className="text-xs opacity-50 mt-1">{open[0].job.company}</p>
+            )}
           </div>
         </div>
       </header>
 
       {/* Stats Overview */}
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-        <StatCard title="Assigned Interviews" value={stats?.total || defaultInterviews.length} icon={IconLayers} change="Ready to take" variant="purple" />
+        <StatCard title="Assigned Interviews" value={assigned.length} icon={IconLayers} change="Ready to take" variant="purple" />
         <StatCard title="Completed" value={stats?.completed || 0} icon={IconAward} change="Under evaluation" variant="emerald" />
         <StatCard title="In Progress" value={stats?.inProgress || 0} icon={IconClock} change="Pending completion" variant="amber" />
       </section>
@@ -201,6 +233,9 @@ export default function CandidateHome() {
         </ol>
       </section>
 
+      {/* ENTER INTERVIEW ID */}
+      <InterviewIdBox t={t} />
+
       {/* JOBS SECTION */}
       <section>
         <div className="flex items-center gap-3 mb-6 px-1">
@@ -210,19 +245,20 @@ export default function CandidateHome() {
           <h2 className="text-xl font-bold">Your Active Interviews</h2>
         </div>
 
-        {defaultInterviews.length === 0 ? (
+        {assigned.length === 0 ? (
           <div className={`text-center py-20 px-6 rounded-[3rem] border ${t.card}`}>
             <div className="opacity-30 mx-auto mb-6 flex justify-center scale-150">
               <IconAlert />
             </div>
             <h3 className="text-2xl font-bold mb-2">No interviews scheduled</h3>
             <p className="opacity-60 text-sm max-w-md mx-auto">
-              When a recruiter invites you to an AI interview, it will appear right here instantly.
+              When a recruiter invites you, open the link in your invitation email or enter
+              the Interview ID above. Only the role you were invited for will appear here.
             </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-            {defaultInterviews.map((i) => (
+            {assigned.map((i) => (
               <JobCard key={i.id} item={i} t={t} />
             ))}
           </div>

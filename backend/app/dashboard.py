@@ -12,7 +12,11 @@ from app.models.report import Report
 from app.models.session_review import SessionReview
 from app.models.interview_configuration import InterviewConfiguration
 
-from app.services.interview_policy import follow_up_policy, is_invited
+from app.services.interview_policy import (
+    follow_up_policy,
+    invitation_for,
+    is_invited,
+)
 from app.services.report_service import generate_interview_report
 
 
@@ -276,6 +280,13 @@ def get_dashboard(
         proctoring = extra.get("proctoring") or {}
         follow_ups = follow_up_policy(cfg)
 
+        # The role the interviewer FIXED for this candidate in the
+        # invitation e-mail. The candidate sees only this role.
+        invitation = invitation_for(cfg, current_user) or {}
+        assigned_role = (
+            invitation.get("role") or job.get("role") or ""
+        )
+
         session_data = None
 
         if existing_session is not None:
@@ -306,8 +317,9 @@ def get_dashboard(
                 "status": interview.status,
                 "created_at": _iso(interview.created_at),
                 "session": session_data,
+                "invitation_code": invitation.get("code"),
                 "job": {
-                    "role": job.get("role") or "",
+                    "role": assigned_role,
                     "company": job.get("company") or "",
                     "location": job.get("location") or "",
                     "employment_type": job.get("employment_type") or "",

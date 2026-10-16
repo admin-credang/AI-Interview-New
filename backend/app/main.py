@@ -50,6 +50,8 @@ from app.api.interview_monitoring import (
 # =========================================================
 
 from app.api.hiring import router as hiring_router
+from app.api.company_intro import router as company_intro_router
+from app.api.candidate_resume import router as candidate_resume_router
 from app.models.session_review import SessionReview
 
 
@@ -64,6 +66,22 @@ try:
     )
 except Exception as exc:
     print(f"Could not create session_reviews table: {exc}")
+
+
+# =========================================================
+# ADD NEW COLUMN TO EXISTING TABLE (safe on every start)
+# =========================================================
+
+try:
+    with engine.begin() as _connection:
+        _connection.execute(
+            text(
+                "ALTER TABLE session_reviews "
+                "ADD COLUMN IF NOT EXISTS gaze_metrics JSON"
+            )
+        )
+except Exception as exc:
+    print(f"gaze_metrics column skipped: {exc}")
 
 
 # =========================================================
@@ -148,6 +166,10 @@ app.include_router(
     interview_configuration_router
 )
 
+app.include_router(
+    company_intro_router
+)
+
 
 # =========================================================
 # INTERVIEW PROCESS ROUTES
@@ -190,6 +212,10 @@ app.include_router(
 
 app.include_router(
     hiring_router
+)
+
+app.include_router(
+    candidate_resume_router
 )
 
 

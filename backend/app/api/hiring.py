@@ -17,6 +17,7 @@ Candidate side (own session only, never sees scores)
     POST /hiring/sessions/{session_id}/submitted  "thanks" e-mail after completion
     GET  /hiring/sessions/{session_id}/status     under review / selected / not selected
     POST /hiring/sessions/{session_id}/monitoring-event
+    POST /hiring/sessions/{session_id}/gaze-summary   (write only, interviewer reads it)
 """
 
 import re
@@ -36,7 +37,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import Text, cast, func
 from sqlalchemy.orm import Session
 
-from app.api.auth.auth import get_current_user
+from app.api.auth.auth import create_access_token, get_current_user
+from app.services.gaze_analysis_service import build_gaze_report
 from app.database import SessionLocal, get_db
 from app.models.answer import Answer
 from app.models.feedback import Feedback
@@ -51,6 +53,7 @@ from app.models.session import InterviewSession
 from app.models.session_review import SessionReview
 from app.models.user import User
 from app.config import settings
+from app import features
 from app.services.email_service import (
     build_ack_email,
     build_interviewer_report_email,
@@ -160,6 +163,31 @@ def _job(configuration) -> dict:
         "experience": job.get("experience") or "",
         "skills": job.get("skills") or [],
         "responsibilities": job.get("responsibilities") or "",
+    }
+
+
+def _interviewer(configuration, fallback_user) -> dict:
+    """
+    Interviewer shown to candidates (name in the e-mail, reply-to) and
+    who receives the finished-interview report.
+    Saved per interview in Client Settings; defaults to the account
+    that created the interview.
+    """
+
+    saved = ((configuration.extra_config or {}) if configuration else {}).get(
+        "interviewer"
+    ) or {}
+
+    # module "Interviewer name & email" switched OFF -> account that made it
+    if not features.is_on(configuration, "custom_interviewer"):
+        saved = {}
+
+    name = (saved.get("name") or "").strip()
+    email = (saved.get("email") or "").strip()
+
+    return {
+        "name": name or (getattr(fallback_user, "name", "") or ""),
+        "email": email or (getattr(fallback_user, "email", "") or ""),
     }
 
 
@@ -431,8 +459,15 @@ def notify_interviewer_task(session_id) -> None:
 
         configuration = _get_configuration(db, interview.id)
 
+        # module "Report e-mail to interviewer" is OFF -> report is still
+        # generated above, only the mail is skipped
+        if not features.is_on(configuration, "email_report"):
+            return
+
+        iv = _interviewer(configuration, interviewer)
+
         subject, text = build_interviewer_report_email(
-            interviewer.name,
+            iv["name"],
             candidate.name,
             candidate.email,
             _job(configuration)["role"] or interview.title,
@@ -457,17 +492,18 @@ def notify_interviewer_task(session_id) -> None:
         # PDF report (bullet points + feedback + improvement analysis)
         attachments = []
 
-        try:
-            pdf_bytes, pdf_name = build_report_pdf_for_session(
-                db, session.id
-            )
-            attachments.append((pdf_name, pdf_bytes, "application/pdf"))
+        if features.is_on(configuration, "email_report_pdf"):
+            try:
+                pdf_bytes, pdf_name = build_report_pdf_for_session(
+                    db, session.id
+                )
+                attachments.append((pdf_name, pdf_bytes, "application/pdf"))
 
-        except Exception as exc:
-            print(f"PDF report could not be built: {exc}")
+            except Exception as exc:
+                print(f"PDF report could not be built: {exc}")
 
         send_email(
-            interviewer.email,
+            iv["email"] or interviewer.email,
             subject,
             text,
             attachments=attachments,
@@ -506,18 +542,43 @@ class JobDetails(BaseModel):
     responsibilities: str | None = Field(None, max_length=3000)
 
 
+class InterviewerSettings(BaseModel):
+    name: str = Field("", max_length=100)
+    email: str = Field("", max_length=254)
+
+
 class InterviewSettingsUpdate(BaseModel):
     proctoring: ProctoringSettings | None = None
     job: JobDetails | None = None
     follow_ups: FollowUpSettings | None = None
+    # interview-level switch for resume-based questions (default ON)
+    resume_questions: bool | None = None
+    # who the candidates see as the interviewer + who gets the report
+    interviewer: InterviewerSettings | None = None
 
 
 class StatusRequest(BaseModel):
     open: bool
 
 
+class CandidateIn(BaseModel):
+    """One candidate added from Client Settings."""
+
+    name: str | None = Field(None, max_length=120)
+    email: str = Field(..., max_length=254)
+    phone: str | None = Field(None, max_length=30)
+
+
 class InviteRequest(BaseModel):
-    emails: list[str] = Field(..., min_length=1, max_length=50)
+    # plain e-mail list (old UI) and/or full candidates (name + phone)
+    emails: list[str] = Field(default_factory=list, max_length=50)
+    candidates: list[CandidateIn] = Field(
+        default_factory=list, max_length=50
+    )
+
+    # False = only save the candidate (status "Pending"); the
+    # interviewer sends the mail later with the row's "Send email"
+    send_email: bool = True
 
     # The role the interviewer fixed for these candidates. It is sent
     # in the e-mail and is the ONLY role they can open.
@@ -630,15 +691,33 @@ def _invitation_rows(
         else:
             state = "sent"
 
+        # mail delivery: pending -> sent / failed
+        # (old invitations had no tracking -> treated as sent)
+        mail_status = record.get("mail_status") or "sent"
+
         rows.append(
             {
                 "email": email,
-                "name": user.name if user else None,
+                "name": record.get("name") or (user.name if user else None),
+                "phone": record.get("phone") or "",
+                "mail_status": mail_status,
+                "mail_error": record.get("mail_error"),
                 "role": record.get("role") or "",
                 "code": record.get("code"),
+                # the personal link - used when the e-mail module is OFF
+                "link": (
+                    f"{settings.frontend_url.rstrip('/')}/invite/{record['code']}"
+                    if record.get("code")
+                    else None
+                ),
                 "status": state,
                 "invited_at": record.get("invited_at"),
                 "opened_at": record.get("opened_at"),
+                # never the resume text - only that one exists
+                "has_resume": bool((record.get("resume") or {}).get("text")),
+                "resume_name": (record.get("resume") or {}).get("filename"),
+                # interviewer's ON/OFF switch (default ON)
+                "resume_questions": record.get("resume_questions") is not False,
             }
         )
 
@@ -716,6 +795,13 @@ def list_my_interviews(
         db, _all_invited_emails(configs.values())
     )
 
+    creators = {
+        u.id: u
+        for u in db.query(User)
+        .filter(User.id.in_(list({i.created_by for i in interviews})))
+        .all()
+    } if interviews else {}
+
     for interview in interviews:
 
         configuration = configs.get(interview.id)
@@ -761,14 +847,71 @@ def list_my_interviews(
                 "question_count": extra.get("question_count"),
                 "proctoring": _policy(configuration),
                 "follow_ups": follow_up_policy(configuration),
+                "resume_questions_enabled": extra.get("resume_questions_enabled") is not False,
                 "job": _job(configuration),
+                "features": features.resolve(configuration),
+                "interviewer": _interviewer(
+                    configuration,
+                    creators.get(interview.created_by) or current_user,
+                ),
                 "candidates_total": len(sessions),
                 "candidates_completed": len(completed),
                 "pending_review": len(pending),
             }
         )
 
-    return {"interviews": result}
+    return {
+        "interviews": result,
+        "feature_catalog": features.catalog(),
+        "feature_groups": features.groups(),
+    }
+
+
+class FeaturesUpdate(BaseModel):
+    # {"email_ack": false, "company_intro": true, ...}
+    features: dict[str, bool] = Field(default_factory=dict)
+
+
+@router.put("/interviews/{interview_id}/features")
+def update_interview_features(
+    interview_id: UUID,
+    body: FeaturesUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Switch feature modules ON / OFF for ONE interview."""
+
+    _require_recruiter(current_user)
+    _owned_interview(db, current_user, interview_id)
+
+    configuration = _get_configuration(db, interview_id)
+
+    if configuration is None:
+        raise HTTPException(
+            404, "Configure the interview first, then change its modules"
+        )
+
+    unknown = [k for k in body.features if k not in features.BY_KEY]
+
+    if unknown:
+        raise HTTPException(422, f"Unknown module: {', '.join(unknown)}")
+
+    configuration.extra_config = features.apply(
+        configuration.extra_config or {}, body.features
+    )
+
+    db.commit()
+    db.refresh(configuration)
+
+    return {
+        "success": True,
+        "features": features.resolve(configuration),
+        "proctoring": _policy(configuration),
+        "follow_ups": follow_up_policy(configuration),
+        "resume_questions_enabled": features.is_on(
+            configuration, "resume_questions"
+        ),
+    }
 
 
 @router.put("/interviews/{interview_id}/settings")
@@ -815,6 +958,18 @@ def update_interview_settings(
     if body.follow_ups is not None:
         extra["follow_ups"] = body.follow_ups.model_dump()
 
+    if body.resume_questions is not None:
+        extra["resume_questions_enabled"] = bool(body.resume_questions)
+
+    if body.interviewer is not None:
+        iv_name = body.interviewer.name.strip()
+        iv_email = body.interviewer.email.strip().lower()
+
+        if iv_email and not _EMAIL_RE.match(iv_email):
+            raise HTTPException(422, "Enter a valid interviewer email address")
+
+        extra["interviewer"] = {"name": iv_name, "email": iv_email}
+
     if body.job is not None:
         job = body.job.model_dump()
         job["skills"] = [
@@ -834,6 +989,11 @@ def update_interview_settings(
         "proctoring": _policy(configuration),
         "job": _job(configuration),
         "follow_ups": follow_up_policy(configuration),
+        "resume_questions_enabled": (
+            (configuration.extra_config or {}).get("resume_questions_enabled")
+            is not False
+        ),
+        "interviewer": _interviewer(configuration, current_user),
     }
 
 
@@ -897,21 +1057,72 @@ def set_interview_status(
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
+_PHONE_RE = re.compile(r"^\+?\d{7,15}$")
+
+
+def _clean_phone(raw: str | None) -> str | None:
+    """'+91 98765-43210' -> '+919876543210'. None when invalid."""
+
+    value = re.sub(r"[\s().-]", "", (raw or "").strip())
+
+    return value if _PHONE_RE.match(value) else None
+
+
 def _send_invite_task(
     messages: list[tuple[str, str, str]],
     from_name: str | None,
     reply_to: str | None,
+    interview_id: UUID | None = None,
 ) -> None:
-    """messages = [(to_email, subject, body), ...] - one per candidate."""
+    """
+    messages = [(to_email, subject, body), ...] - one per candidate.
+
+    After each mail the result is written back to the invitation
+    (mail_status = sent / failed) so Client Settings can show it.
+    """
 
     for address, subject, body in messages:
-        send_email(
+        ok, info = send_email(
             address,
             subject,
             body,
             from_name=from_name,
             reply_to=reply_to,
         )
+
+        if interview_id is None:
+            continue
+
+        db = SessionLocal()
+
+        try:
+            configuration = _get_configuration(db, interview_id)
+
+            if configuration is None:
+                continue
+
+            extra = dict(configuration.extra_config or {})
+            records = dict(extra.get("invitations") or {})
+            record = dict(records.get(address) or {})
+
+            record["mail_status"] = "sent" if ok else "failed"
+            record["mail_error"] = None if ok else info
+            record["mail_checked_at"] = datetime.now(
+                timezone.utc
+            ).isoformat()
+
+            records[address] = record
+            extra["invitations"] = records
+            configuration.extra_config = extra
+
+            db.commit()
+
+        except Exception as exc:  # never break the other mails
+            db.rollback()
+            print(f"INVITE STATUS UPDATE FAILED: {exc}")
+
+        finally:
+            db.close()
 
 
 @router.post("/interviews/{interview_id}/invite")
@@ -945,14 +1156,34 @@ def invite_candidates(
 
     valid = []
     invalid = []
+    details: dict[str, dict] = {}
 
-    for raw in body.emails:
-        address = (raw or "").strip().lower()
+    entries = [
+        CandidateIn(email=e) for e in body.emails
+    ] + list(body.candidates)
+
+    for entry in entries:
+        address = (entry.email or "").strip().lower()
         if not address:
             continue
         if _EMAIL_RE.match(address):
             if address not in valid:
                 valid.append(address)
+
+            phone = None
+            if (entry.phone or "").strip():
+                phone = _clean_phone(entry.phone)
+                if phone is None:
+                    raise HTTPException(
+                        422,
+                        f"Phone number for {address} is not valid "
+                        "(use 7 to 15 digits, e.g. +919876543210).",
+                    )
+
+            details[address] = {
+                "name": (entry.name or "").strip() or None,
+                "phone": phone,
+            }
         elif address not in invalid:
             invalid.append(address)
 
@@ -983,6 +1214,12 @@ def invite_candidates(
 
     base = settings.frontend_url.rstrip("/")
 
+    interviewer = _interviewer(configuration, current_user)
+
+    # module "Invitation e-mail": OFF = nothing is mailed, link is shared by hand
+    email_on = features.is_on(configuration, "email_invite")
+    send_now = bool(body.send_email and email_on)
+
     messages = []
 
     for address in valid:
@@ -997,8 +1234,28 @@ def invite_candidates(
 
         record["email"] = address
         record["role"] = role
-        record["last_sent_at"] = now
+        if send_now:
+            record["last_sent_at"] = now
         record["invited_by"] = str(current_user.id)
+
+        # name + phone are kept together with the e-mail
+        info = details.get(address) or {}
+        if info.get("name"):
+            record["name"] = info["name"]
+        if info.get("phone"):
+            record["phone"] = info["phone"]
+
+        if send_now:
+            # becomes "sent" / "failed" once the mail is delivered
+            record["mail_status"] = "pending"
+            record["mail_error"] = None
+        elif body.send_email and not email_on:
+            # module OFF: the interviewer shares the link manually
+            record["mail_status"] = "manual"
+            record["mail_error"] = None
+        elif not record.get("mail_status"):
+            # saved only - not e-mailed yet (shown as "Pending")
+            record["mail_status"] = "draft"
 
         records[address] = record
 
@@ -1010,11 +1267,13 @@ def invite_candidates(
             duration=interview.duration,
             question_count=extra.get("question_count"),
             access_code=record["code"],
-            interviewer_name=current_user.name,
+            interviewer_name=interviewer["name"],
             candidate_email=address,
+            candidate_name=record.get("name"),
         )
 
-        messages.append((address, subject, text))
+        if send_now:
+            messages.append((address, subject, text))
 
     extra["invitations"] = records
 
@@ -1031,7 +1290,8 @@ def invite_candidates(
         _send_invite_task,
         messages,
         company,
-        current_user.email,
+        interviewer["email"] or current_user.email,
+        interview_id,
     )
 
     sessions = (
@@ -1043,6 +1303,7 @@ def invite_candidates(
     return {
         "success": True,
         "queued": len(valid),
+        "email_sent": send_now,
         "invalid": invalid,
         "role": role,
         "link": f"{base}/interviews/{interview.id}",
@@ -1168,6 +1429,158 @@ def open_invitation(
     job = _job(configuration)
 
     return {
+        "interview_id": str(interview.id),
+        "title": interview.title,
+        "role": record.get("role") or job["role"] or interview.title,
+        "company": job["company"] or settings.company_name,
+    }
+
+
+# =========================================================
+# CANDIDATE: ENTER WITH THE EMAIL LINK (no login, no password)
+# =========================================================
+
+def _find_invitation(db: Session, canonical: str):
+    """(configuration, record) that owns this Interview ID, or (None, None)."""
+
+    rows = (
+        db.query(InterviewConfiguration)
+        .filter(
+            cast(InterviewConfiguration.extra_config, Text).like(
+                f"%{canonical}%"
+            )
+        )
+        .all()
+    )
+
+    for item in rows:
+        for rec in invitation_records(item).values():
+            if rec.get("code") == canonical:
+                return item, rec
+
+    return None, None
+
+
+@router.post("/invitations/{code}/enter")
+def enter_with_invitation(
+    code: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Public. The candidate clicks the button in the e-mail
+    (/invite/<ID>) and this signs them in as the invited address.
+
+    * The Interview ID is the key - it was e-mailed only to that
+      candidate, so there is no login or password.
+    * Interviewer / admin accounts can never be entered this way.
+    * The candidate account is created automatically on first use.
+    """
+
+    canonical = format_code(code)
+
+    if canonical is None:
+        raise HTTPException(
+            404,
+            "This Interview ID is not valid. "
+            "Check the ID in your invitation email.",
+        )
+
+    configuration, record = _find_invitation(db, canonical)
+
+    if configuration is None:
+        raise HTTPException(
+            404,
+            "This Interview ID was not found. "
+            "Check the ID in your invitation email.",
+        )
+
+    # module "Open from e-mail without login" is OFF -> normal login
+    if not features.is_on(configuration, "passwordless_link"):
+        raise HTTPException(403, "LOGIN_REQUIRED")
+
+    invited_email = (record.get("email") or "").strip().lower()
+
+    if not invited_email:
+        raise HTTPException(404, "This invitation is not valid.")
+
+    interview = (
+        db.query(Interview)
+        .filter(Interview.id == configuration.interview_id)
+        .first()
+    )
+
+    if interview is None:
+        raise HTTPException(404, "This interview no longer exists.")
+
+    user = (
+        db.query(User)
+        .filter(func.lower(User.email) == invited_email)
+        .first()
+    )
+
+    if user is not None and user.role != "candidate":
+        raise HTTPException(
+            403,
+            "This email belongs to an interviewer account, so it cannot "
+            "be used as a candidate.",
+        )
+
+    has_session = (
+        user is not None
+        and db.query(InterviewSession.id)
+        .filter(
+            InterviewSession.interview_id == interview.id,
+            InterviewSession.candidate_id == user.id,
+        )
+        .first()
+        is not None
+    )
+
+    if interview.status == "closed" and not has_session:
+        raise HTTPException(
+            400,
+            "This interview is no longer accepting candidates.",
+        )
+
+    if user is None:
+        user = User(
+            name=(
+                (record.get("name") or invited_email.split("@")[0])
+                or "Candidate"
+            )[:100],
+            email=invited_email,
+            password_hash=None,
+            role="candidate",
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+    if not record.get("opened_at"):
+
+        extra = dict(configuration.extra_config or {})
+        records = dict(extra.get("invitations") or {})
+
+        updated = dict(records.get(invited_email) or {})
+        updated["opened_at"] = datetime.now(timezone.utc).isoformat()
+        records[invited_email] = updated
+
+        extra["invitations"] = records
+        configuration.extra_config = extra
+
+        db.commit()
+
+    job = _job(configuration)
+
+    return {
+        "access_token": create_access_token(str(user.id)),
+        "token_type": "bearer",
+        "user": {
+            "id": str(user.id),
+            "name": user.name,
+            "email": user.email,
+            "role": user.role,
+        },
         "interview_id": str(interview.id),
         "title": interview.title,
         "role": record.get("role") or job["role"] or interview.title,
@@ -1863,6 +2276,7 @@ def get_candidate_detail(
             "questions": qa,
         },
         "candidate_feedback": candidate_feedback,
+        "features": features.simple(configuration),
         "monitoring": {
             "required": policy["enabled"],
             "face": policy["face"],
@@ -1872,6 +2286,14 @@ def get_candidate_detail(
             ),
             "events": (
                 (review.proctoring_events or []) if review else []
+            ),
+            # interviewer-only; None when nothing was measured
+            "gaze": (
+                build_gaze_report(review.gaze_metrics)
+                if review
+                and policy["eye"]
+                and features.is_on(configuration, "gaze_report")
+                else None
             ),
         },
         "review": {
@@ -1982,11 +2404,18 @@ def set_decision(
 
     email_state = "not_sent"
 
+    decision_config = _get_configuration(db, interview.id)
+
     wants_email = (
         body.send_email
         and body.decision in {"selected", "rejected"}
         and candidate is not None
     )
+
+    # module "Selected / rejected e-mail" is OFF -> decision saved, no mail
+    if wants_email and not features.is_on(decision_config, "email_decision"):
+        wants_email = False
+        email_state = "module_off"
 
     # Do not e-mail twice for the same decision
     if (
@@ -2000,11 +2429,14 @@ def set_decision(
     if wants_email:
 
         # strengths / weak points / how to improve for the candidate
-        try:
-            feedback = candidate_feedback_for_session(db, session.id)
-        except Exception as exc:
-            print(f"Candidate feedback skipped: {exc}")
-            feedback = None
+        feedback = None
+
+        if features.is_on(decision_config, "email_decision_feedback"):
+            try:
+                feedback = candidate_feedback_for_session(db, session.id)
+            except Exception as exc:
+                print(f"Candidate feedback skipped: {exc}")
+                feedback = None
 
         if body.decision == "selected":
             subject, text = build_selected_email(
@@ -2083,23 +2515,32 @@ def interview_submitted(
             session.id,
         )
 
-        subject, text = build_ack_email(
-            current_user.name,
-            interview.title if interview else "your interview",
-        )
+        if not features.is_on(
+            _get_configuration(db, session.interview_id), "email_ack"
+        ):
+            # module "Submitted e-mail" is OFF: mark as handled so the
+            # interviewer report mail above is not repeated
+            review.ack_sent_at = datetime.now(timezone.utc)
+            db.commit()
 
-        review_id = review.id
-        to_email = current_user.email
+        else:
+            subject, text = build_ack_email(
+                current_user.name,
+                interview.title if interview else "your interview",
+            )
 
-        db.commit()
+            review_id = review.id
+            to_email = current_user.email
 
-        background_tasks.add_task(
-            _send_ack_email_task,
-            review_id,
-            to_email,
-            subject,
-            text,
-        )
+            db.commit()
+
+            background_tasks.add_task(
+                _send_ack_email_task,
+                review_id,
+                to_email,
+                subject,
+                text,
+            )
 
     else:
         db.commit()
@@ -2182,3 +2623,58 @@ def monitoring_event(
     db.commit()
 
     return {"success": True, "stored": True}
+
+
+# =========================================================
+# CANDIDATE BROWSER -> PER-QUESTION GAZE NUMBERS
+# (write only. The candidate never gets these back.)
+# =========================================================
+
+class GazeSummaryRequest(BaseModel):
+    question: int = Field(..., ge=1, le=100)
+    answer_ms: int = Field(..., ge=0, le=1_800_000)
+    on_screen_ms: int = Field(..., ge=0, le=1_800_000)
+    side_ms: int = Field(0, ge=0, le=1_800_000)
+    down_ms: int = Field(0, ge=0, le=1_800_000)
+    phone_ms: int = Field(0, ge=0, le=1_800_000)
+    glances: int = Field(0, ge=0, le=1000)
+    sweeps: int = Field(0, ge=0, le=1000)
+
+
+@router.post("/sessions/{session_id}/gaze-summary")
+def gaze_summary(
+    session_id: UUID,
+    body: GazeSummaryRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+
+    session = _own_session(db, current_user, session_id)
+
+    review = _get_or_create_review(db, session.id)
+
+    items = list(review.gaze_metrics or [])
+
+    entry = body.model_dump()
+
+    # clean obvious nonsense from the browser
+    entry["on_screen_ms"] = min(entry["on_screen_ms"], entry["answer_ms"])
+    entry["side_ms"] = min(entry["side_ms"], entry["answer_ms"])
+    entry["down_ms"] = min(entry["down_ms"], entry["answer_ms"])
+    entry["phone_ms"] = min(entry["phone_ms"], entry["answer_ms"])
+
+    for index, old in enumerate(items):
+        if old.get("question") == body.question:
+            # the browser sends running totals; keep the biggest one
+            if entry["answer_ms"] >= (old.get("answer_ms") or 0):
+                items[index] = entry
+            break
+    else:
+        items.append(entry)
+
+    # reassign so the JSON column is saved
+    review.gaze_metrics = items
+
+    db.commit()
+
+    return {"success": True}

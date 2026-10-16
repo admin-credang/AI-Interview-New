@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import api from "../../services/api";
 import { Toggle } from "./hiring";
+import CompanyIntroEditor from "./CompanyIntroEditor";
 import { IconEye, IconShield } from "./icons";
 
 // Works inside AND outside the dashboard theme provider.
@@ -19,6 +20,7 @@ export default function InterviewSettingsForm({
   initialProctoring,
   initialJob,
   initialFollowUps,
+  initialResumeQuestions,
   t = DEFAULT_T,
   saveLabel = "Save settings",
   onSaved,
@@ -37,6 +39,11 @@ export default function InterviewSettingsForm({
     enabled: initialFollowUps ? Boolean(initialFollowUps.enabled) : true,
     count: Number(initialFollowUps?.count) || 2,
   });
+
+  // Resume questions: 2 extra questions from the candidate's resume (default on).
+  const [resumeQuestions, setResumeQuestions] = useState(
+    initialResumeQuestions !== false
+  );
 
   const [job, setJob] = useState({
     role: initialJob?.role || "",
@@ -72,6 +79,7 @@ export default function InterviewSettingsForm({
           enabled: followUps.enabled,
           count: Math.min(5, Math.max(1, Number(followUps.count) || 2)),
         },
+        resume_questions: resumeQuestions,
         job: {
           role: job.role,
           company: job.company,
@@ -87,7 +95,13 @@ export default function InterviewSettingsForm({
       });
 
       setMessage("Saved.");
-      onSaved?.();
+      onSaved?.({
+        resumeQuestions,
+        followUps: {
+          enabled: followUps.enabled,
+          count: Math.min(5, Math.max(1, Number(followUps.count) || 2)),
+        },
+      });
     } catch (err) {
       setError(err?.response?.data?.detail || "Could not save settings.");
     } finally {
@@ -244,11 +258,39 @@ export default function InterviewSettingsForm({
               className={`px-3 py-2 rounded-xl border ${t.input} text-sm outline-none focus:ring-2 focus:ring-fuchsia-500 disabled:cursor-not-allowed`}
             >
               {[1, 2, 3, 4, 5].map((n) => (
-                <option key={n} value={n} className="text-black">
+                <option key={n} value={n} className="bg-slate-900 text-white">
                   {n}
                 </option>
               ))}
             </select>
+          </div>
+        </div>
+      </div>
+
+      {/* RESUME QUESTIONS */}
+      <div className="space-y-4">
+        <div>
+          <h3 className="font-bold">Resume questions</h3>
+          <p className="text-xs opacity-60">
+            Extra questions taken from a candidate's resume, asked after the normal ones.
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-white/10">
+          <div className="flex items-center justify-between gap-4 px-5 py-4">
+            <div>
+              <p className="font-semibold text-sm">Ask resume questions</p>
+              <p className="text-xs opacity-60">
+                On = candidates who have a resume get 2 extra questions from it. Off =
+                nobody gets resume questions. Candidates without a resume only get the
+                normal questions.
+              </p>
+            </div>
+            <Toggle
+              label="Ask resume questions"
+              checked={resumeQuestions}
+              onChange={setResumeQuestions}
+            />
           </div>
         </div>
       </div>
@@ -277,6 +319,14 @@ export default function InterviewSettingsForm({
           onChange={setField("responsibilities")}
         />
       </div>
+
+      {/* COMPANY INTRODUCTION (own approve/save buttons) */}
+      <CompanyIntroEditor
+        interviewId={interviewId}
+        role={job.role}
+        company={job.company}
+        t={t}
+      />
 
       {error && (
         <div className="p-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 text-sm text-rose-300">

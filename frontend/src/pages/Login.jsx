@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import "./Login.scss"; // pages/Login.scss — same folder as this file
 
 function Login() {
   const navigate = useNavigate();
-  const { login, loading } = useAuth();
+  const { login, googleLogin, loading } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -34,6 +34,14 @@ function Login() {
 
     // Came from an invitation e-mail? Go straight back to that
     // interview instead of the dashboard.
+    afterLogin(result.user);
+  };
+
+  // ---- Google sign-in (needs VITE_GOOGLE_CLIENT_ID in .env of the frontend) ----
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+  const googleBox = useRef(null);
+
+  const afterLogin = (user) => {
     let pending = null;
 
     try {
@@ -43,22 +51,59 @@ function Login() {
     }
 
     navigate(
-      pending && result.user?.role === "candidate"
+      pending && user?.role === "candidate"
         ? `/invite/${pending}`
         : "/dashboard"
     );
   };
 
-  const handleGoogleLogin = async () => {
-    try {
-      setError("");
-      // Connect your AuthContext googleLogin here
-      // e.g., await googleLogin();
-      navigate("/dashboard");
-    } catch (err) {
-      setError("Google sign-in failed. Please try again.");
+  useEffect(() => {
+    if (!googleClientId || !googleBox.current) return undefined;
+
+    let cancelled = false;
+
+    const draw = () => {
+      if (cancelled || !window.google?.accounts?.id || !googleBox.current) return;
+
+      window.google.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: async (response) => {
+          setError("");
+          const result = await googleLogin(response.credential);
+
+          if (!result.success) {
+            setError(result.message);
+            return;
+          }
+
+          afterLogin(result.user);
+        },
+      });
+
+      window.google.accounts.id.renderButton(googleBox.current, {
+        theme: "outline",
+        size: "large",
+        width: googleBox.current.offsetWidth || 320,
+        text: "continue_with",
+      });
+    };
+
+    if (window.google?.accounts?.id) {
+      draw();
+    } else {
+      const script = document.createElement("script");
+      script.src = "https://accounts.google.com/gsi/client";
+      script.async = true;
+      script.defer = true;
+      script.onload = draw;
+      document.head.appendChild(script);
     }
-  };
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [googleClientId]);
 
   const inputClass =
     "w-full rounded-xl border border-stone-300 bg-stone-50 px-4 py-3 text-sm text-stone-900 placeholder:text-stone-400 outline-none";
@@ -204,19 +249,13 @@ function Login() {
               <span className="h-px flex-1 bg-stone-300" />
             </div>
 
-            <button
-              type="button"
-              onClick={handleGoogleLogin}
-              className="flex w-full items-center justify-center gap-3 rounded-xl border border-stone-300 bg-white px-4 py-3 text-sm font-semibold text-stone-700 transition hover:border-stone-400 hover:bg-stone-50 focus:outline-none focus-visible:ring-4 focus-visible:ring-stone-200"
-            >
-              <svg className="h-5 w-5" viewBox="0 0 24 24">
-                <path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.8 14.8 1 12 1 7.5 1 3.7 3.6 1.8 7.4l3.7 2.9C6.4 7.3 9 5 12 5z" />
-                <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.8z" />
-                <path fill="#FBBC05" d="M5.5 14.7c-.2-.7-.4-1.5-.4-2.7s.2-2 .4-2.7L1.8 6.4C.7 8.6 0 11.2 0 14s.7 5.4 1.8 7.6l3.7-2.9z" />
-                <path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.6-2.3-6.5-5.3L1.8 15.9C3.7 19.7 7.5 23 12 23z" />
-              </svg>
-              Continue with Google
-            </button>
+            {googleClientId ? (
+              <div ref={googleBox} className="flex w-full justify-center" />
+            ) : (
+              <p className="text-center text-xs text-stone-400">
+                Google sign-in is not set up. Use your e-mail and password.
+              </p>
+            )}
 
             <p className="mt-8 text-center text-sm text-stone-500">
               Don't have an account?{" "}

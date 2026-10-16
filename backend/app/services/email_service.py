@@ -16,13 +16,136 @@ the console (so the whole flow still works while developing).
     COMPANY_NAME=Your Company
 """
 
+import base64
+import json
 import smtplib
+import socket
 import ssl
+import time
+import urllib.error
+import urllib.request
 from email.message import EmailMessage
 from email.utils import formataddr, parseaddr
 from html import escape
 
 from app.config import settings
+
+
+# ---------------------------------------------------------
+# SMTP CONNECTION (with automatic fallbacks)
+#
+# Some Windows PCs pick an IPv6 address or have an antivirus that
+# cuts the STARTTLS connection (WinError 10053). So if the first
+# try fails we retry over IPv4, then with the other Gmail mode
+# (587 STARTTLS <-> 465 SSL).
+# ---------------------------------------------------------
+
+def _ipv4(host: str, port: int) -> str:
+    return socket.getaddrinfo(host, port, socket.AF_INET)[0][4][0]
+
+
+class _IPv4SMTP(smtplib.SMTP):
+    def _get_socket(self, host, port, timeout):
+        return socket.create_connection(
+            (_ipv4(host, port), port), timeout
+        )
+
+
+class _IPv4SMTP_SSL(smtplib.SMTP_SSL):
+    def _get_socket(self, host, port, timeout):
+        raw = socket.create_connection(
+            (_ipv4(host, port), port), timeout
+        )
+        return self.context.wrap_socket(raw, server_hostname=self._host)
+
+
+def _open_smtp(use_ssl: bool, port: int, ipv4: bool, context):
+    """Connect, (STARTTLS), log in. Returns a ready server."""
+
+    host = settings.smtp_host
+
+    if use_ssl:
+        cls = _IPv4SMTP_SSL if ipv4 else smtplib.SMTP_SSL
+        server = cls(host, port, context=context, timeout=20)
+    else:
+        cls = _IPv4SMTP if ipv4 else smtplib.SMTP
+        server = cls(host, port, timeout=20)
+        server.ehlo()
+
+        if settings.smtp_use_tls:
+            server.starttls(context=context)
+            server.ehlo()
+
+    if settings.smtp_user:
+        password = settings.smtp_password or ""
+
+        # Google shows App Passwords as "abcd efgh ijkl mnop";
+        # the spaces are not part of the password.
+        if "gmail.com" in (host or "").lower():
+            password = password.replace(" ", "")
+
+        server.login(settings.smtp_user, password)
+
+    return server
+
+
+def _connection_plans() -> list[tuple[bool, int, bool]]:
+    """[(use_ssl, port, ipv4), ...] in the order they are tried."""
+
+    use_ssl = bool(settings.smtp_use_ssl)
+    port = int(settings.smtp_port)
+
+    plans = [(use_ssl, port, False), (use_ssl, port, True)]
+
+    # Gmail only: also try the other standard mode
+    if "gmail.com" in (settings.smtp_host or "").lower():
+        if use_ssl:
+            plans.append((False, 587, True))
+        else:
+            plans.append((True, 465, True))
+
+    unique = []
+    for plan in plans:
+        if plan not in unique:
+            unique.append(plan)
+
+    # one last extra try over IPv4 - a cut connection is often a one-off
+    unique.append(unique[1])
+
+    return unique
+
+
+def _friendly_error(exc: Exception, tried: list[str] | None = None) -> str:
+    """Short, readable reason + what to do (shown in Client Settings)."""
+
+    text = str(exc)
+    low = text.lower()
+
+    if isinstance(exc, smtplib.SMTPAuthenticationError) or "535" in low:
+        hint = (
+            "Gmail rejected the login. Put the 16-letter App Password "
+            "(not the normal Gmail password) in SMTP_PASSWORD."
+        )
+    elif (
+        "10053" in low
+        or "10054" in low
+        or "unexpectedly closed" in low
+        or "connection aborted" in low
+        or isinstance(exc, smtplib.SMTPServerDisconnected)
+    ):
+        hint = (
+            "This PC cut the connection to the mail server (antivirus "
+            "'email / SSL scanning', firewall or VPN). Turn that off or "
+            "allow python.exe, then retry."
+        )
+    elif "timed out" in low or "10060" in low:
+        hint = "Could not reach the mail server (timeout). Check internet / firewall."
+    else:
+        hint = ""
+
+    tail = f" | tried: {'; '.join(tried)}" if tried else ""
+
+    return (f"{hint} [{text}]{tail}" if hint else f"{text}{tail}")
 
 
 class MailBody(str):
@@ -41,6 +164,98 @@ class MailBody(str):
         obj = super().__new__(cls, text)
         obj.html = html
         return obj
+
+
+# ---------------------------------------------------------
+# HTTPS e-mail API (Brevo) - no SMTP port needed
+# ---------------------------------------------------------
+
+BREVO_URL = "https://api.brevo.com/v3/smtp/email"
+
+
+def _send_via_brevo(
+    to_email: str,
+    subject: str,
+    body: str,
+    sender: str,
+    reply_to: str | None,
+    attachments,
+) -> tuple[bool, str]:
+
+    name, address = parseaddr(sender)
+
+    if not address or address == "no-reply@localhost":
+        return False, (
+            "failed: set SMTP_FROM (or SMTP_USER) to the sender email "
+            "you verified in Brevo"
+        )
+
+    payload: dict = {
+        "sender": {"name": name or settings.company_name, "email": address},
+        "to": [{"email": to_email}],
+        "subject": subject,
+        "textContent": str(body),
+    }
+
+    html_body = getattr(body, "html", None)
+    if html_body:
+        payload["htmlContent"] = html_body
+
+    if reply_to:
+        payload["replyTo"] = {"email": reply_to}
+
+    if attachments:
+        payload["attachment"] = [
+            {"name": n, "content": base64.b64encode(b).decode("ascii")}
+            for n, b, _m in attachments
+        ]
+
+    request = urllib.request.Request(
+        BREVO_URL,
+        data=json.dumps(payload).encode("utf-8"),
+        method="POST",
+        headers={
+            "api-key": settings.brevo_api_key or "",
+            "content-type": "application/json",
+            "accept": "application/json",
+        },
+    )
+
+    last = "unknown error"
+
+    for _attempt in range(2):
+        try:
+            with urllib.request.urlopen(
+                request, timeout=25, context=ssl.create_default_context()
+            ) as response:
+                if 200 <= response.status < 300:
+                    return True, "sent"
+                last = f"HTTP {response.status}"
+
+        except urllib.error.HTTPError as exc:
+            detail = ""
+            try:
+                detail = exc.read().decode("utf-8", "ignore")[:200]
+            except Exception:
+                pass
+
+            if exc.code in (401, 403):
+                return False, (
+                    "failed: Brevo rejected the API key or the sender is "
+                    f"not verified in Brevo. {detail}"
+                )
+
+            last = f"HTTP {exc.code} {detail}"
+
+            if exc.code < 500:
+                break  # bad request - retry cannot help
+
+        except Exception as exc:
+            last = f"{type(exc).__name__}: {exc}"
+
+        time.sleep(1)
+
+    return False, f"failed: Brevo API - {last}"[:400]
 
 
 def send_email(
@@ -62,6 +277,30 @@ def send_email(
 
     if not to_email:
         return False, "skipped: no recipient"
+
+    brevo_failure = None
+
+    if settings.brevo_api_key:
+
+        sender = (
+            settings.smtp_from
+            or settings.smtp_user
+            or "no-reply@localhost"
+        )
+        _n, sender_address = parseaddr(sender)
+
+        if from_name and sender_address:
+            sender = formataddr((from_name, sender_address))
+
+        ok, info = _send_via_brevo(
+            to_email, subject, body, sender, reply_to, attachments
+        )
+
+        if ok or not settings.smtp_host:
+            return ok, info
+
+        brevo_failure = info  # fall back to SMTP below
+        print(f"Brevo failed, trying SMTP: {info}")
 
     if not settings.smtp_host:
 
@@ -119,45 +358,67 @@ def send_email(
 
         context = ssl.create_default_context()
 
-        if settings.smtp_use_ssl:
+        tried: list[str] = []
+        last_error: Exception | None = None
 
-            server = smtplib.SMTP_SSL(
-                settings.smtp_host,
-                settings.smtp_port,
-                context=context,
-                timeout=20,
-            )
+        # Connect + login + SEND all happen inside the loop, so if the
+        # connection is cut half way (WinError 10053) the next route is
+        # tried with a fresh connection instead of giving up.
+        for use_ssl, port, ipv4 in _connection_plans():
 
-        else:
+            label = f"{'SSL' if use_ssl else 'TLS'}:{port}{' v4' if ipv4 else ''}"
+            server = None
 
-            server = smtplib.SMTP(
-                settings.smtp_host,
-                settings.smtp_port,
-                timeout=20,
-            )
+            try:
+                server = _open_smtp(use_ssl, port, ipv4, context)
+                server.send_message(message)
 
-            server.ehlo()
+                try:
+                    server.quit()
+                except Exception:
+                    pass  # mail is already accepted
 
-            if settings.smtp_use_tls:
-                server.starttls(context=context)
-                server.ehlo()
+                return True, "sent"
 
-        if settings.smtp_user:
-            server.login(
-                settings.smtp_user,
-                settings.smtp_password or "",
-            )
+            except smtplib.SMTPAuthenticationError:
+                # wrong user / App Password - another route will not help
+                raise
 
-        server.send_message(message)
-        server.quit()
+            except smtplib.SMTPRecipientsRefused:
+                # the address itself is bad - retrying cannot fix it
+                raise
 
-        return True, "sent"
+            except Exception as exc:
+                last_error = exc
+                tried.append(f"{label} -> {type(exc).__name__}")
+                print(f"SMTP try failed ({label}): {exc}")
+
+                if server is not None:
+                    try:
+                        server.close()
+                    except Exception:
+                        pass
+
+                time.sleep(1)
+
+        raise RuntimeError(
+            _friendly_error(last_error or RuntimeError("SMTP failed"), tried)
+        )
 
     except Exception as exc:
 
         print(f"EMAIL FAILED: {exc}")
 
-        return False, f"failed: {exc}"[:240]
+        message_text = (
+            str(exc)
+            if isinstance(exc, RuntimeError)
+            else _friendly_error(exc)
+        )
+
+        if brevo_failure:
+            message_text = f"{brevo_failure} | SMTP: {message_text}"
+
+        return False, f"failed: {message_text}"[:400]
 
 
 # =========================================================
@@ -367,6 +628,7 @@ def build_invite_email(
     access_code: str | None = None,
     interviewer_name: str | None = None,
     candidate_email: str | None = None,
+    candidate_name: str | None = None,
 ) -> tuple[str, str]:
     """
     Interview invitation sent to ONE candidate.
@@ -392,8 +654,10 @@ def build_invite_email(
 
     # ---------- plain text (fallback) ----------
 
+    greeting = f"Hello {candidate_name}," if candidate_name else "Hello,"
+
     text = (
-        "Hello,\n\n"
+        f"{greeting}\n\n"
         f"{org} has invited you to an AI interview for the "
         f"position of \"{job_title}\".\n\n"
         + (
@@ -403,13 +667,12 @@ def build_invite_email(
         )
         + f"Start your interview here:\n{link}\n\n"
         f"1. Open the link above.\n"
-        f"2. Log in, or register with this same email address "
-        f"{email_hint}- the interview opens only for the invited "
-        "address.\n"
+        "2. Your Interview ID is entered for you - there is no "
+        "login or password.\n"
         "3. Complete the quick device check and start.\n\n"
         + (
-            "If you open the platform yourself, enter your "
-            "Interview ID on your dashboard.\n\n"
+            "This link and ID work only for you "
+            f"{email_hint}- please do not forward this email.\n\n"
             if access_code
             else ""
         )
@@ -440,7 +703,7 @@ def build_invite_email(
 
     inner = (
         _h1("You are invited to an interview")
-        + _p("Hello,")
+        + _p(_e(greeting))
         + _p(
             f"<strong>{_e(org)}</strong> would like you to take an "
             f"AI interview for the position of "
@@ -457,11 +720,9 @@ def build_invite_email(
         + _steps(
             [
                 "Click <strong>Start your interview</strong> below.",
-                "Log in. New here? Register with <strong>this same "
-                "email address</strong> - the interview only opens "
-                "for the address that was invited.",
-                "Your Interview ID is checked automatically. Finish "
-                "the quick device check and start.",
+                "No login or password needed - your Interview ID is "
+                "entered for you automatically.",
+                "Finish the quick device check and start.",
             ]
         )
         + (
@@ -480,15 +741,6 @@ def build_invite_email(
             )
         )
         + _button("Start your interview", link)
-        + (
-            _p(
-                "Opened the platform yourself? Enter the Interview "
-                "ID above on your dashboard to begin.",
-                bottom=18,
-            )
-            if access_code
-            else ""
-        )
         + _p(
             "Your Interview ID is personal to you - please do not "
             "share it.",

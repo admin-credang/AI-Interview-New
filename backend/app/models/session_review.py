@@ -87,6 +87,14 @@ class SessionReview(Base):
         nullable=True,
     )
 
+    # Per-question eye / gaze measurements (interviewer-only report).
+    # List of {question, answer_ms, on_screen_ms, side_ms, down_ms,
+    # glances, sweeps}. Scores are computed on read, never stored.
+    gaze_metrics: Mapped[list | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

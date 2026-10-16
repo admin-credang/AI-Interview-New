@@ -92,6 +92,7 @@ SKIP_ANSWER_PHRASES = {
     "im not sure",
 
     "skip",
+    "pass",
 
     "i can't answer",
     "i cant answer",
@@ -112,6 +113,30 @@ SKIP_ANSWER_PHRASES = {
     "im unsure",
     "i am unsure",
 }
+
+
+SKIP_CONTAINS_PHRASES = (
+    "don't know",
+    "dont know",
+    "do not know",
+    "no idea",
+    "not sure",
+    "can't answer",
+    "cant answer",
+    "cannot answer",
+    "not aware",
+    "no knowledge",
+    "don't remember",
+    "dont remember",
+    "don't have any idea",
+    "dont have any idea",
+    "don't have knowledge",
+    "dont have knowledge",
+    "i skip",
+    "skip this",
+    "skip it",
+    "next question",
+)
 
 
 # =========================================================
@@ -167,7 +192,22 @@ def is_skip_answer(
     if not normalized:
         return False
 
-    return normalized in SKIP_ANSWER_PHRASES
+    if normalized in SKIP_ANSWER_PHRASES:
+        return True
+
+    # Short answers that are only "I don't know"-style
+    # ("sorry I don't know sir", "no idea about this", "pass").
+    # Long real answers that merely contain these words are NOT
+    # treated as a skip.
+    normalized = normalized.replace("\u2019", "'")
+
+    if len(normalized.split()) <= 8:
+        return any(
+            phrase in normalized
+            for phrase in SKIP_CONTAINS_PHRASES
+        )
+
+    return False
 
 
 # =========================================================

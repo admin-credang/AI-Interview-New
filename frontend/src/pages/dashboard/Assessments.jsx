@@ -117,15 +117,6 @@ export default function Assessments() {
           {list.map((i) => (
             <div key={i.id} className="flex flex-col">
               <InterviewCard interview={i} />
-              {isInterviewer && (
-                <button
-                  onClick={() => navigate(`/interviews/${i.id}/configuration`)}
-                  className="mt-3 flex items-center justify-center gap-2 py-3 rounded-2xl border border-white/10 hover:bg-white/10 text-sm font-bold transition"
-                >
-                  <IconBriefcase />
-                  Configure interview
-                </button>
-              )}
             </div>
           ))}
         </div>

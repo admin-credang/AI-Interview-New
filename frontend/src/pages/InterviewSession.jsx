@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "../api";
+import {
+  createGazeTracker,
+  computeHeadPose,
+  GAZE_CONFIG,
+} from "../services/gazeTracker";
 
 
 /*
@@ -179,6 +184,13 @@ function normalizeQuestion(
             1
         ) || 1,
 
+      total_questions:
+        Number(
+          fallback.total_questions ??
+            fallback.totalQuestions ??
+            0
+        ) || null,
+
       question_type:
         fallback.question_type ||
         fallback.questionType ||
@@ -236,6 +248,15 @@ function normalizeQuestion(
           fallback.questionNumber ??
           1
       ) || 1,
+
+    total_questions:
+      Number(
+        rawQuestion.total_questions ??
+          rawQuestion.totalQuestions ??
+          fallback.total_questions ??
+          fallback.totalQuestions ??
+          0
+      ) || null,
 
     question_type:
       rawQuestion.question_type ||
@@ -391,7 +412,7 @@ const PHONE_GRACE_MS = 1500; // tolerate missed frames before resetting
 // Looking down (eye-ball movement, via MediaPipe blendshapes)
 const LOOK_DOWN_SCORE = 0.5; // 0..1, average of both eyes
 const LOOK_DOWN_EPISODE_MS = 1000; // one "glance down" = at least this long
-const LOOK_DOWN_TERMINATE_MS = 4000; // one long continuous look down
+const LOOK_DOWN_TERMINATE_MS = 2500; // one long continuous look down
 const LOOK_DOWN_REPEAT_COUNT = 4; // this many glances ...
 const LOOK_DOWN_REPEAT_WINDOW_MS = 90000; // ... within this window
 
@@ -408,6 +429,152 @@ const REASON_TO_EVENT = {
   candidate_left_interview_page: "tab_left",
 };
 
+/*
+ * ============================================================
+ * AI INTERVIEWER VOICES
+ * ============================================================
+ * Three voices the candidate can choose from. The browser's
+ * installed voices differ per device, so each profile lists
+ * the best-sounding voices to look for (natural / online
+ * voices first) and falls back to any English voice of the
+ * right gender. Rate / pitch are tuned to sound clear and
+ * confident.
+ */
+const VOICE_PROFILES = {
+  aria: {
+    label: "Aria - Young female",
+    gender: "female",
+    rate: 1.05,
+    pitch: 1.2,
+    names: [
+      "Aria",
+      "Jenny",
+      "Neerja",
+      "Zira",
+      "Google UK English Female",
+      "Samantha",
+      "Heera",
+    ],
+  },
+  ryan: {
+    label: "Ryan - Male",
+    gender: "male",
+    rate: 1.0,
+    pitch: 0.95,
+    names: [
+      "Ryan",
+      "Guy",
+      "Prabhat",
+      "Google UK English Male",
+      "David",
+      "Mark",
+      "Daniel",
+      "Alex",
+    ],
+  },
+  maya: {
+    label: "Maya - Confident",
+    gender: "female",
+    rate: 1.0,
+    pitch: 0.88,
+    names: [
+      "Sonia",
+      "Libby",
+      "Google US English",
+      "Zira",
+      "Neerja",
+      "Samantha",
+      "Karen",
+    ],
+  },
+};
+
+const DEFAULT_VOICE_ID = "aria";
+
+const FEMALE_VOICE_RE =
+  /female|woman|aria|jenny|zira|samantha|susan|hazel|heera|neerja|sonia|libby|karen|tessa|victoria|moira|fiona/i;
+
+const MALE_VOICE_RE =
+  /(^|[^a-z])male|man\b|david|mark|guy|ryan|daniel|alex|george|prabhat|james|ravi|fred|thomas/i;
+
+function pickVoice(voiceId) {
+  const synth = window.speechSynthesis;
+
+  if (!synth) {
+    return null;
+  }
+
+  const profile =
+    VOICE_PROFILES[voiceId] ||
+    VOICE_PROFILES[DEFAULT_VOICE_ID];
+
+  const english = (
+    synth.getVoices() || []
+  ).filter((v) =>
+    /^en/i.test(v.lang || "")
+  );
+
+  if (english.length === 0) {
+    return null;
+  }
+
+  // natural / online voices sound far better than the old ones
+  const quality = (v) =>
+    /natural|online/i.test(v.name)
+      ? 0
+      : 1;
+
+  const ranked = [...english].sort(
+    (a, b) => quality(a) - quality(b)
+  );
+
+  for (const name of profile.names) {
+    const hit = ranked.find((v) =>
+      v.name
+        .toLowerCase()
+        .includes(name.toLowerCase())
+    );
+
+    if (hit) {
+      return hit;
+    }
+  }
+
+  const wantRe =
+    profile.gender === "male"
+      ? MALE_VOICE_RE
+      : FEMALE_VOICE_RE;
+
+  return (
+    ranked.find((v) =>
+      wantRe.test(v.name)
+    ) ||
+    ranked[0]
+  );
+}
+
+function buildUtterance(text, voiceId) {
+  const profile =
+    VOICE_PROFILES[voiceId] ||
+    VOICE_PROFILES[DEFAULT_VOICE_ID];
+
+  const utterance =
+    new SpeechSynthesisUtterance(text);
+
+  const voice = pickVoice(voiceId);
+
+  if (voice) {
+    utterance.voice = voice;
+    utterance.lang = voice.lang;
+  }
+
+  utterance.rate = profile.rate;
+  utterance.pitch = profile.pitch;
+  utterance.volume = 1;
+
+  return utterance;
+}
+
 const VIOLATION_MESSAGES = {
   face_not_found: "Face not visible - please stay in front of the camera.",
   multiple_faces: "More than one person detected in the camera.",
@@ -418,7 +585,11 @@ const VIOLATION_MESSAGES = {
   tab_left: "Please stay on the interview page.",
 };
 
-const VIOLATION_REPEAT_MS = 30000; // same flag saved at most every 30 s
+const VIOLATION_REPEAT_MS = 30000; // same flag saved to the report at most every 30 s
+const VIOLATION_NOTICE_REPEAT_MS = 8000; // warning on screen again after this long
+const MONITOR_INTERVAL_MS = 100; // face/eye check ~10x per second (was every frame)
+const LOOK_DOWN_CALIBRATION_MS = 3000; // learn the normal "reading the screen" eye angle
+const LOOK_DOWN_MARGIN = 0.2; // must be this much below the learned normal
 
 const GREETING_SPEECH =
   "Hello! Welcome to the AI Interview. I will guide you through the interview and ask you a series of questions based on your interview configuration. Are you ready to start your interview?";
@@ -463,6 +634,14 @@ export default function InterviewSession() {
   const [ready, setReady] =
     useState(false);
 
+  // Company introduction: spoken once (voice only, never shown as
+  // text) after "Yes, I'm ready" and before the first question.
+  const [introDone, setIntroDone] =
+    useState(false);
+
+  const introPromiseRef =
+    useRef(null);
+
   // chat transcript shown on the right side ("Previous Questions")
   const [chatLog, setChatLog] =
     useState([]);
@@ -497,6 +676,12 @@ export default function InterviewSession() {
     questionNumber,
     setQuestionNumber,
   ] = useState(1);
+
+  // 5 without a resume, 7 with one (sent by the backend)
+  const [
+    totalQuestions,
+    setTotalQuestions,
+  ] = useState(5);
 
   const [answer, setAnswer] =
     useState("");
@@ -677,6 +862,72 @@ export default function InterviewSession() {
   const violationThrottleRef =
     useRef({});
 
+  const noticeThrottleRef =
+    useRef({});
+
+  const [voiceId, setVoiceId] =
+    useState(() => {
+      try {
+        const saved =
+          localStorage.getItem(
+            "interview_voice"
+          );
+
+        return VOICE_PROFILES[saved]
+          ? saved
+          : DEFAULT_VOICE_ID;
+      } catch {
+        return DEFAULT_VOICE_ID;
+      }
+    });
+
+  const voiceIdRef =
+    useRef(voiceId);
+
+  voiceIdRef.current = voiceId;
+
+  const changeVoice =
+    (nextId) => {
+      if (!VOICE_PROFILES[nextId]) {
+        return;
+      }
+
+      setVoiceId(nextId);
+
+      voiceIdRef.current = nextId;
+
+      try {
+        localStorage.setItem(
+          "interview_voice",
+          nextId
+        );
+      } catch {}
+
+      // short preview so the candidate can hear the voice
+      try {
+        if (window.speechSynthesis) {
+          window.speechSynthesis.cancel();
+
+          window.speechSynthesis.speak(
+            buildUtterance(
+              "Hello, I will be your interviewer today.",
+              nextId
+            )
+          );
+        }
+      } catch {}
+    };
+
+  const lastMonitorTickRef =
+    useRef(0);
+
+  const downBaselineRef =
+    useRef({
+      samples: [],
+      startedAt: 0,
+      value: null,
+    });
+
   const violationTimerRef =
     useRef(null);
 
@@ -684,7 +935,7 @@ export default function InterviewSession() {
     useRef(null);
 
   flagViolationRef.current =
-    (reason) => {
+    (reason, options = {}) => {
       if (
         !sessionId ||
         completedRef.current ||
@@ -703,31 +954,46 @@ export default function InterviewSession() {
 
       const now = Date.now();
 
+      // ---- report for the interviewer (throttled) ----
+      // noticeOnly = warning for the candidate, already logged elsewhere
       if (
+        !options.noticeOnly &&
         now -
           (violationThrottleRef
-            .current[type] || 0) <
+            .current[type] || 0) >=
         VIOLATION_REPEAT_MS
+      ) {
+        violationThrottleRef.current[
+          type
+        ] = now;
+
+        api
+          .post(
+            `/hiring/sessions/${sessionId}/monitoring-event`,
+            {
+              type,
+              detail: String(reason).slice(
+                0,
+                200
+              ),
+            }
+          )
+          .catch(() => {});
+      }
+
+      // ---- warning on screen (own, shorter throttle) ----
+      if (
+        now -
+          (noticeThrottleRef
+            .current[type] || 0) <
+        VIOLATION_NOTICE_REPEAT_MS
       ) {
         return;
       }
 
-      violationThrottleRef.current[
+      noticeThrottleRef.current[
         type
       ] = now;
-
-      api
-        .post(
-          `/hiring/sessions/${sessionId}/monitoring-event`,
-          {
-            type,
-            detail: String(reason).slice(
-              0,
-              200
-            ),
-          }
-        )
-        .catch(() => {});
 
       setViolationNotice(
         VIOLATION_MESSAGES[type] ||
@@ -743,7 +1009,7 @@ export default function InterviewSession() {
       violationTimerRef.current =
         setTimeout(() => {
           setViolationNotice("");
-        }, 6000);
+        }, 8000);
     };
 
   /*
@@ -778,6 +1044,110 @@ export default function InterviewSession() {
 
   const currentQuestionRef =
     useRef(null);
+
+  /*
+   * ============================================================
+   * GAZE REPORT (interviewer only)
+   * ============================================================
+   * Measures eye movement per question while the candidate is
+   * answering. Numbers go to the server; scores are calculated
+   * there and are never shown to the candidate.
+   */
+  const gazeTrackerRef =
+    useRef(null);
+
+  if (gazeTrackerRef.current === null) {
+    gazeTrackerRef.current =
+      createGazeTracker();
+  }
+
+  const gazeAnsweringRef =
+    useRef(false);
+
+  // true while the phone detector can see a phone (read by the gaze report)
+  const phoneVisibleRef =
+    useRef(false);
+
+  // live numbers box, only shown with  ?gazedebug=1  in the page address
+  const gazeDebugRef =
+    useRef(null);
+
+  const gazeDebugOn =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("gazedebug") === "1";
+
+  // answering = microphone on and the AI is not speaking
+  gazeAnsweringRef.current =
+    Boolean(isListening) &&
+    !isSpeaking;
+
+  const flushGazeRef =
+    useRef(null);
+
+  flushGazeRef.current =
+    (question) => {
+      const tracker =
+        gazeTrackerRef.current;
+
+      if (!tracker || !sessionId) {
+        return;
+      }
+
+      const items = question
+        ? [tracker.snapshot(question)]
+        : tracker.snapshotAll();
+
+      items
+        .filter(Boolean)
+        .forEach((item) => {
+          api
+            .post(
+              `/hiring/sessions/${sessionId}/gaze-summary`,
+              item
+            )
+            .catch(() => {});
+        });
+    };
+
+  // new question -> save the previous one, start the next
+  useEffect(() => {
+    const tracker =
+      gazeTrackerRef.current;
+
+    const n = Number(questionNumber);
+
+    if (!tracker || !currentQuestion || !n) {
+      return;
+    }
+
+    const previous =
+      tracker.currentQuestion;
+
+    if (previous && previous !== n) {
+      flushGazeRef.current?.(previous);
+    }
+
+    tracker.setQuestion(n);
+  }, [currentQuestion?.question, questionNumber]);
+
+  // safety net: save running totals every 20s and on leaving
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const tracker =
+        gazeTrackerRef.current;
+
+      if (tracker?.currentQuestion) {
+        flushGazeRef.current?.(
+          tracker.currentQuestion
+        );
+      }
+    }, 20000);
+
+    return () => {
+      clearInterval(timer);
+      flushGazeRef.current?.();
+    };
+  }, []);
 
   const recognitionRef =
     useRef(null);
@@ -1183,13 +1553,10 @@ recognitionRef.current.stop();
         window.speechSynthesis.cancel();
 
         const utterance =
-          new SpeechSynthesisUtterance(
-            text
+          buildUtterance(
+            text,
+            voiceIdRef.current
           );
-
-        utterance.rate = 0.95;
-        utterance.pitch = 1;
-        utterance.volume = 1;
 
         utterance.onstart = () => {
           if (
@@ -1273,6 +1640,12 @@ recognitionRef.current.stop();
           ) || 1
         );
 
+        if (Number(question.total_questions) > 0) {
+          setTotalQuestions(
+            Number(question.total_questions)
+          );
+        }
+
         setAnswer("");
 
         setLastAnswer("");
@@ -1326,6 +1699,8 @@ recognitionRef.current.stop();
       processingRef.current =
         false;
 
+      flushGazeRef.current?.();
+
       stopMedia();
 
       setProcessing(false);
@@ -1336,7 +1711,10 @@ recognitionRef.current.stop();
       try {
         window.speechSynthesis?.cancel();
         window.speechSynthesis?.speak(
-          new SpeechSynthesisUtterance(CLOSING_SPEECH)
+          buildUtterance(
+            CLOSING_SPEECH,
+            voiceIdRef.current
+          )
         );
       } catch {}
 
@@ -1459,6 +1837,13 @@ recognitionRef.current.stop();
             data?.question_number ??
             data?.questionNumber ??
             1,
+
+          total_questions:
+            parameters?.total_questions ??
+            parameters?.totalQuestions ??
+            data?.total_questions ??
+            data?.totalQuestions ??
+            null,
 
           category:
             parameters?.category ||
@@ -1589,50 +1974,10 @@ recognitionRef.current.stop();
           );
 
         /*
-         * FOLLOW-UP CONFIRMATION
+         * The candidate is never asked "do you want a follow-up?".
+         * The interviewer's settings decide; a follow-up simply
+         * arrives as the next question (handled below).
          */
-
-        if (
-          followUpRequired &&
-          (
-            nextAction ===
-              "ask_follow_up_confirmation" ||
-            nextAction ===
-              "follow_up_confirmation"
-          )
-        ) {
-          const generatedFollowUp =
-            extractFollowUpQuestion(
-              data,
-              parameters
-            );
-
-          if (!generatedFollowUp) {
-            setError(
-              "Follow-up question was not received from server."
-            );
-
-            setProcessing(false);
-
-            return;
-          }
-
-          setFollowUpQuestion(
-            generatedFollowUp
-          );
-
-          setFollowUpConfirmation(
-            true
-          );
-
-          setProcessing(false);
-
-          setPhase(
-            "followup-confirmation"
-          );
-
-          return;
-        }
 
         /*
          * DIRECT FOLLOW-UP
@@ -1642,7 +1987,11 @@ recognitionRef.current.stop();
           nextAction ===
             "follow_up" ||
           nextAction ===
-            "followup"
+            "followup" ||
+          nextAction ===
+            "ask_follow_up_confirmation" ||
+          nextAction ===
+            "follow_up_confirmation"
         ) {
           const backendFollowUp =
             extractFollowUpQuestion(
@@ -1680,6 +2029,12 @@ recognitionRef.current.stop();
                 parameters?.questionNumber ??
                 current?.question_number ??
                 questionNumber,
+
+              total_questions:
+                parameters?.total_questions ??
+                parameters?.totalQuestions ??
+                current?.total_questions ??
+                totalQuestions,
 
               question_type:
                 parameters?.question_type ||
@@ -1887,8 +2242,9 @@ recognitionRef.current.stop();
     };
 
     if (window.speechSynthesis) {
-      const utterance = new SpeechSynthesisUtterance(
-        GREETING_SPEECH
+      const utterance = buildUtterance(
+        GREETING_SPEECH,
+        voiceIdRef.current
       );
       utterance.onend = listen;
       utterance.onerror = listen;
@@ -1906,6 +2262,122 @@ recognitionRef.current.stop();
       window.speechSynthesis?.cancel();
     };
   }, [phase]);
+
+  /*
+   * ============================================================
+   * COMPANY INTRODUCTION (VOICE ONLY)
+   * ============================================================
+   * The interviewer-approved text is fetched while the greeting is
+   * playing, so there is no wait. It is only SPOKEN - it is never
+   * put on the screen. If nothing is approved, or the request
+   * fails, the interview starts exactly as before.
+   */
+  useEffect(() => {
+    introPromiseRef.current = api
+      .get(
+        `/interviews/${interviewId}/company-intro/voice`
+      )
+      .then((res) => {
+        const d = res?.data || {};
+
+        if (!d.available || !d.text) {
+          return "";
+        }
+
+        const role = String(d.role || "").trim();
+
+        // the AI intro usually already describes the role; only add
+        // the one-line mention when it does not
+        let spoken =
+          role &&
+          !d.text.toLowerCase().includes(role.toLowerCase())
+            ? `${d.text} Today's interview is for the ${role} role.`
+            : d.text;
+
+        // hand-over to the first question (not repeated if present)
+        if (!/brief introduction/i.test(spoken)) {
+          spoken +=
+            " Let's continue to the interview. Let's start with your brief introduction.";
+        }
+
+        return spoken;
+      })
+      .catch(() => "");
+  }, [interviewId]);
+
+  useEffect(() => {
+    if (!ready || introDone) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    const playedKey = `intro_played_${sessionId}`;
+
+    const finish = () => {
+      if (cancelled) {
+        return;
+      }
+
+      try {
+        sessionStorage.setItem(playedKey, "1");
+      } catch {}
+
+      setIntroDone(true);
+    };
+
+    // resumed interview: the candidate already heard it
+    let alreadyPlayed = false;
+
+    try {
+      alreadyPlayed =
+        sessionStorage.getItem(playedKey) === "1";
+    } catch {}
+
+    if (alreadyPlayed || !window.speechSynthesis) {
+      setIntroDone(true);
+      return undefined;
+    }
+
+    (async () => {
+      const text =
+        (await introPromiseRef.current) || "";
+
+      if (cancelled) {
+        return;
+      }
+
+      if (!text) {
+        setIntroDone(true);
+        return;
+      }
+
+      setPhase("intro");
+
+      // let the greeting cleanup (cancel) finish first
+      setTimeout(() => {
+        if (cancelled) {
+          return;
+        }
+
+        const utterance = buildUtterance(
+          text,
+          voiceIdRef.current
+        );
+
+        utterance.onend = finish;
+        utterance.onerror = finish;
+
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(utterance);
+      }, 150);
+    })();
+
+    return () => {
+      cancelled = true;
+      window.speechSynthesis?.cancel();
+    };
+  }, [ready, introDone, sessionId]);
 
   /*
    * ============================================================
@@ -1987,8 +2459,9 @@ recognitionRef.current.stop();
   }, [chatLog]);
 
   useEffect(() => {
-    // wait until the candidate says / clicks "Yes"
-    if (!ready) {
+    // wait until the candidate says / clicks "Yes" AND the
+    // company introduction (if any) has finished
+    if (!ready || !introDone) {
       return;
     }
 
@@ -2059,6 +2532,13 @@ recognitionRef.current.stop();
                   data?.question_number ??
                   data?.questionNumber ??
                   1,
+
+                total_questions:
+                  parameters?.total_questions ??
+                  parameters?.totalQuestions ??
+                  data?.total_questions ??
+                  data?.totalQuestions ??
+                  null,
 
                 category:
                   parameters?.category ||
@@ -2134,6 +2614,7 @@ recognitionRef.current.stop();
     };
   }, [
     ready,
+    introDone,
     interviewId,
     sessionId,
     handleDialogflowResponse,
@@ -2870,11 +3351,10 @@ recognitionRef.current?.stop();
       window.speechSynthesis.cancel();
 
       const utterance =
-        new SpeechSynthesisUtterance(
-          text
+        buildUtterance(
+          text,
+          voiceIdRef.current
         );
-
-      utterance.rate = 0.95;
 
       utterance.onstart = () => {
         if (mountedRef.current) {
@@ -3929,6 +4409,24 @@ recognitionRef.current?.stop();
           return;
         }
 
+        // run the heavy detector ~10x/second, not on every frame
+        const tickNow = performance.now();
+
+        if (
+          tickNow - lastMonitorTickRef.current <
+          MONITOR_INTERVAL_MS
+        ) {
+          monitoringFrameRef.current =
+            requestAnimationFrame(
+              monitor
+            );
+
+          return;
+        }
+
+        lastMonitorTickRef.current =
+          tickNow;
+
         const video =
           videoRef.current;
 
@@ -3976,6 +4474,24 @@ recognitionRef.current?.stop();
           const faces =
             result?.faceLandmarks ||
             [];
+
+          // filled below, then handed to the gaze report
+          const pose =
+            faces.length === 1
+              ? computeHeadPose(faces[0])
+              : null;
+
+          const gazeFrame = {
+            faces: faces.length,
+            irisX: null,
+            away: false,
+            down: false,
+            closed: false,
+            yaw: pose ? pose.yaw : null,
+            pitch: pose ? pose.pitch : null,
+            eyeDown: null,
+            phone: phoneVisibleRef.current,
+          };
 
           /*
            * ==================================================
@@ -4120,6 +4636,9 @@ recognitionRef.current?.stop();
             const eyesClosed =
               averageEAR < 0.16;
 
+            gazeFrame.closed =
+              eyesClosed;
+
             if (eyesClosed) {
               setEyeStatus(
                 "Eyes closed"
@@ -4190,6 +4709,9 @@ recognitionRef.current?.stop();
                 rightGaze) /
               2;
 
+            gazeFrame.irisX =
+              averageGaze;
+
             /*
              * Looking away threshold
              */
@@ -4197,6 +4719,9 @@ recognitionRef.current?.stop();
             const lookingAway =
               averageGaze < 0.20 ||
               averageGaze > 0.80;
+
+            gazeFrame.away =
+              lookingAway;
 
             if (lookingAway) {
               setEyeStatus(
@@ -4278,12 +4803,66 @@ recognitionRef.current?.stop();
                 )) /
               2;
 
+            gazeFrame.eyeDown =
+              shapes.length > 0
+                ? downScore
+                : null;
+
+            // Learn this candidate's normal eye angle while they read
+            // the screen (laptop cameras sit above the screen, so the
+            // eyes are always a little "down").
+            const baseline =
+              downBaselineRef.current;
+
+            if (
+              baseline.value === null &&
+              shapes.length > 0 &&
+              blinkScore < 0.6
+            ) {
+              const t = Date.now();
+
+              if (!baseline.startedAt) {
+                baseline.startedAt = t;
+              }
+
+              baseline.samples.push(
+                downScore
+              );
+
+              if (
+                t - baseline.startedAt >=
+                  LOOK_DOWN_CALIBRATION_MS &&
+                baseline.samples.length >= 10
+              ) {
+                baseline.value =
+                  baseline.samples.reduce(
+                    (a, b) => a + b,
+                    0
+                  ) /
+                  baseline.samples.length;
+              }
+            }
+
+            const downThreshold =
+              Math.min(
+                0.85,
+                Math.max(
+                  LOOK_DOWN_SCORE,
+                  (baseline.value ?? 0) +
+                    LOOK_DOWN_MARGIN
+                )
+              );
+
             // blinking also raises the "down" score, so ignore it
             const lookingDown =
               shapes.length > 0 &&
+              baseline.value !== null &&
               downScore >=
-                LOOK_DOWN_SCORE &&
+                downThreshold &&
               blinkScore < 0.6;
+
+            gazeFrame.down =
+              lookingDown;
 
             if (lookingDown) {
               setEyeStatus(
@@ -4314,6 +4893,13 @@ recognitionRef.current?.stop();
 
                 logMonitoringEventRef.current?.(
                   "looking_down"
+                );
+
+                // tell the candidate right away (warning only,
+                // the event above is already saved for the interviewer)
+                flagViolationRef.current?.(
+                  "looking_down",
+                  { noticeOnly: true }
                 );
 
                 const recent =
@@ -4355,6 +4941,44 @@ recognitionRef.current?.stop();
 
             lookDownCountedRef.current =
               false;
+          }
+
+          // per-question eye numbers for the interviewer report
+          if (eyeGazeEnabled) {
+            const gz =
+              gazeTrackerRef.current?.sample(
+                performance.now(),
+                gazeAnsweringRef.current,
+                gazeFrame
+              );
+
+            // tell the candidate when they keep looking away while answering
+            if (gz && gz.off && gz.offFor >= GAZE_CONFIG.warnAfterMs) {
+              logMonitoringEventRef.current?.(
+                "looking_away"
+              );
+
+              flagViolationRef.current?.(
+                "looking_away",
+                { noticeOnly: true }
+              );
+            }
+
+            if (gazeDebugOn && gazeDebugRef.current) {
+              const d = gazeTrackerRef.current.debug;
+
+              gazeDebugRef.current.textContent =
+                (d.calibrated
+                  ? "READY"
+                  : `LEARNING YOUR NORMAL ${Math.round(d.calibrationProgress * 100)}% (look at the screen)`) +
+                `\nanswering: ${d.answering}` +
+                `\nOFF SCREEN: ${d.off ? "YES - " + d.reason : "no"}` +
+                `\nhead turn : ${d.yawDev.toFixed(3)}  (limit ${GAZE_CONFIG.yawDev})` +
+                `\nhead down : ${d.pitchDev.toFixed(3)}  (limit ${GAZE_CONFIG.pitchDownDev})` +
+                `\neyes down : ${d.eyeDownDev.toFixed(3)}  (limit ${GAZE_CONFIG.eyeDownDev})` +
+                `\neyes side : ${d.irisDev.toFixed(3)}  (limit ${GAZE_CONFIG.irisDev})` +
+                `\nphone seen: ${d.phone}`;
+            }
           }
 
           /*
@@ -4507,6 +5131,9 @@ recognitionRef.current?.stop();
                 PHONE_SCORE_THRESHOLD
           )
         );
+
+        phoneVisibleRef.current =
+          found;
 
         const nowMs = Date.now();
 
@@ -4754,6 +5381,53 @@ recognitionRef.current?.stop();
     );
   }
 
+  if (phase === "intro") {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6 relative overflow-hidden font-sans">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-indigo-500/20 rounded-full blur-[120px] pointer-events-none" />
+
+        <div className="max-w-lg w-full bg-slate-900/80 border border-slate-800 backdrop-blur-2xl p-8 rounded-3xl text-center space-y-6 shadow-2xl relative z-10">
+          <div className="w-16 h-16 bg-indigo-500/10 border border-indigo-500/30 rounded-2xl flex items-center justify-center text-3xl mx-auto animate-pulse">
+            🤖
+          </div>
+
+          <h1 className="text-2xl font-bold text-white">
+            A quick introduction
+          </h1>
+
+          <p className="text-slate-300 text-sm leading-relaxed">
+            Please listen. Your interviewer is introducing the company.
+            Your first question comes right after.
+          </p>
+
+          <div className="flex items-end justify-center gap-1.5 h-8" aria-hidden="true">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <span
+                key={i}
+                className="w-1.5 rounded-full bg-indigo-400 animate-pulse"
+                style={{
+                  height: `${12 + ((i * 7) % 5) * 5}px`,
+                  animationDelay: `${i * 120}ms`,
+                }}
+              />
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              window.speechSynthesis?.cancel();
+              setIntroDone(true);
+            }}
+            className="text-xs text-slate-400 underline underline-offset-4 hover:text-slate-200 transition"
+          >
+            Skip introduction
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (phase === "loading") {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center relative overflow-hidden font-sans">
@@ -4947,7 +5621,7 @@ recognitionRef.current?.stop();
     ? "Listening..."
     : "Your turn";
 
-  const TOTAL_QUESTIONS = 5;
+  const TOTAL_QUESTIONS = Number(totalQuestions) > 0 ? Number(totalQuestions) : 5;
 
   const progress = Math.round(
     (Math.min(Number(questionNumber) || 1, TOTAL_QUESTIONS) /
@@ -5064,9 +5738,16 @@ recognitionRef.current?.stop();
 
             {/* warning (interview keeps running) */}
             {violationNotice && (
-              <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 max-w-[90%] px-3 py-2 rounded-md bg-amber-500/95 text-slate-900 text-xs font-semibold shadow-lg text-center">
+              <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 max-w-[92%] px-6 py-4 rounded-xl bg-amber-400 border-2 border-amber-600 text-slate-900 text-2xl md:text-3xl font-extrabold shadow-2xl text-center animate-pulse">
                 ⚠ {violationNotice}
               </div>
+            )}
+
+            {gazeDebugOn && (
+              <pre
+                ref={gazeDebugRef}
+                className="absolute top-2 left-2 z-30 max-w-[95%] p-2 rounded bg-black/75 text-[11px] leading-tight text-lime-300 whitespace-pre-wrap"
+              />
             )}
 
             {/* RECORDING BUTTONS ON TOP OF THE VIDEO */}
@@ -5112,6 +5793,22 @@ recognitionRef.current?.stop();
               <div className="text-[11px] text-slate-400">
                 {assistantStatus}
               </div>
+              <select
+                value={voiceId}
+                onChange={(e) =>
+                  changeVoice(e.target.value)
+                }
+                aria-label="Interviewer voice"
+                className="mt-1 w-full rounded-md bg-[#0f1626] border border-[#3a4660] text-[11px] text-slate-200 px-2 py-1 outline-none focus:border-[#ea5b24]"
+              >
+                {Object.entries(VOICE_PROFILES).map(
+                  ([id, profile]) => (
+                    <option key={id} value={id}>
+                      {profile.label}
+                    </option>
+                  )
+                )}
+              </select>
             </div>
 
             <div className="rounded-lg border border-[#2a3550] bg-[#1c2740] p-4">

@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     smtp_from: str | None = None
     smtp_use_tls: bool = True
     smtp_use_ssl: bool = False
+
+    # HTTPS e-mail API (Brevo). Works even when the PC antivirus / firewall
+    # blocks SMTP (WinError 10053). Used first when set.
+    brevo_api_key: str | None = None
     company_name: str = "The Hiring Team"
     frontend_url: str = "http://localhost:5173"
 

@@ -14,6 +14,7 @@ import {
   scoreText,
 } from "../../components/dashboard/hiring";
 import { formatDate, useDashboard } from "../../context/DashboardContext";
+import GazeReport from "../../components/dashboard/GazeReport";
 
 const SKILL_LABELS = {
   relevance: "Relevance",
@@ -456,6 +457,13 @@ export default function CandidateDetail() {
               </div>
             )}
           </Card>
+
+          {/* EYE MOVEMENT (AI-ASSISTED ANSWER CHECK) - interviewer only */}
+          {monitoring.required && monitoring.eye && (
+            <Card t={t} title="Answer check">
+              <GazeReport gaze={monitoring.gaze} eyeRequired={monitoring.eye} />
+            </Card>
+          )}
         </div>
 
         {/* RIGHT / SIDE */}

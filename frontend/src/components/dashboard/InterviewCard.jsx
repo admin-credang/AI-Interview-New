@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { getSessionState } from "../../context/DashboardContext";
-import { IconCheckCircle, IconClock, IconZap } from "./icons";
+import { getSessionState, useDashboard } from "../../context/DashboardContext";
+import { IconBriefcase, IconCheckCircle, IconClock, IconZap } from "./icons";
 
 // --- Advanced 3D Interactive Futuristic Card Component ---
 const BUTTON_LABELS = {
@@ -12,6 +12,7 @@ const BUTTON_LABELS = {
 
 export default function InterviewCard({ interview }) {
   const navigate = useNavigate();
+  const { isInterviewer } = useDashboard();
   const getButtonLabel = (s) => BUTTON_LABELS[s];
 
   const onAction = (item, sessionState) => {
@@ -101,10 +102,12 @@ export default function InterviewCard({ interview }) {
           <h3 className="text-2xl font-black leading-tight tracking-tight text-white drop-shadow-md line-clamp-2">
             {interview.title || interview.name}
           </h3>
-          <span className={`shrink-0 flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold border ${cfg.border} bg-black/40 ${cfg.text} shadow-inner backdrop-blur-md`}>
-            <StatusIcon />
-            {cfg.statusText}
-          </span>
+          {!isInterviewer && (
+            <span className={`shrink-0 flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold border ${cfg.border} bg-black/40 ${cfg.text} shadow-inner backdrop-blur-md`}>
+              <StatusIcon />
+              {cfg.statusText}
+            </span>
+          )}
         </div>
 
         <p className="text-sm text-slate-300/90 mb-8 leading-relaxed line-clamp-3 flex-grow font-normal">
@@ -116,7 +119,15 @@ export default function InterviewCard({ interview }) {
            <span className="bg-white/5 px-3 py-1 rounded-full border border-white/5">{interview.duration_minutes || 30} mins duration</span>
         </div>
 
-        {status === "completed" ? (
+        {isInterviewer ? (
+          <button
+            onClick={() => navigate(`/interviews/${interview.id}/configuration`)}
+            className="mt-6 w-full flex items-center justify-center gap-2.5 px-6 py-4 bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white rounded-2xl font-bold transition-all duration-300 active:scale-[0.98] shadow-xl"
+          >
+            <IconBriefcase />
+            Configure interview
+          </button>
+        ) : status === "completed" ? (
           <div className="mt-6 w-full px-6 py-4 rounded-2xl border border-white/10 bg-black/20 text-center text-sm font-semibold text-slate-200">
             {interview?.session?.result === "selected"
               ? "Selected - we will contact you"

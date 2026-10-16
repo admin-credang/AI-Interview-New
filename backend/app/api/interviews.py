@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
+from app import features
 from app.database import get_db
 from app.api.auth.dependencies import get_current_user
 
@@ -24,7 +25,8 @@ from app.schemas.session import (
     SessionResponse,
 )
 
-from app.services.question_generator import generate_questions
+from app.services.question_service import generate_questions
+from app.services.resume_service import resume_text_for
 from app.services.interview_policy import (
     NOT_INVITED_MESSAGE,
     candidate_can_access,
@@ -273,6 +275,11 @@ def get_interview_lobby(
     proctoring = extra.get("proctoring") or {}
     job = extra.get("job") or {}
     follow_ups = follow_up_policy(configuration)
+    module = features.simple(configuration)
+
+    # module "Job details for candidate" OFF -> only the role is shown
+    if not module["job_details"]:
+        job = {"role": job.get("role") or ""}
 
     # candidate sees the role the interviewer fixed for them
     assigned_role = (
@@ -298,7 +305,8 @@ def get_interview_lobby(
                 "responsibilities": job.get("responsibilities") or "",
             },
             "monitoring_required": bool(proctoring.get("enabled", False)),
-            "follow_ups_enabled": follow_ups["enabled"],
+            "follow_ups_enabled": follow_ups["enabled"] and module["follow_ups"],
+            "features": module,
             "question_count": extra.get("question_count"),
         },
         "configuration": {
@@ -581,6 +589,13 @@ def create_session(
 
     try:
 
+        # Resume the interviewer uploaded for THIS candidate
+        # (empty when none, or when the interviewer switched it OFF)
+        try:
+            candidate_resume = resume_text_for(configuration, current_user)
+        except Exception:
+            candidate_resume = ""
+
         generated_questions = generate_questions(
             interview_title=interview.title,
             interview_description=interview.description,
@@ -594,6 +609,7 @@ def create_session(
             extra_config=(
                 configuration.extra_config
             ),
+            candidate_resume=candidate_resume,
         )
 
     except Exception as e:

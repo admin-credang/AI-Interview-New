@@ -10,6 +10,7 @@ Sections:
   6. How to improve           (bullets, per weak skill)
   7. Question-by-question     (answer score + AI feedback bullets)
   8. Monitoring summary       (face / eye / phone / tab flags)
+  9. Eye movement detection   (per-question answer check, interviewer only)
 
 Used by:
   - notify_interviewer_task  -> attached to the e-mail sent to the interviewer
@@ -47,6 +48,7 @@ from app.models.score import Score
 from app.models.session import InterviewSession
 from app.models.session_review import SessionReview
 from app.models.user import User
+from app.services.gaze_analysis_service import build_gaze_report
 
 
 # =========================================================
@@ -246,6 +248,7 @@ def collect_report_data(db: Session, session_id) -> dict:
         "skills": skills,
         "qa": qa,
         "events": events,
+        "gaze": build_gaze_report(review.gaze_metrics) if review else None,
         "terminated_reason": review.termination_reason if review else None,
         "decision": review.decision if review else "pending",
     }
@@ -465,6 +468,202 @@ def _bullets(items, style):
     )
 
 
+GAZE_PINK = colors.HexColor("#DB2777")
+
+_LEVEL_COLOR = {
+    "HIGH": colors.HexColor("#DC2626"),
+    "MEDIUM": colors.HexColor("#F59E0B"),
+    "LOW": colors.HexColor("#10B981"),
+}
+
+
+def _gaze_story(gaze: dict, st: dict) -> list:
+    """
+    "Eye Movement Detection (AI-Assisted Answer Check)".
+    Interviewer PDF only. Returns [] when nothing was measured.
+    """
+
+    if not gaze:
+        return []
+
+    base = getSampleStyleSheet()
+
+    cell = ParagraphStyle(
+        "gz_cell", parent=base["Normal"], fontSize=8.5, leading=11,
+        textColor=INK,
+    )
+    head = ParagraphStyle(
+        "gz_head", parent=cell, textColor=colors.white,
+        fontName="Helvetica-Bold",
+    )
+    note = ParagraphStyle(
+        "gz_note", parent=cell, fontSize=7.5, textColor=MUTED,
+    )
+
+    banner = Table(
+        [[Paragraph(
+            "Eye Movement Detection (AI-Assisted Answer Check)",
+            ParagraphStyle(
+                "gz_banner", parent=head, fontSize=11, leading=14,
+            ),
+        )]],
+        colWidths=[174 * mm],
+    )
+    banner.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), GAZE_PINK),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ]
+        )
+    )
+
+    story = [Spacer(1, 10), banner, Spacer(1, 6)]
+
+    summary = gaze.get("summary")
+
+    if not summary:
+        story.append(
+            Paragraph(
+                "Not enough answer time to assess "
+                "(every answer was shorter than 3 seconds).",
+                st["small"],
+            )
+        )
+        return story
+
+    def level_color(label):
+        return _LEVEL_COLOR.get(str(label).upper(), INK)
+
+    gaze_pct = summary["gaze_pct"]
+    gaze_color = (
+        _LEVEL_COLOR["LOW"] if gaze_pct >= 90
+        else _LEVEL_COLOR["MEDIUM"] if gaze_pct >= 75
+        else _LEVEL_COLOR["HIGH"]
+    )
+
+    stats = [
+        ("Gaze on screen", f"{gaze_pct}%", "Of answer time", gaze_color),
+        ("Off-screen glances", str(summary["glances"]),
+         "Total, all questions", colors.HexColor("#2563EB")),
+        ("Reading pattern",
+         f"{summary['reading_flagged']} / {summary['reading_total']}",
+         summary["reading_note"],
+         _LEVEL_COLOR["HIGH"] if summary["reading_flagged"]
+         else _LEVEL_COLOR["LOW"]),
+        ("Second-screen risk", f"{summary['second_screen_pct']}%",
+         summary["second_screen_label"],
+         level_color(summary["second_screen_label"])),
+        ("AI-answer risk", summary["ai_answer_risk"],
+         summary["ai_answer_note"],
+         level_color(summary["ai_answer_risk"])),
+    ]
+
+    def big(text, color):
+        return Paragraph(
+            f"<font color='{color.hexval().replace('0x', '#')}'>"
+            f"<b>{escape(str(text))}</b></font>",
+            ParagraphStyle(
+                "gz_big", parent=cell, fontSize=15, leading=18,
+            ),
+        )
+
+    stat_table = Table(
+        [
+            [Paragraph(escape(label), cell) for label, *_ in stats],
+            [big(value, color) for _l, value, _n, color in stats],
+            [Paragraph(escape(str(n)), note) for _l, _v, n, _c in stats],
+        ],
+        colWidths=[34.8 * mm] * 5,
+    )
+
+    style = [
+        ("BOX", (0, 0), (-1, -1), 0.4, LINE),
+        ("INNERGRID", (0, 0), (-1, -1), 0.4, LINE),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ]
+
+    for col, (_l, _v, _n, color) in enumerate(stats):
+        style.append(("LINEABOVE", (col, 0), (col, 0), 2.5, color))
+
+    stat_table.setStyle(TableStyle(style))
+
+    story += [stat_table, Spacer(1, 8)]
+
+    rows = [[
+        Paragraph("#", head),
+        Paragraph("Gaze on screen", head),
+        Paragraph("Off-screen glances", head),
+        Paragraph("Reading pattern", head),
+        Paragraph("Observation", head),
+        Paragraph("AI risk", head),
+    ]]
+
+    risk_styles = []
+
+    for index, q in enumerate(gaze["questions"], start=1):
+        assessed = q["assessed"]
+
+        rows.append([
+            Paragraph(f"<b>Q{q['question']}</b>", cell),
+            Paragraph(f"{q['gaze_pct']}%" if assessed else "-", cell),
+            Paragraph(str(q["glances"]) if assessed else "-", cell),
+            Paragraph(
+                ("<font color='#DC2626'><b>Yes</b></font>"
+                 if q["reading"] else "No") if assessed else "-",
+                cell,
+            ),
+            Paragraph(escape(q["observation"]), cell),
+            Paragraph(
+                f"<b>{q['risk']}</b>" if assessed else "-",
+                ParagraphStyle(
+                    "gz_risk", parent=head, alignment=1,
+                ) if assessed else cell,
+            ),
+        ])
+
+        if assessed:
+            risk_styles.append(
+                ("BACKGROUND", (5, index), (5, index),
+                 _LEVEL_COLOR.get(q["risk"], INK))
+            )
+
+    q_table = Table(
+        rows,
+        colWidths=[10 * mm, 20 * mm, 22 * mm, 22 * mm, 80 * mm, 20 * mm],
+        repeatRows=1,
+    )
+    q_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), GAZE_PINK),
+                ("GRID", (0, 0), (-1, -1), 0.4, LINE),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]
+            + risk_styles
+        )
+    )
+
+    story += [
+        q_table,
+        Spacer(1, 4),
+        Paragraph(
+            "Indicators from the webcam, not proof. Lighting, glasses and "
+            "camera position affect them. Review the answers before "
+            "deciding. For the interviewer only.",
+            st["small"],
+        ),
+    ]
+
+    return story
+
+
 def build_report_pdf(data: dict) -> bytes:
     st = _styles()
     ana = analyse(data)
@@ -571,6 +770,9 @@ def build_report_pdf(data: dict) -> bytes:
                 ]
             )
         ]
+
+    # ---------- eye movement (interviewer only) ----------
+    story += _gaze_story(data.get("gaze"), st)
 
     # ---------- question by question ----------
     story += [Paragraph("Question-by-question feedback", st["h2"])]

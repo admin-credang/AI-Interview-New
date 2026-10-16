@@ -14,7 +14,8 @@ from app.models.question import Question
 
 from app.schemas.question import QuestionResponse
 
-from app.services.question_generator import generate_questions
+from app.services.question_service import generate_questions
+from app.services.resume_service import resume_text_for
 
 
 router = APIRouter(
@@ -112,13 +113,21 @@ def generate_session_questions(
 
     # 7. Generate questions using GPT-4.1
     try:
+        # Resume the interviewer uploaded for THIS candidate
+        # (empty when none, or when the interviewer switched it OFF)
+        try:
+            candidate_resume = resume_text_for(configuration, current_user)
+        except Exception:
+            candidate_resume = ""
+
         generated_questions = generate_questions(
             interview_title=interview.title,
             interview_description=interview.description,
             difficulty=configuration.difficulty,
             knowledge_expectation=configuration.knowledge_expectation,
             construct_from_answers=configuration.construct_from_answers,
-            extra_config=configuration.extra_config
+            extra_config=configuration.extra_config,
+            candidate_resume=candidate_resume,
         )
 
     except Exception as e:

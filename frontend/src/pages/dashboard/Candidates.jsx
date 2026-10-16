@@ -258,10 +258,10 @@ export default function Candidates() {
             onChange={(e) => setSort(e.target.value)}
             className={`px-4 py-3 rounded-2xl border ${t.input} outline-none focus:ring-2 focus:ring-fuchsia-500 w-full md:w-44`}
           >
-            <option value="recent" className="text-black">Most recent</option>
-            <option value="score_desc" className="text-black">Highest score</option>
-            <option value="score_asc" className="text-black">Lowest score</option>
-            <option value="name" className="text-black">Name A-Z</option>
+            <option value="recent" className="bg-slate-900 text-white">Most recent</option>
+            <option value="score_desc" className="bg-slate-900 text-white">Highest score</option>
+            <option value="score_asc" className="bg-slate-900 text-white">Lowest score</option>
+            <option value="name" className="bg-slate-900 text-white">Name A-Z</option>
           </select>
 
           {!scopeId && (
@@ -270,11 +270,11 @@ export default function Candidates() {
               onChange={(e) => setInterviewId(e.target.value)}
               className={`px-4 py-3 rounded-2xl border ${t.input} outline-none focus:ring-2 focus:ring-fuchsia-500 md:max-w-xs w-full`}
             >
-              <option value="all" className="text-black">
+              <option value="all" className="bg-slate-900 text-white">
                 All interviews
               </option>
               {interviewOptions.map(([id, title]) => (
-                <option key={id} value={id} className="text-black">
+                <option key={id} value={id} className="bg-slate-900 text-white">
                   {title}
                 </option>
               ))}

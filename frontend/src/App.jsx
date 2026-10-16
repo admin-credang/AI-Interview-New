@@ -29,6 +29,7 @@ const Help = lazy(() => import("./pages/dashboard/Help"));
 const Candidates = lazy(() => import("./pages/dashboard/Candidates"));
 const CandidateDetail = lazy(() => import("./pages/dashboard/CandidateDetail"));
 const InterviewControls = lazy(() => import("./pages/dashboard/InterviewControls"));
+const ClientSettings = lazy(() => import("./pages/dashboard/ClientSettings"));
 const CreateInterview = lazy(() => import("./pages/CreateInterview"));
 const InterviewConfiguration = lazy(() => import("./pages/InterviewConfiguration"));
 const InterviewLobby = lazy(() => import("./pages/InterviewLobby"));
@@ -218,6 +219,14 @@ function AppRoutes() {
           element={
             <RecruiterRoute>
               <InterviewControls />
+            </RecruiterRoute>
+          }
+        />
+        <Route
+          path="client-settings"
+          element={
+            <RecruiterRoute>
+              <ClientSettings />
             </RecruiterRoute>
           }
         />

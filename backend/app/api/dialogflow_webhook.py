@@ -17,7 +17,11 @@ from app.models.interview_configuration import InterviewConfiguration
 from app.schemas.answer import AnswerCreate
 
 from app.services.answer_service import process_answer
-from app.services.question_service import generate_and_save_questions
+from app.services.question_service import (
+    VALID_QUESTION_COUNTS,
+    expected_question_count,
+    generate_and_save_questions,
+)
 from app.services.report_service import generate_interview_report
 
 
@@ -31,7 +35,9 @@ router = APIRouter(
 # CONFIG
 # =========================================================
 
-EXPECTED_MAIN_QUESTION_COUNT = 5
+# Main-question sets are 5 questions (no resume) or 5 + 2 resume questions
+# (with resume). Use VALID_QUESTION_COUNTS / expected_question_count().
+EXPECTED_MAIN_QUESTION_COUNT = 5   # default / fallback only
 
 # ---------------------------------------------------------
 # Candidate can think before submitting an answer.
@@ -424,6 +430,27 @@ def get_next_main_question(
     )
 
 
+def get_total_main_questions_for_session(
+    db: Session | None,
+    session_id,
+) -> int:
+    """Number of MAIN questions in this session (5 or 7)."""
+
+    if db is None:
+        return EXPECTED_MAIN_QUESTION_COUNT
+
+    total = (
+        db.query(Question)
+        .filter(
+            Question.session_id == session_id,
+            Question.parent_question_id.is_(None),
+        )
+        .count()
+    )
+
+    return int(total) or EXPECTED_MAIN_QUESTION_COUNT
+
+
 def get_main_question_number(
     db: Session,
     question: Question,
@@ -563,6 +590,13 @@ def build_completion_response(
     interview_session: InterviewSession,
 ):
 
+    from sqlalchemy.orm import object_session
+
+    total_questions = get_total_main_questions_for_session(
+        object_session(interview_session),
+        interview_session.id,
+    )
+
     return build_dialogflow_parameter_response(
         {
             "session_id": str(
@@ -573,8 +607,9 @@ def build_completion_response(
 
             "question": None,
 
-            "question_number":
-                EXPECTED_MAIN_QUESTION_COUNT,
+            "question_number": total_questions,
+
+            "total_questions": total_questions,
 
             "category": None,
 
@@ -640,6 +675,12 @@ def build_question_parameters(
         "question": question.question,
 
         "question_number": question_number,
+
+        # 5 without a resume, 7 with one - the UI shows "Question x of N"
+        "total_questions": get_total_main_questions_for_session(
+            db,
+            session_id,
+        ),
 
         "category": question.category,
 
@@ -726,6 +767,22 @@ def build_current_question_response(
             "answer_wait_seconds": ANSWER_WAIT_SECONDS,
         }
     )
+
+    # A follow-up is asked straight away (no yes/no from the
+    # candidate), so the frontend needs the follow-up text / id.
+    if question.parent_question_id is not None:
+
+        parameters.update(
+            {
+                "follow_up_question": question.question,
+
+                "follow_up_question_id": str(question.id),
+
+                "parent_question_id": str(
+                    question.parent_question_id
+                ),
+            }
+        )
 
     return build_dialogflow_parameter_response(
         parameters
@@ -913,65 +970,20 @@ def build_follow_up_confirmation_response(
     main_question: Question,
     follow_up_question: Question,
 ):
+    """
+    The candidate is NEVER asked whether they want a follow-up.
 
-    question_number = (
-        get_main_question_number(
-            db=db,
-            question=main_question,
-        )
-    )
+    The interviewer's configuration decides if / how many
+    follow-ups happen. When one is due, it is simply asked as
+    the next question and the candidate just answers it.
 
-    parameters = {
-        "session_id": str(
-            interview_session.id
-        ),
+    (Name kept so existing callers keep working.)
+    """
 
-        "question_id": str(
-            main_question.id
-        ),
-
-        "question": main_question.question,
-
-        "question_number": question_number,
-
-        "category": main_question.category,
-
-        "difficulty": main_question.difficulty,
-
-        "question_type": main_question.type,
-
-        "candidate_answer": None,
-
-        "is_follow_up": False,
-
-        "follow_up_required": True,
-
-        "follow_up_question":
-            follow_up_question.question,
-
-        "follow_up_question_id":
-            str(follow_up_question.id),
-
-        "follow_up_confirmation": None,
-
-        "follow_up_confirmation_required": True,
-
-        "next_action":
-            "ask_follow_up_confirmation",
-
-        "interview_completed": False,
-
-        # -------------------------------------------------
-        # We are waiting for YES / NO, not an answer.
-        # -------------------------------------------------
-
-        "waiting_for_candidate_answer": False,
-
-        "answer_wait_seconds": ANSWER_WAIT_SECONDS,
-    }
-
-    return build_dialogflow_parameter_response(
-        parameters
+    return build_current_question_response(
+        db=db,
+        interview_session=interview_session,
+        question=follow_up_question,
     )
 
 
@@ -1253,12 +1265,12 @@ def ensure_interview_questions(
     )
 
     # =====================================================
-    # Already exactly 5
+    # Already a complete set (5 without resume, 7 with resume)
     # =====================================================
 
     if (
         len(existing_main_questions)
-        == EXPECTED_MAIN_QUESTION_COUNT
+        in VALID_QUESTION_COUNTS
     ):
 
         return existing_main_questions
@@ -1273,8 +1285,8 @@ def ensure_interview_questions(
             status_code=500,
 
             detail=(
-                f"Expected exactly "
-                f"{EXPECTED_MAIN_QUESTION_COUNT} "
+                f"Expected one of "
+                f"{VALID_QUESTION_COUNTS} "
                 f"main questions, found "
                 f"{len(existing_main_questions)}."
             ),
@@ -1291,6 +1303,24 @@ def ensure_interview_questions(
             interview_session=interview_session,
         )
     )
+
+    # Resume the interviewer uploaded for THIS candidate (if any)
+    candidate_resume = ""
+
+    try:
+        from app.models.user import User as _User
+        from app.services.resume_service import resume_text_for
+
+        candidate = (
+            db.query(_User)
+            .filter(_User.id == interview_session.candidate_id)
+            .first()
+        )
+
+        candidate_resume = resume_text_for(configuration, candidate)
+
+    except Exception:
+        candidate_resume = ""
 
     generate_and_save_questions(
         db=db,
@@ -1316,6 +1346,8 @@ def ensure_interview_questions(
         ),
 
         extra_config=configuration.extra_config,
+
+        candidate_resume=candidate_resume,
     )
 
     db.flush()
@@ -1336,7 +1368,7 @@ def ensure_interview_questions(
 
     if (
         len(main_questions)
-        != EXPECTED_MAIN_QUESTION_COUNT
+        != expected_question_count(candidate_resume)
     ):
 
         raise HTTPException(
@@ -1345,7 +1377,7 @@ def ensure_interview_questions(
             detail=(
                 "Question generation failed. "
                 f"Expected "
-                f"{EXPECTED_MAIN_QUESTION_COUNT}, "
+                f"{expected_question_count(candidate_resume)}, "
                 f"found {len(main_questions)}."
             ),
         )
@@ -1436,7 +1468,7 @@ def start_interview(
         )
 
     # =====================================================
-    # Ensure exactly 5 questions
+    # Ensure the full question set exists (5, or 7 with a resume)
     # =====================================================
 
     ensure_interview_questions(
@@ -2029,6 +2061,11 @@ def handle_follow_up_confirmation(
     parameters: dict[str, Any],
     fallback_text: str | None = None,
 ):
+
+    # Follow-ups are asked automatically (no yes/no from the
+    # candidate), so there is never a confirmation to handle.
+    # "yes" / "no" typed by a candidate is a normal answer.
+    return None
 
     # =====================================================
     # CHECK WHETHER CONFIRMATION IS REQUIRED

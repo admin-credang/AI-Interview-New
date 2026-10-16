@@ -9,13 +9,34 @@ import api from "../services/api";
 
 const AuthContext = createContext(null);
 
+// Turns an axios error into a message the user can act on.
+function loginErrorMessage(error) {
+  const detail = error.response?.data?.detail;
+
+  // FastAPI validation error (422) comes as a list
+  if (Array.isArray(detail)) {
+    return detail.map((d) => d.msg).join(", ") || "Check the e-mail and password.";
+  }
+
+  if (typeof detail === "string" && detail) return detail;
+
+  if (!error.response) {
+    return "Cannot reach the server. Start the backend (uvicorn app.main:app --reload) and check VITE_API_BASE_URL.";
+  }
+
+  return `Login failed (server error ${error.response.status}). Check the backend console.`;
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
-    const savedUser = localStorage.getItem("user");
+    // a broken "user" value in localStorage must never white-screen the app
+    try {
+      const savedUser = localStorage.getItem("user");
 
-    return savedUser
-      ? JSON.parse(savedUser)
-      : null;
+      return savedUser ? JSON.parse(savedUser) : null;
+    } catch {
+      return null;
+    }
   });
 
   const [loading, setLoading] = useState(false);
@@ -25,7 +46,7 @@ export function AuthProvider({ children }) {
 
     try {
       const response = await api.post("/auth/login", {
-        email,
+        email: String(email || "").trim().toLowerCase(),
         password,
       });
 
@@ -53,9 +74,32 @@ export function AuthProvider({ children }) {
     } catch (error) {
       return {
         success: false,
+        message: loginErrorMessage(error),
+      };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Google sign-in: `credential` is the ID token from Google Identity Services
+  const googleLogin = async (credential) => {
+    setLoading(true);
+
+    try {
+      const response = await api.post("/auth/google", { credential });
+      const { access_token, user } = response.data;
+
+      localStorage.setItem("access_token", access_token);
+      localStorage.setItem("user", JSON.stringify(user));
+      setUser(user);
+
+      return { success: true, user };
+    } catch (error) {
+      return {
+        success: false,
         message:
           error.response?.data?.detail ||
-          "Login failed",
+          "Google sign-in failed. Please try again.",
       };
     } finally {
       setLoading(false);
@@ -74,8 +118,8 @@ export function AuthProvider({ children }) {
       const response = await api.post(
         "/auth/register",
         {
-          name,
-          email,
+          name: String(name || "").trim(),
+          email: String(email || "").trim().toLowerCase(),
           password,
           role,
         }
@@ -88,13 +132,20 @@ export function AuthProvider({ children }) {
     } catch (error) {
       return {
         success: false,
-        message:
-          error.response?.data?.detail ||
-          "Registration failed",
+        message: loginErrorMessage(error),
       };
     } finally {
       setLoading(false);
     }
+  };
+
+  // Used by the e-mail invitation link: the server already signed the
+  // candidate in, so just store the session (no password screen).
+  const setSession = (access_token, sessionUser) => {
+    localStorage.setItem("access_token", access_token);
+    localStorage.setItem("user", JSON.stringify(sessionUser));
+
+    setUser(sessionUser);
   };
 
   const logout = () => {
@@ -107,7 +158,7 @@ export function AuthProvider({ children }) {
   // Same object between renders -> pages that only read `user`
   // are not re-rendered every time something else changes.
   const value = useMemo(
-    () => ({ user, loading, login, register, logout }),
+    () => ({ user, loading, login, googleLogin, register, logout, setSession }),
     // login / register / logout only use setters, so they are stable
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [user, loading]

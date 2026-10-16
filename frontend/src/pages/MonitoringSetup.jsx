@@ -82,6 +82,7 @@ export default function MonitoringSetup() {
               interviewId={item.id}
               initialProctoring={item.proctoring}
               initialFollowUps={item.follow_ups}
+              initialResumeQuestions={item.resume_questions_enabled}
               initialJob={item.job}
               saveLabel="Save monitoring setup"
               onSaved={() => setSaved(true)}

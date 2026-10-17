@@ -905,9 +905,8 @@ export default function InterviewSession() {
 
       // short preview so the candidate can hear the voice
       try {
+        cancelSpeech();
         if (window.speechSynthesis) {
-          window.speechSynthesis.cancel();
-
           window.speechSynthesis.speak(
             buildUtterance(
               "Hello, I will be your interviewer today.",
@@ -1161,6 +1160,15 @@ export default function InterviewSession() {
   const speechGenerationRef =
     useRef(0);
 
+  const speechAudioRef =
+    useRef(null);
+
+  const speechAudioUrlRef =
+    useRef(null);
+
+  const speechCancelRef =
+    useRef(null);
+
   const submitAnswerRef =
     useRef(null);
 
@@ -1239,6 +1247,31 @@ export default function InterviewSession() {
   const terminateInterviewRef =
     useRef(null);
 
+  const cancelSpeech =
+    useCallback(() => {
+      speechGenerationRef.current += 1;
+      speechCancelRef.current?.();
+      speechCancelRef.current = null;
+      window.speechSynthesis?.cancel();
+
+      if (speechAudioRef.current) {
+        speechAudioRef.current.pause();
+        speechAudioRef.current.onended = null;
+        speechAudioRef.current.onerror = null;
+        speechAudioRef.current.onplay = null;
+        speechAudioRef.current = null;
+      }
+
+      if (speechAudioUrlRef.current) {
+        URL.revokeObjectURL(speechAudioUrlRef.current);
+        speechAudioUrlRef.current = null;
+      }
+
+      if (mountedRef.current) {
+        setIsSpeaking(false);
+      }
+    }, []);
+
   /*
    * ============================================================
    * STOP MEDIA
@@ -1289,7 +1322,7 @@ recognitionRef.current.stop();
       /*
        * Stop TTS
        */
-      window.speechSynthesis?.cancel();
+      cancelSpeech();
 
       /*
        * Stop monitoring loop
@@ -1354,7 +1387,7 @@ recognitionRef.current.stop();
       setEyeStatus(
         "Eye/Gaze detection OFF"
       );
-    }, []);
+    }, [cancelSpeech]);
 
   /*
    * ============================================================
@@ -1534,66 +1567,178 @@ recognitionRef.current.stop();
    * ============================================================
    */
 
-  const speakQuestion =
+  const speakText =
     useCallback(
-      (text) => {
-        if (
-          !text ||
-          !window.speechSynthesis
-        ) {
+      async (text) => {
+        if (!text) {
           return;
         }
 
-        speechGenerationRef.current +=
-          1;
+        cancelSpeech();
+        const generation = speechGenerationRef.current;
+        const pendingCancellation = () => undefined;
+        speechCancelRef.current = pendingCancellation;
 
-        const generation =
-          speechGenerationRef.current;
+        const isCurrent = () =>
+          mountedRef.current &&
+          generation === speechGenerationRef.current;
 
-        window.speechSynthesis.cancel();
+        const browserFallback = () =>
+          new Promise((resolve) => {
+            if (!isCurrent() || !window.speechSynthesis) {
+              resolve();
+              return;
+            }
 
-        const utterance =
-          buildUtterance(
-            text,
-            voiceIdRef.current
+            let settled = false;
+            let utterance;
+            const finish = () => {
+              if (settled) {
+                return;
+              }
+              settled = true;
+              if (utterance) {
+                utterance.onstart = null;
+                utterance.onend = null;
+                utterance.onerror = null;
+              }
+              if (speechCancelRef.current === finish) {
+                speechCancelRef.current = null;
+              }
+              if (isCurrent()) {
+                setIsSpeaking(false);
+              }
+              resolve();
+            };
+
+            speechCancelRef.current = finish;
+
+            try {
+              utterance = buildUtterance(text, voiceIdRef.current);
+              utterance.onstart = () => {
+                if (isCurrent()) {
+                  setIsSpeaking(true);
+                }
+              };
+              utterance.onend = finish;
+              utterance.onerror = finish;
+              window.speechSynthesis.speak(utterance);
+            } catch (error) {
+              console.warn("Browser speech fallback failed.", error);
+              finish();
+            }
+          });
+
+        try {
+          const response = await api.post(
+            `/interviews/${interviewId}/speech`,
+            { text },
+            { responseType: "blob" },
           );
 
-        utterance.onstart = () => {
-          if (
-            mountedRef.current &&
-            generation ===
-              speechGenerationRef.current
-          ) {
-            setIsSpeaking(true);
+          if (!isCurrent()) {
+            return;
           }
-        };
 
-        utterance.onend = () => {
-          if (
-            mountedRef.current &&
-            generation ===
-              speechGenerationRef.current
-          ) {
+          const audioUrl = URL.createObjectURL(response.data);
+          speechAudioUrlRef.current = audioUrl;
+
+          const audio = new Audio(audioUrl);
+          speechAudioRef.current = audio;
+
+          const releaseAudio = () => {
+            audio.onplay = null;
+            audio.onended = null;
+            audio.onerror = null;
+            if (speechAudioRef.current === audio) {
+              speechAudioRef.current = null;
+            }
+            if (speechAudioUrlRef.current === audioUrl) {
+              URL.revokeObjectURL(audioUrl);
+              speechAudioUrlRef.current = null;
+            }
+          };
+
+          await new Promise((resolve, reject) => {
+            let settled = false;
+
+            const finish = () => {
+              if (settled) {
+                return;
+              }
+              settled = true;
+              audio.onended = null;
+              audio.onerror = null;
+              if (speechCancelRef.current === finish) {
+                speechCancelRef.current = null;
+              }
+              resolve();
+            };
+
+            const fail = (error) => {
+              if (settled) {
+                return;
+              }
+              settled = true;
+              audio.onended = null;
+              audio.onerror = null;
+              if (speechCancelRef.current === finish) {
+                speechCancelRef.current = null;
+              }
+              releaseAudio();
+              reject(error);
+            };
+
+            speechCancelRef.current = finish;
+            audio.onplay = () => {
+              if (isCurrent()) {
+                setIsSpeaking(true);
+              }
+            };
+            audio.onended = finish;
+            audio.onerror = () =>
+              fail(new Error("Google TTS audio playback failed."));
+            audio.play().catch(fail);
+          });
+        } catch (error) {
+          if (isCurrent()) {
+            console.warn("Google TTS failed; using browser speech.", error);
+            await browserFallback();
+          }
+        } finally {
+          if (generation === speechGenerationRef.current) {
             setIsSpeaking(false);
-          }
-        };
 
-        utterance.onerror = () => {
-          if (
-            mountedRef.current &&
-            generation ===
-              speechGenerationRef.current
-          ) {
-            setIsSpeaking(false);
-          }
-        };
+            if (speechCancelRef.current === pendingCancellation) {
+              speechCancelRef.current = null;
+            }
 
-        window.speechSynthesis.speak(
-          utterance
-        );
+            if (speechAudioRef.current) {
+              speechAudioRef.current.pause();
+              speechAudioRef.current.onended = null;
+              speechAudioRef.current.onerror = null;
+              speechAudioRef.current.onplay = null;
+              speechAudioRef.current = null;
+            }
+
+            if (speechAudioUrlRef.current) {
+              URL.revokeObjectURL(speechAudioUrlRef.current);
+              speechAudioUrlRef.current = null;
+            }
+          }
+        }
       },
-      []
+      [cancelSpeech, interviewId],
     );
+
+  const speakQuestion = useCallback(
+    (text) => {
+      void speakText(text).catch((error) => {
+        console.error("Question speech failed:", error);
+      });
+    },
+    [speakText],
+  );
 
   /*
    * ============================================================
@@ -1708,15 +1853,9 @@ recognitionRef.current.stop();
       setPhase("completed");
 
       // spoken thank-you
-      try {
-        window.speechSynthesis?.cancel();
-        window.speechSynthesis?.speak(
-          buildUtterance(
-            CLOSING_SPEECH,
-            voiceIdRef.current
-          )
-        );
-      } catch {}
+      void speakText(CLOSING_SPEECH).catch((error) => {
+        console.error("Closing speech failed:", error);
+      });
 
       // Thank-you email + "we will contact you if selected".
       // The candidate does not get a report or scores.
@@ -1735,6 +1874,7 @@ recognitionRef.current.stop();
       sessionId,
       navigate,
       stopMedia,
+      speakText,
     ]);
 
   /*
@@ -2241,27 +2381,29 @@ recognitionRef.current.stop();
       } catch {}
     };
 
-    if (window.speechSynthesis) {
-      const utterance = buildUtterance(
-        GREETING_SPEECH,
-        voiceIdRef.current
-      );
-      utterance.onend = listen;
-      utterance.onerror = listen;
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(utterance);
-    } else {
-      listen();
-    }
+    const greetingSpeech = speakText(GREETING_SPEECH);
+    const greetingGeneration = speechGenerationRef.current;
+
+    void greetingSpeech
+      .catch((error) => {
+        console.error("Greeting speech failed:", error);
+      })
+      .then(() => {
+        if (!stopped && mountedRef.current) {
+          listen();
+        }
+      });
 
     return () => {
       stopped = true;
       try {
         rec?.abort();
       } catch {}
-      window.speechSynthesis?.cancel();
+      if (greetingGeneration === speechGenerationRef.current) {
+        cancelSpeech();
+      }
     };
-  }, [phase]);
+  }, [phase, speakText, cancelSpeech]);
 
   /*
    * ============================================================
@@ -2334,7 +2476,7 @@ recognitionRef.current.stop();
         sessionStorage.getItem(playedKey) === "1";
     } catch {}
 
-    if (alreadyPlayed || !window.speechSynthesis) {
+    if (alreadyPlayed) {
       setIntroDone(true);
       return undefined;
     }
@@ -2354,30 +2496,26 @@ recognitionRef.current.stop();
 
       setPhase("intro");
 
-      // let the greeting cleanup (cancel) finish first
+      // Let the greeting cleanup finish before starting another voice.
       setTimeout(() => {
         if (cancelled) {
           return;
         }
 
-        const utterance = buildUtterance(
-          text,
-          voiceIdRef.current
-        );
-
-        utterance.onend = finish;
-        utterance.onerror = finish;
-
-        window.speechSynthesis.cancel();
-        window.speechSynthesis.speak(utterance);
+        void speakText(text)
+          .then(finish)
+          .catch((error) => {
+            console.error("Company introduction speech failed:", error);
+            finish();
+          });
       }, 150);
     })();
 
     return () => {
       cancelled = true;
-      window.speechSynthesis?.cancel();
+      cancelSpeech();
     };
-  }, [ready, introDone, sessionId]);
+  }, [ready, introDone, sessionId, speakText, cancelSpeech]);
 
   /*
    * ============================================================
@@ -2682,7 +2820,7 @@ recognitionRef.current.stop();
           } catch {}
         }
 
-        window.speechSynthesis?.cancel();
+        cancelSpeech();
 
         try {
           const payload = {
@@ -2785,6 +2923,7 @@ recognitionRef.current.stop();
         }
       },
       [
+        cancelSpeech,
         interviewId,
         sessionId,
         handleDialogflowResponse,
@@ -3198,6 +3337,7 @@ recognitionRef.current.stop();
         !processingRef.current &&
         !completedRef.current &&
         !terminatedRef.current &&
+        !speechCancelRef.current &&
         !window.speechSynthesis?.speaking
       ) {
         speechBaseRef.current =
@@ -3229,6 +3369,7 @@ recognitionRef.current.stop();
           "followup-confirmation" &&
         !processingRef.current &&
         !terminatedRef.current &&
+        !speechCancelRef.current &&
         !window.speechSynthesis?.speaking &&
         confirmRetryRef.current < 4
       ) {
@@ -3330,60 +3471,30 @@ recognitionRef.current.stop();
    * SPEAK + CALLBACK (voice follow-up offer)
    * ============================================================
    */
-  const speakThen =
-    (text, onDone) => {
-      if (
-        !window.speechSynthesis
-      ) {
-        onDone?.();
-        return;
-      }
+  const speakThen = (text, onDone) => {
+    try {
+      wantListeningRef.current = false;
+      recognitionRef.current?.stop();
+    } catch {}
 
-      speechGenerationRef.current += 1;
-      const generation =
-        speechGenerationRef.current;
+    const speech = speakText(text);
+    const generation = speechGenerationRef.current;
 
-      try {
-        wantListeningRef.current = false;
-recognitionRef.current?.stop();
-      } catch {}
-
-      window.speechSynthesis.cancel();
-
-      const utterance =
-        buildUtterance(
-          text,
-          voiceIdRef.current
-        );
-
-      utterance.onstart = () => {
-        if (mountedRef.current) {
-          setIsSpeaking(true);
-        }
-      };
-
-      const finish = () => {
-        if (!mountedRef.current) {
-          return;
-        }
-
-        setIsSpeaking(false);
-
+    void speech
+      .then(() => {
         if (
-          generation ===
-          speechGenerationRef.current
+          mountedRef.current &&
+          generation === speechGenerationRef.current &&
+          !completedRef.current &&
+          !terminatedRef.current
         ) {
           onDone?.();
         }
-      };
-
-      utterance.onend = finish;
-      utterance.onerror = finish;
-
-      window.speechSynthesis.speak(
-        utterance
-      );
-    };
+      })
+      .catch((error) => {
+        console.error("Follow-up prompt speech failed:", error);
+      });
+  };
 
   speakThenRef.current =
     speakThen;
@@ -5416,7 +5527,7 @@ recognitionRef.current?.stop();
           <button
             type="button"
             onClick={() => {
-              window.speechSynthesis?.cancel();
+              cancelSpeech();
               setIntroDone(true);
             }}
             className="text-xs text-slate-400 underline underline-offset-4 hover:text-slate-200 transition"

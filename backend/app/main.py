@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
-
+from app.api.interview_speech import router as interview_speech_router
 from app.database import engine
 
 # =========================================================
@@ -18,7 +18,7 @@ from app.api.auth.google_auth import router as google_auth_router
 from app import dashboard
 
 # =========================================================
-# INTERVIEWS
+# INTERVIEW
 # =========================================================
 
 from app.api.interviews import router as interview_router
@@ -166,11 +166,9 @@ app.include_router(
     interview_configuration_router
 )
 
-app.include_router(
-    company_intro_router
-)
+app.include_router(company_intro_router)
 
-
+app.include_router(interview_speech_router)
 # =========================================================
 # INTERVIEW PROCESS ROUTES
 # =========================================================

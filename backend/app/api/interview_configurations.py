@@ -22,6 +22,10 @@ from app.services.interview_policy import (
     candidate_can_access,
     owns_interview,
 )
+from app.services.interview_voice import (
+    DEFAULT_VOICE,
+    normalize_voice_config,
+)
 
 
 # =========================================================
@@ -32,6 +36,20 @@ router = APIRouter(
     prefix="/interviews",
     tags=["Interview Configuration"],
 )
+
+# =========================================================
+# INTERVIEWER VOICE SETTINGS
+# =========================================================
+
+def validate_voice_name(extra_config: dict | None) -> dict:
+    """Validate voice selection while preserving other settings."""
+    try:
+        return normalize_voice_config(extra_config)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(error),
+        ) from error
 
 
 # =========================================================
@@ -128,7 +146,9 @@ def create_configuration(
             if configuration_data.knowledge_expectation
             else "intermediate"
         ),
-        extra_config=configuration_data.extra_config,
+        extra_config=validate_voice_name(
+            configuration_data.extra_config
+        ),
     )
 
     try:
@@ -226,6 +246,7 @@ def get_configuration(
                 "extra_config": {
                     "question_count": extra.get("question_count"),
                     "categories": extra.get("categories"),
+                    "voice_name": extra.get("voice_name", DEFAULT_VOICE),
                     # monitoring rules the interviewer chose for THIS
                     # interview (the candidate screen needs them)
                     "proctoring": {
@@ -334,7 +355,7 @@ def update_configuration(
         if field == "extra_config":
             merged = dict(configuration.extra_config or {})
             merged.update(value or {})
-            value = merged
+            value = validate_voice_name(merged)
 
         setattr(
             configuration,

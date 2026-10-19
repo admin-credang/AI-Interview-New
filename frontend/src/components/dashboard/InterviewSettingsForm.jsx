@@ -3,7 +3,7 @@ import { useState } from "react";
 import api from "../../services/api";
 import { Toggle } from "./hiring";
 import CompanyIntroEditor from "./CompanyIntroEditor";
-import { IconEye, IconShield } from "./icons";
+import { IconShield } from "./icons";
 
 // Works inside AND outside the dashboard theme provider.
 const DEFAULT_T = {
@@ -24,14 +24,16 @@ export default function InterviewSettingsForm({
   t = DEFAULT_T,
   saveLabel = "Save settings",
   onSaved,
+  // true = only job details + company intro (monitoring, follow-ups and
+  // resume questions are switched in Interview Controls > Features)
+  jobOnly = false,
 }) {
   const inputCls = `w-full px-4 py-3 rounded-xl border ${t.input} outline-none focus:ring-2 focus:ring-fuchsia-500 text-sm`;
 
+  // ONE switch: face, eye / gaze and phone detection (and the gaze report)
+  // all follow it - they are not separate options.
   const [proctoring, setProctoring] = useState({
     enabled: Boolean(initialProctoring?.enabled),
-    face: initialProctoring?.enabled ? Boolean(initialProctoring?.face) : true,
-    eye: initialProctoring?.enabled ? Boolean(initialProctoring?.eye) : true,
-    phone: initialProctoring?.enabled ? Boolean(initialProctoring?.phone) : true,
   });
 
   // Follow-up questions: the interviewer decides (default = on, 2).
@@ -49,7 +51,6 @@ export default function InterviewSettingsForm({
     role: initialJob?.role || "",
     company: initialJob?.company || "",
     location: initialJob?.location || "",
-    employment_type: initialJob?.employment_type || "",
     experience: initialJob?.experience || "",
     responsibilities: initialJob?.responsibilities || "",
     skillsText: (initialJob?.skills || []).join(", "),
@@ -69,22 +70,25 @@ export default function InterviewSettingsForm({
 
     try {
       await api.put(`/hiring/interviews/${interviewId}/settings`, {
-        proctoring: {
-          enabled: proctoring.enabled,
-          face: proctoring.enabled && proctoring.face,
-          eye: proctoring.enabled && proctoring.face && proctoring.eye,
-          phone: proctoring.enabled && proctoring.phone,
-        },
-        follow_ups: {
-          enabled: followUps.enabled,
-          count: Math.min(5, Math.max(1, Number(followUps.count) || 2)),
-        },
-        resume_questions: resumeQuestions,
+        ...(jobOnly
+          ? {}
+          : {
+              proctoring: {
+                enabled: proctoring.enabled,
+                face: proctoring.enabled,
+                eye: proctoring.enabled,
+                phone: proctoring.enabled,
+              },
+              follow_ups: {
+                enabled: followUps.enabled,
+                count: Math.min(5, Math.max(1, Number(followUps.count) || 2)),
+              },
+              resume_questions: resumeQuestions,
+            }),
         job: {
           role: job.role,
           company: job.company,
           location: job.location,
-          employment_type: job.employment_type,
           experience: job.experience,
           responsibilities: job.responsibilities,
           skills: job.skillsText
@@ -111,6 +115,8 @@ export default function InterviewSettingsForm({
 
   return (
     <div className="space-y-8">
+      {!jobOnly && (
+        <>
       {/* MONITORING */}
       <div className="space-y-4">
         <div className="flex items-center gap-3">
@@ -131,6 +137,8 @@ export default function InterviewSettingsForm({
               <p className="font-semibold text-sm">Require monitoring</p>
               <p className="text-xs opacity-60">
                 Camera turns on automatically and the candidate cannot switch it off.
+                Includes face detection, eye / gaze detection and phone detection,
+                and the gaze report.
               </p>
             </div>
             <Toggle
@@ -140,70 +148,6 @@ export default function InterviewSettingsForm({
             />
           </div>
 
-          <div
-            className={`flex items-center justify-between gap-4 px-5 py-4 ${
-              proctoring.enabled ? "" : "opacity-40"
-            }`}
-          >
-            <div>
-              <p className="font-semibold text-sm">Face detection</p>
-              <p className="text-xs opacity-60">
-                Ends the interview if no face, or more than one face, stays in view.
-              </p>
-            </div>
-            <Toggle
-              label="Face detection"
-              disabled={!proctoring.enabled}
-              checked={proctoring.enabled && proctoring.face}
-              onChange={(v) =>
-                setProctoring((p) => ({ ...p, face: v, eye: v ? p.eye : false }))
-              }
-            />
-          </div>
-
-          <div
-            className={`flex items-center justify-between gap-4 px-5 py-4 ${
-              proctoring.enabled && proctoring.face ? "" : "opacity-40"
-            }`}
-          >
-            <div className="flex items-start gap-2">
-              <span className="mt-0.5 opacity-70">
-                <IconEye />
-              </span>
-              <div>
-                <p className="font-semibold text-sm">Eye / gaze detection</p>
-                <p className="text-xs opacity-60">
-                  Watches closed eyes, looking sideways and repeatedly looking down
-                  (for example at a phone on the desk). Needs face detection.
-                </p>
-              </div>
-            </div>
-            <Toggle
-              label="Eye and gaze detection"
-              disabled={!proctoring.enabled || !proctoring.face}
-              checked={proctoring.enabled && proctoring.face && proctoring.eye}
-              onChange={(v) => setProctoring((p) => ({ ...p, eye: v }))}
-            />
-          </div>
-
-          <div
-            className={`flex items-center justify-between gap-4 px-5 py-4 ${
-              proctoring.enabled ? "" : "opacity-40"
-            }`}
-          >
-            <div>
-              <p className="font-semibold text-sm">Phone detection</p>
-              <p className="text-xs opacity-60">
-                Ends the interview if a mobile phone stays visible on the camera.
-              </p>
-            </div>
-            <Toggle
-              label="Phone detection"
-              disabled={!proctoring.enabled}
-              checked={proctoring.enabled && proctoring.phone}
-              onChange={(v) => setProctoring((p) => ({ ...p, phone: v }))}
-            />
-          </div>
         </div>
 
         {proctoring.enabled && (
@@ -294,19 +238,23 @@ export default function InterviewSettingsForm({
           </div>
         </div>
       </div>
+        </>
+      )}
 
       {/* JOB DETAILS */}
       <div className="space-y-4">
         <div>
-          <h3 className="font-bold">Job details shown to the candidate</h3>
-          <p className="text-xs opacity-60">Optional, but candidates see these before they start.</p>
+          <h3 className="font-bold">Job details</h3>
+          <p className="text-xs opacity-60">
+            The AI uses all of these (role, location, experience, skills, responsibilities) to write
+            the company introduction. Candidates themselves only see the role.
+          </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <input className={inputCls} placeholder="Job role (e.g. Full Stack Developer)" value={job.role} onChange={setField("role")} />
           <input className={inputCls} placeholder="Company" value={job.company} onChange={setField("company")} />
           <input className={inputCls} placeholder="Location (e.g. Remote, Chennai)" value={job.location} onChange={setField("location")} />
-          <input className={inputCls} placeholder="Type (Full-time, Internship...)" value={job.employment_type} onChange={setField("employment_type")} />
           <input className={inputCls} placeholder="Experience (e.g. 0-2 years)" value={job.experience} onChange={setField("experience")} />
           <input className={inputCls} placeholder="Skills, comma separated" value={job.skillsText} onChange={setField("skillsText")} />
         </div>
@@ -325,6 +273,13 @@ export default function InterviewSettingsForm({
         interviewId={interviewId}
         role={job.role}
         company={job.company}
+        location={job.location}
+        experience={job.experience}
+        skills={job.skillsText
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)}
+        responsibilities={job.responsibilities}
         t={t}
       />
 

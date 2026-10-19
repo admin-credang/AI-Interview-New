@@ -22,6 +22,10 @@ export default function CompanyIntroEditor({
   interviewId,
   role = "",
   company = "",
+  location = "",
+  experience = "",
+  skills = [],
+  responsibilities = "",
   t = DEFAULT_T,
 }) {
   const inputCls = `w-full px-4 py-3 rounded-xl border ${t.input} outline-none focus:ring-2 focus:ring-fuchsia-500 text-sm`;
@@ -87,7 +91,15 @@ export default function CompanyIntroEditor({
     try {
       const res = await api.post(
         `/interviews/${interviewId}/company-intro/generate`,
-        { url: url.trim(), role, company },
+        {
+          url: url.trim(),
+          role,
+          company,
+          location,
+          experience,
+          skills,
+          responsibilities,
+        },
         { timeout: 90000 }
       );
 

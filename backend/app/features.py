@@ -33,12 +33,15 @@ from typing import Any
 # key, label, description, group, parent, default
 # ---------------------------------------------------------
 
+# how many compulsory questions a client may add
+MAX_COMPULSORY_QUESTIONS = 5
+MAX_COMPULSORY_LENGTH = 500
+
 GROUPS = [
     ("email", "E-mails"),
     ("access", "Candidate access"),
     ("interview", "Interview"),
     ("monitoring", "Monitoring"),
-    ("reports", "Reports"),
     ("candidates", "Candidate management"),
 ]
 
@@ -48,9 +51,6 @@ FEATURES: list[dict[str, Any]] = [
          label="Invitation e-mail",
          description="E-mail the interview link and ID to the candidate. "
                      "OFF = no mail is sent; copy the link and share it yourself."),
-    dict(key="email_ack", group="email", default=True, parent=None,
-         label="Submitted e-mail",
-         description="\"Thank you, we received your interview\" mail to the candidate."),
     dict(key="email_decision", group="email", default=True, parent=None,
          label="Selected / rejected e-mail",
          description="Mail to the candidate when you select or reject them."),
@@ -72,43 +72,32 @@ FEATURES: list[dict[str, Any]] = [
          description="The e-mail button opens the interview directly. "
                      "OFF = the candidate must log in or register first."),
 
-    # ---- interview ----
-    dict(key="follow_ups", group="interview", default=True, parent=None,
-         label="Follow-up questions", legacy=True,
-         description="The AI may ask a follow-up after some answers."),
-    dict(key="resume_questions", group="interview", default=True, parent=None,
-         label="Resume questions", legacy=True,
-         description="2 extra questions taken from the candidate's resume."),
+    # ---- interview (order = order of the interview) ----
+    # company intro -> resume questions -> follow-ups -> compulsory questions
     dict(key="company_intro", group="interview", default=True, parent=None,
          label="Company introduction",
          description="The AI speaks the approved company introduction first."),
-    dict(key="job_details", group="interview", default=True, parent=None,
-         label="Job details for candidate",
-         description="Show role, location, skills etc. before the interview."),
+    dict(key="compulsory_questions", group="interview", default=True,
+         parent=None, label="Compulsory questions",
+         description="Add up to 5 fixed questions of your own. Every candidate is asked the same questions, word for word, at the end of the interview, so answers are easy to compare. These are not AI-generated - ideal for notice period, expected salary, location or availability."),
+    dict(key="resume_questions", group="interview", default=True, parent=None,
+         label="Resume questions", legacy=True,
+         description="ON = candidates who have a resume get 2 extra interview "
+                     "questions taken from that resume. OFF = no resume "
+                     "questions for anyone."),
+    dict(key="follow_ups", group="interview", default=True, parent=None,
+         label="Follow-up questions", legacy=True,
+         description="The AI may ask a follow-up after some answers."),
 
     # ---- monitoring ----
+    # ONE switch. ON = camera + face + eye / gaze + phone detection all run
+    # and the gaze report is part of the candidate report. There are no
+    # separate switches for them.
     dict(key="monitoring", group="monitoring", default=False, parent=None,
-         label="Camera monitoring", legacy=True,
-         description="Camera turns on automatically and cannot be switched off."),
-    dict(key="face_detection", group="monitoring", default=True,
-         parent="monitoring", label="Face detection", legacy=True,
-         description="Ends the interview if no face / more than one face."),
-    dict(key="eye_gaze", group="monitoring", default=True,
-         parent="face_detection", label="Eye / gaze detection", legacy=True,
-         description="Watches closed eyes and looking away."),
-    dict(key="phone_detection", group="monitoring", default=True,
-         parent="monitoring", label="Phone detection", legacy=True,
-         description="Ends the interview if a phone stays in view."),
-
-    # ---- reports ----
-    dict(key="gaze_report", group="reports", default=True, parent=None,
-         label="Eye / gaze report",
-         description="Show the per-question gaze report on the candidate page."),
+         label="Cheating detection", legacy=True,
+         description="AI proctoring for the whole interview. The camera starts automatically and the candidate cannot turn it off. It detects cheating signs: no face or more than one face, eyes looking away from the screen, and mobile phone use. Findings appear in the gaze report in each candidate's results."),
 
     # ---- candidate management ----
-    dict(key="cv_upload", group="candidates", default=True, parent=None,
-         label="CV upload",
-         description="Upload a CV / resume when adding a candidate."),
     dict(key="custom_interviewer", group="candidates", default=True,
          parent=None, label="Interviewer name & email",
          description="Use the interviewer name / email you set here in mails "
@@ -159,21 +148,9 @@ def _stored(extra: dict, key: str) -> bool:
     if key == "resume_questions":
         return extra.get("resume_questions_enabled") is not False
 
-    if key in ("monitoring", "face_detection", "eye_gaze", "phone_detection"):
+    if key == "monitoring":
         raw = extra.get("proctoring") or {}
-        field = {
-            "monitoring": "enabled",
-            "face_detection": "face",
-            "eye_gaze": "eye",
-            "phone_detection": "phone",
-        }[key]
-        # same defaults the interview itself uses when a key is missing
-        fallback = (
-            spec["default"]
-            if not raw
-            else {"enabled": False, "face": True, "eye": True, "phone": False}[field]
-        )
-        return bool(raw.get(field, fallback))
+        return bool(raw.get("enabled", spec["default"]))
 
     saved = (extra.get("features") or {}).get(key)
 
@@ -239,22 +216,9 @@ def apply(extra: dict, changes: dict[str, bool]) -> dict:
         elif key == "resume_questions":
             extra["resume_questions_enabled"] = value
 
-        elif key in ("monitoring", "face_detection", "eye_gaze",
-                     "phone_detection"):
-            raw = dict(extra.get("proctoring") or {})
-            raw.setdefault("enabled", False)
-            raw.setdefault("face", True)
-            raw.setdefault("eye", True)
-            raw.setdefault("phone", True)
-
-            field = {
-                "monitoring": "enabled",
-                "face_detection": "face",
-                "eye_gaze": "eye",
-                "phone_detection": "phone",
-            }[key]
-            raw[field] = value
-            extra["proctoring"] = raw
+        elif key == "monitoring":
+            # ONE switch: face, eye / gaze and phone detection follow it
+            extra["proctoring"] = monitoring_flags(value)
 
         else:
             saved = dict(extra.get("features") or {})
@@ -262,3 +226,60 @@ def apply(extra: dict, changes: dict[str, bool]) -> dict:
             extra["features"] = saved
 
     return extra
+
+
+# ---------------------------------------------------------
+# MONITORING  (one switch -> face + eye / gaze + phone)
+# ---------------------------------------------------------
+
+def monitoring_flags(enabled: bool) -> dict[str, bool]:
+    """Everything monitoring does is ON or OFF together."""
+
+    enabled = bool(enabled)
+
+    return {
+        "enabled": enabled,
+        "face": enabled,
+        "eye": enabled,
+        "phone": enabled,
+    }
+
+
+def monitoring_policy(configuration) -> dict[str, bool]:
+    """What the interview and the reports use. Old interviews that saved
+    face / eye / phone separately now follow the main switch too."""
+
+    raw = _extra(configuration).get("proctoring") or {}
+
+    return monitoring_flags(raw.get("enabled", False))
+
+
+# ---------------------------------------------------------
+# COMPULSORY QUESTIONS  (asked to every candidate, at the END)
+# ---------------------------------------------------------
+
+def clean_compulsory(raw) -> list[str]:
+    """Trim, drop empty / duplicate lines, keep at most 5 questions."""
+
+    seen: set[str] = set()
+    out: list[str] = []
+
+    for item in raw or []:
+        text = " ".join(str(item or "").split())[:MAX_COMPULSORY_LENGTH]
+
+        if not text or text.lower() in seen:
+            continue
+
+        seen.add(text.lower())
+        out.append(text)
+
+    return out[:MAX_COMPULSORY_QUESTIONS]
+
+
+def compulsory_questions(configuration) -> list[str]:
+    """The compulsory questions that really run (module ON + questions)."""
+
+    if not is_on(configuration, "compulsory_questions"):
+        return []
+
+    return clean_compulsory(_extra(configuration).get("compulsory_questions"))

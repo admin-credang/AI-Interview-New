@@ -258,6 +258,69 @@ def _send_via_brevo(
     return False, f"failed: Brevo API - {last}"[:400]
 
 
+def _send_via_mailbox(
+    account: dict,
+    to_email: str,
+    subject: str,
+    body: str,
+    from_name: str | None,
+    attachments: list[tuple[str, bytes, str]] | None,
+) -> tuple[bool, str]:
+    """Send through the interviewer's OWN mailbox: From = their address."""
+
+    from app.services import mailbox
+
+    try:
+        message = EmailMessage()
+        message["From"] = (
+            formataddr((from_name, account["email"]))
+            if from_name
+            else account["email"]
+        )
+        message["To"] = to_email
+        message["Subject"] = subject
+        message.set_content(str(body))
+
+        html_body = getattr(body, "html", None)
+
+        if html_body:
+            message.add_alternative(html_body, subtype="html")
+
+        for file_name, file_bytes, mime in attachments or []:
+            main_type, _, sub_type = mime.partition("/")
+            message.add_attachment(
+                file_bytes,
+                maintype=main_type or "application",
+                subtype=sub_type or "octet-stream",
+                filename=file_name,
+            )
+
+        if account.get("type") == "gmail_oauth":
+            # Gmail OAuth: HTTPS Gmail API, From = the interviewer's Gmail
+            from app.services import gmail_oauth
+
+            gmail_oauth.send_raw(account["refresh_token"], message.as_bytes())
+            return True, "sent"
+
+        server = mailbox.open_server(account)
+        server.send_message(message)
+
+        try:
+            server.quit()
+        except Exception:
+            pass
+
+        return True, "sent"
+
+    except smtplib.SMTPAuthenticationError:
+        return False, (
+            "failed: the interviewer mailbox rejected the login "
+            "(App Password changed or removed?)"
+        )
+    except Exception as exc:
+        return False, f"failed: interviewer mailbox - {type(exc).__name__}: {exc}"[:400]
+
+
 def send_email(
     to_email: str,
     subject: str,
@@ -265,6 +328,7 @@ def send_email(
     from_name: str | None = None,
     reply_to: str | None = None,
     attachments: list[tuple[str, bytes, str]] | None = None,
+    mailbox: dict | None = None,
 ) -> tuple[bool, str]:
     """
     Returns (sent, status_text). Never raises.
@@ -273,10 +337,28 @@ def send_email(
                  ("Acme Technologies" <hr@acme.com>)
     reply_to  -> where the candidate's reply goes (the interviewer)
     attachments -> [(filename, bytes, "application/pdf"), ...]
+    mailbox   -> the interviewer's own mailbox (see services/mailbox.py).
+                 When given, the mail is sent FROM that address. If that
+                 fails, the mail is sent the normal way (system address,
+                 Reply-To = interviewer) so the candidate still gets it.
     """
 
     if not to_email:
         return False, "skipped: no recipient"
+
+    mailbox_note = ""
+
+    if mailbox:
+        ok, info = _send_via_mailbox(
+            mailbox, to_email, subject, body, from_name, attachments
+        )
+
+        if ok:
+            return True, "sent (from the interviewer's mailbox)"
+
+        print(f"Interviewer mailbox failed, using system mail: {info}")
+        mailbox_note = f"{info} | sent from system address instead | "
+        reply_to = reply_to or mailbox.get("email")
 
     brevo_failure = None
 
@@ -297,7 +379,7 @@ def send_email(
         )
 
         if ok or not settings.smtp_host:
-            return ok, info
+            return ok, mailbox_note + info
 
         brevo_failure = info  # fall back to SMTP below
         print(f"Brevo failed, trying SMTP: {info}")
@@ -317,7 +399,7 @@ def send_email(
         print(body)
         print("=" * 70)
 
-        return False, "skipped: SMTP not configured"
+        return False, mailbox_note + "skipped: SMTP not configured"
 
     try:
 
@@ -378,7 +460,7 @@ def send_email(
                 except Exception:
                     pass  # mail is already accepted
 
-                return True, "sent"
+                return True, mailbox_note + "sent"
 
             except smtplib.SMTPAuthenticationError:
                 # wrong user / App Password - another route will not help
@@ -418,7 +500,7 @@ def send_email(
         if brevo_failure:
             message_text = f"{brevo_failure} | SMTP: {message_text}"
 
-        return False, f"failed: {message_text}"[:400]
+        return False, (mailbox_note + f"failed: {message_text}")[:400]
 
 
 # =========================================================
@@ -763,48 +845,6 @@ def build_invite_email(
         f"{org} invited you to interview for {job_title}.",
         inner,
         org=org,
-    )
-
-    return subject, MailBody(text, html)
-
-
-def build_ack_email(name: str, job_title: str) -> tuple[str, str]:
-
-    subject = f"We received your interview - {job_title}"
-
-    text = (
-        f"Hi {name},\n\n"
-        f"Thank you for attending the interview for \"{job_title}\".\n\n"
-        "Your responses have been submitted successfully and our "
-        "team will review them.\n\n"
-        "What happens next:\n"
-        "  - If you are selected, our team will contact you.\n"
-        "  - If you are not selected, you will receive an email.\n\n"
-        "No further action is needed from you right now.\n\n"
-        f"Regards,\n{_team()}\n"
-    )
-
-    inner = (
-        _h1("Your interview is submitted")
-        + _p(f"Hi {_e(name)},")
-        + _p(
-            "Thank you for attending the interview for "
-            f"<strong>{_e(job_title)}</strong>. Your answers reached "
-            "our team and they will review them."
-        )
-        + _p("<strong>What happens next</strong>", bottom=10)
-        + _callout(
-            "If you are selected, our team will contact you.<br>"
-            "If you are not selected, you will get an email.",
-            "info",
-        )
-        + _p("You do not need to do anything right now.", bottom=4)
-    )
-
-    html = _layout(
-        subject,
-        "Your answers were submitted. Our team will review them.",
-        inner,
     )
 
     return subject, MailBody(text, html)

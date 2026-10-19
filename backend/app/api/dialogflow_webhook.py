@@ -21,7 +21,9 @@ from app.services.question_service import (
     VALID_QUESTION_COUNTS,
     expected_question_count,
     generate_and_save_questions,
+    generated_only,
 )
+from app import features
 from app.services.report_service import generate_interview_report
 
 
@@ -1268,10 +1270,11 @@ def ensure_interview_questions(
     # Already a complete set (5 without resume, 7 with resume)
     # =====================================================
 
-    if (
-        len(existing_main_questions)
-        in VALID_QUESTION_COUNTS
-    ):
+    # Compulsory questions (client-written, saved last) are not part of
+    # the 5 / 7 generated questions, so they are not counted here.
+    generated_count = len(generated_only(existing_main_questions))
+
+    if generated_count in VALID_QUESTION_COUNTS:
 
         return existing_main_questions
 
@@ -1288,7 +1291,7 @@ def ensure_interview_questions(
                 f"Expected one of "
                 f"{VALID_QUESTION_COUNTS} "
                 f"main questions, found "
-                f"{len(existing_main_questions)}."
+                f"{generated_count}."
             ),
         )
 
@@ -1348,6 +1351,11 @@ def ensure_interview_questions(
         extra_config=configuration.extra_config,
 
         candidate_resume=candidate_resume,
+
+        # client-written questions, asked last, word for word
+        compulsory_questions=features.compulsory_questions(
+            configuration
+        ),
     )
 
     db.flush()
@@ -1367,7 +1375,7 @@ def ensure_interview_questions(
     )
 
     if (
-        len(main_questions)
+        len(generated_only(main_questions))
         != expected_question_count(candidate_resume)
     ):
 
@@ -1378,7 +1386,7 @@ def ensure_interview_questions(
                 "Question generation failed. "
                 f"Expected "
                 f"{expected_question_count(candidate_resume)}, "
-                f"found {len(main_questions)}."
+                f"found {len(generated_only(main_questions))}."
             ),
         )
 

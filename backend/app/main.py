@@ -10,6 +10,8 @@ from app.database import engine
 
 from app.api.auth.auth import router as auth_router
 from app.api.auth.google_auth import router as google_auth_router
+from app.api.google_oauth import router as gmail_oauth_router
+from app.config import settings
 
 # =========================================================
 # DASHBOARD
@@ -85,6 +87,21 @@ except Exception as exc:
 
 
 # =========================================================
+# GMAIL OAUTH COLUMNS ON users (safe on every start)
+# =========================================================
+
+for _statement in (
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS gmail_email VARCHAR(255)",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS gmail_refresh_token_enc TEXT",
+):
+    try:
+        with engine.begin() as _connection:
+            _connection.execute(text(_statement))
+    except Exception as exc:
+        print(f"Gmail column skipped: {exc}")
+
+
+# =========================================================
 # INDEXES (speed) - safe to run on every start
 # =========================================================
 
@@ -130,7 +147,19 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        settings.frontend_url.rstrip("/"),
+        *[
+            o.strip().rstrip("/")
+            for o in settings.cors_origins.split(",")
+            if o.strip()
+        ],
     ],
+    # development: localhost / 127.0.0.1 and LAN IPs (10.x, 192.168.x, 172.16-31.x),
+    # any port, http or https (e.g. https://10.13.212.48:5173)
+    allow_origin_regex=(
+        r"^https?://(localhost|127\.0\.0\.1|10(\.\d{1,3}){3}"
+        r"|192\.168(\.\d{1,3}){2}|172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2})(:\d+)?$"
+    ),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -143,6 +172,7 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(google_auth_router)
+app.include_router(gmail_oauth_router)
 
 
 # =========================================================

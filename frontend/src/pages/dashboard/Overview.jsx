@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import InterviewCard from "../../components/dashboard/InterviewCard";
@@ -33,11 +34,21 @@ function InterviewerOverview() {
   const hiring = hiringData?.summary || null;
   const allCandidates = hiringData?.candidates || [];
 
+  const [reviewQuery, setReviewQuery] = useState("");
+  const rq = reviewQuery.trim().toLowerCase();
+
   const needsReview = allCandidates
     .filter(
       (c) =>
         c.session_status === "completed" &&
         (c.decision === "pending" || c.decision === "on_hold")
+    )
+    .filter(
+      (c) =>
+        !rq ||
+        c.candidate.name?.toLowerCase().includes(rq) ||
+        c.candidate.email?.toLowerCase().includes(rq) ||
+        c.interview_title?.toLowerCase().includes(rq)
     )
     .slice(0, 5);
 
@@ -84,15 +95,6 @@ function InterviewerOverview() {
             </p>
           </div>
 
-          {isInterviewer && (
-            <button
-              onClick={() => navigate("/create-interview")}
-              className="flex items-center gap-2.5 px-7 py-4 bg-gradient-to-r from-fuchsia-600 to-purple-600 text-white rounded-2xl font-bold hover:opacity-95 transition-all shadow-xl shadow-fuchsia-500/30 whitespace-nowrap active:scale-95"
-            >
-              <IconZap />
-              Create Assessment
-            </button>
-          )}
         </div>
       </header>
 
@@ -151,7 +153,7 @@ function InterviewerOverview() {
 
           <div className="flex gap-3">
             <button
-              onClick={() => navigate("/dashboard/candidates")}
+              onClick={() => navigate("/dashboard/controls")}
               className="px-6 py-3.5 bg-gradient-to-r from-fuchsia-600 to-purple-600 text-white rounded-2xl font-bold shadow-lg shadow-fuchsia-500/30 active:scale-95 transition"
             >
               Review candidates
@@ -172,13 +174,21 @@ function InterviewerOverview() {
           <div className={`rounded-[2rem] border ${t.card} p-8`}>
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-black tracking-tight">Needs your review</h2>
-              <Link to="/dashboard/candidates" className="text-xs font-bold text-fuchsia-400 hover:underline">
+              <Link to="/dashboard/controls" className="text-xs font-bold text-fuchsia-400 hover:underline">
                 See all
               </Link>
             </div>
 
+            <input
+              type="text"
+              value={reviewQuery}
+              onChange={(e) => setReviewQuery(e.target.value)}
+              placeholder="Search name, email or interview..."
+              className={`w-full mb-4 px-4 py-2.5 rounded-xl border ${t.input} text-xs outline-none focus:ring-2 focus:ring-fuchsia-500`}
+            />
+
             {needsReview.length === 0 ? (
-              <p className="text-sm opacity-70">You are all caught up.</p>
+              <p className="text-sm opacity-70">{rq ? "No match." : "You are all caught up."}</p>
             ) : (
               <ul className="divide-y divide-white/10">
                 {needsReview.map((c) => (

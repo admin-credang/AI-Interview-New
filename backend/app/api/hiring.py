@@ -30,6 +30,7 @@ from fastapi import (
     BackgroundTasks,
     Depends,
     HTTPException,
+    Query,
     Response,
     status,
 )
@@ -54,8 +55,8 @@ from app.models.session_review import SessionReview
 from app.models.user import User
 from app.config import settings
 from app import features
+from app.services import mailbox as mailbox_service
 from app.services.email_service import (
-    build_ack_email,
     build_interviewer_report_email,
     build_invite_email,
     build_rejected_email,
@@ -124,26 +125,13 @@ def _policy(configuration) -> dict:
     """
     Monitoring rules the interviewer chose.
 
-    enabled = False  -> no camera, no face, no eye. Interview works normally.
-    enabled = True   -> camera is required, plus face and/or eye as chosen.
+    enabled = False  -> no camera, no face, no eye, no phone.
+    enabled = True   -> camera is required AND face, eye / gaze and phone
+                        detection all run (they are not separate options).
     """
 
-    extra = (
-        (configuration.extra_config or {})
-        if configuration
-        else {}
-    )
-
-    raw = extra.get("proctoring") or {}
-
-    enabled = bool(raw.get("enabled", False))
-
-    return {
-        "enabled": enabled,
-        "face": enabled and bool(raw.get("face", True)),
-        "eye": enabled and bool(raw.get("eye", True)),
-        "phone": enabled and bool(raw.get("phone", False)),
-    }
+    # ONE switch: face, eye / gaze and phone detection always follow it.
+    return features.monitoring_policy(configuration)
 
 
 def _job(configuration) -> dict:
@@ -185,9 +173,47 @@ def _interviewer(configuration, fallback_user) -> dict:
     name = (saved.get("name") or "").strip()
     email = (saved.get("email") or "").strip()
 
+    final_email = email or (getattr(fallback_user, "email", "") or "")
+
     return {
         "name": name or (getattr(fallback_user, "name", "") or ""),
-        "email": email or (getattr(fallback_user, "email", "") or ""),
+        "email": final_email,
+        # True = candidate mails are sent FROM this interviewer's own mailbox
+        "mailbox_connected": bool(
+            mailbox_service.gmail_account(fallback_user)
+            or (
+                saved
+                and mailbox_service.account_from_config(
+                    configuration, final_email
+                )
+            )
+        ),
+    }
+
+
+def _mail_identity(configuration, fallback_user) -> dict:
+    """What a candidate-facing mail needs: sender name, reply-to, mailbox."""
+
+    iv = _interviewer(configuration, fallback_user)
+    job = _job(configuration)
+    company = job["company"] or settings.company_name
+
+    # 1) Gmail OAuth of the logged-in interviewer (From = their login Gmail)
+    account = mailbox_service.gmail_account(fallback_user)
+
+    # 2) older App Password mailbox
+    if account is None and features.is_on(configuration, "custom_interviewer"):
+        account = mailbox_service.account_from_config(
+            configuration, iv["email"]
+        )
+
+    return {
+        # own mailbox -> "Priya (Acme) <priya@acme.com>", otherwise the company
+        "from_name": (
+            f"{iv['name']} ({company})" if account and iv["name"] else company
+        ),
+        "reply_to": iv["email"],
+        "mailbox": account,
     }
 
 
@@ -321,9 +347,19 @@ def _send_decision_email_task(
     to_email: str,
     subject: str,
     body: str,
+    from_name: str | None = None,
+    reply_to: str | None = None,
+    mailbox: dict | None = None,
 ) -> None:
 
-    sent, state = send_email(to_email, subject, body)
+    sent, state = send_email(
+        to_email,
+        subject,
+        body,
+        from_name=from_name,
+        reply_to=reply_to,
+        mailbox=mailbox,
+    )
 
     db = SessionLocal()
 
@@ -349,39 +385,6 @@ def _send_decision_email_task(
     finally:
         db.close()
 
-
-def _send_ack_email_task(
-    review_id,
-    to_email: str,
-    subject: str,
-    body: str,
-) -> None:
-
-    sent, _state = send_email(to_email, subject, body)
-
-    if not sent:
-        return
-
-    db = SessionLocal()
-
-    try:
-
-        review = (
-            db.query(SessionReview)
-            .filter(SessionReview.id == review_id)
-            .first()
-        )
-
-        if review is not None:
-            review.ack_sent_at = datetime.now(timezone.utc)
-            db.commit()
-
-    except Exception as exc:
-        print(f"Could not save ack status: {exc}")
-        db.rollback()
-
-    finally:
-        db.close()
 
 
 def notify_interviewer_task(session_id) -> None:
@@ -545,6 +548,12 @@ class JobDetails(BaseModel):
 class InterviewerSettings(BaseModel):
     name: str = Field("", max_length=100)
     email: str = Field("", max_length=254)
+    # interviewer's own mailbox (App Password) - candidate mails are then
+    # sent FROM their address. Empty = keep what is saved.
+    mail_password: str | None = Field(None, max_length=200)
+    mail_host: str | None = Field(None, max_length=120)
+    # True = forget the saved mailbox
+    disconnect_mailbox: bool = False
 
 
 class InterviewSettingsUpdate(BaseModel):
@@ -555,6 +564,8 @@ class InterviewSettingsUpdate(BaseModel):
     resume_questions: bool | None = None
     # who the candidates see as the interviewer + who gets the report
     interviewer: InterviewerSettings | None = None
+    # up to 5 questions every candidate gets at the END of the interview
+    compulsory_questions: list[str] | None = Field(None, max_length=20)
 
 
 class StatusRequest(BaseModel):
@@ -847,6 +858,9 @@ def list_my_interviews(
                 "question_count": extra.get("question_count"),
                 "proctoring": _policy(configuration),
                 "follow_ups": follow_up_policy(configuration),
+                "compulsory_questions": features.clean_compulsory(
+                    extra.get("compulsory_questions")
+                ),
                 "resume_questions_enabled": extra.get("resume_questions_enabled") is not False,
                 "job": _job(configuration),
                 "features": features.resolve(configuration),
@@ -868,7 +882,7 @@ def list_my_interviews(
 
 
 class FeaturesUpdate(BaseModel):
-    # {"email_ack": false, "company_intro": true, ...}
+    # {"email_invite": false, "company_intro": true, ...}
     features: dict[str, bool] = Field(default_factory=dict)
 
 
@@ -953,7 +967,14 @@ def update_interview_settings(
     extra = dict(configuration.extra_config or {})
 
     if body.proctoring is not None:
-        extra["proctoring"] = body.proctoring.model_dump()
+        extra["proctoring"] = features.monitoring_flags(
+            body.proctoring.enabled
+        )
+
+    if body.compulsory_questions is not None:
+        extra["compulsory_questions"] = features.clean_compulsory(
+            body.compulsory_questions
+        )
 
     if body.follow_ups is not None:
         extra["follow_ups"] = body.follow_ups.model_dump()
@@ -968,7 +989,44 @@ def update_interview_settings(
         if iv_email and not _EMAIL_RE.match(iv_email):
             raise HTTPException(422, "Enter a valid interviewer email address")
 
-        extra["interviewer"] = {"name": iv_name, "email": iv_email}
+        previous = dict(extra.get("interviewer") or {})
+        saved_iv = {"name": iv_name, "email": iv_email}
+
+        # keep the connected mailbox only while the address is unchanged
+        old_box = previous.get("mailbox") or {}
+
+        if (
+            old_box
+            and not body.interviewer.disconnect_mailbox
+            and (old_box.get("for_email") or "").lower() == iv_email
+        ):
+            saved_iv["mailbox"] = old_box
+
+        new_password = (body.interviewer.mail_password or "").strip()
+
+        if new_password:
+            if not iv_email:
+                raise HTTPException(
+                    422, "Enter the interviewer email before the mailbox password"
+                )
+
+            try:
+                connection = mailbox_service.verify(
+                    iv_email, new_password, body.interviewer.mail_host
+                )
+                saved_iv["mailbox"] = {
+                    **connection,
+                    "for_email": iv_email,
+                    "password_enc": mailbox_service.encrypt(
+                        mailbox_service.clean_password(
+                            new_password, connection["host"]
+                        )
+                    ),
+                }
+            except mailbox_service.MailboxError as exc:
+                raise HTTPException(422, str(exc))
+
+        extra["interviewer"] = saved_iv
 
     if body.job is not None:
         job = body.job.model_dump()
@@ -994,6 +1052,9 @@ def update_interview_settings(
             is not False
         ),
         "interviewer": _interviewer(configuration, current_user),
+        "compulsory_questions": features.clean_compulsory(
+            (configuration.extra_config or {}).get("compulsory_questions")
+        ),
     }
 
 
@@ -1073,6 +1134,7 @@ def _send_invite_task(
     from_name: str | None,
     reply_to: str | None,
     interview_id: UUID | None = None,
+    mailbox: dict | None = None,
 ) -> None:
     """
     messages = [(to_email, subject, body), ...] - one per candidate.
@@ -1088,6 +1150,7 @@ def _send_invite_task(
             body,
             from_name=from_name,
             reply_to=reply_to,
+            mailbox=mailbox,
         )
 
         if interview_id is None:
@@ -1215,6 +1278,7 @@ def invite_candidates(
     base = settings.frontend_url.rstrip("/")
 
     interviewer = _interviewer(configuration, current_user)
+    identity = _mail_identity(configuration, current_user)
 
     # module "Invitation e-mail": OFF = nothing is mailed, link is shared by hand
     email_on = features.is_on(configuration, "email_invite")
@@ -1289,9 +1353,10 @@ def invite_candidates(
     background_tasks.add_task(
         _send_invite_task,
         messages,
-        company,
-        interviewer["email"] or current_user.email,
+        identity["from_name"],
+        identity["reply_to"] or current_user.email,
         interview_id,
+        identity["mailbox"],
     )
 
     sessions = (
@@ -1307,6 +1372,66 @@ def invite_candidates(
         "invalid": invalid,
         "role": role,
         "link": f"{base}/interviews/{interview.id}",
+        "invitations": _invitation_rows(
+            configuration,
+            sessions,
+            _users_by_email(db, _all_invited_emails([configuration])),
+        ),
+    }
+
+
+@router.delete("/interviews/{interview_id}/invitations")
+def remove_invitation(
+    interview_id: UUID,
+    email: str = Query(..., max_length=254),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Remove one candidate from THIS interview's invited list
+    (the trash button in Interview Controls > Candidates).
+
+    The invitation (ID, resume, mail status) is deleted, so that ID
+    stops working. Interview sessions that already exist are NOT touched -
+    their answers and reports stay on the Candidates page.
+    """
+
+    _require_recruiter(current_user)
+    _owned_interview(db, current_user, interview_id)
+
+    configuration = _get_configuration(db, interview_id)
+
+    if configuration is None:
+        raise HTTPException(404, "Interview configuration not found")
+
+    address = (email or "").strip().lower()
+
+    extra = dict(configuration.extra_config or {})
+    records = dict(extra.get("invitations") or {})
+    legacy = [str(e).strip().lower() for e in (extra.get("invited") or []) if e]
+
+    if address not in {str(k).strip().lower() for k in records} and address not in legacy:
+        raise HTTPException(404, "That candidate is not on this interview.")
+
+    extra["invitations"] = {
+        k: v for k, v in records.items()
+        if str(k).strip().lower() != address
+    }
+    extra["invited"] = [e for e in legacy if e != address]
+
+    configuration.extra_config = extra
+
+    db.commit()
+    db.refresh(configuration)
+
+    sessions = (
+        db.query(InterviewSession)
+        .filter(InterviewSession.interview_id == interview_id)
+        .all()
+    )
+
+    return {
+        "success": True,
         "invitations": _invitation_rows(
             configuration,
             sessions,
@@ -2290,9 +2415,7 @@ def get_candidate_detail(
             # interviewer-only; None when nothing was measured
             "gaze": (
                 build_gaze_report(review.gaze_metrics)
-                if review
-                and policy["eye"]
-                and features.is_on(configuration, "gaze_report")
+                if review and policy["eye"]
                 else None
             ),
         },
@@ -2452,6 +2575,8 @@ def set_decision(
                 feedback,
             )
 
+        identity = _mail_identity(decision_config, current_user)
+
         review.notification_status = "queued"
         review.notified_at = None
 
@@ -2468,6 +2593,9 @@ def set_decision(
             to_email,
             subject,
             text,
+            identity["from_name"],
+            identity["reply_to"],
+            identity["mailbox"],
         )
 
     else:
@@ -2493,8 +2621,8 @@ def interview_submitted(
 ):
     """
     Called by the candidate screen right after the interview ends.
-    Sends the "thanks - we will call you if selected, otherwise
-    you will get an e-mail" message once.
+    Tells the interviewer the report is ready (once). There is no
+    "thank you, we received your interview" mail to the candidate.
     """
 
     session = _own_session(db, current_user, session_id)
@@ -2515,32 +2643,10 @@ def interview_submitted(
             session.id,
         )
 
-        if not features.is_on(
-            _get_configuration(db, session.interview_id), "email_ack"
-        ):
-            # module "Submitted e-mail" is OFF: mark as handled so the
-            # interviewer report mail above is not repeated
-            review.ack_sent_at = datetime.now(timezone.utc)
-            db.commit()
-
-        else:
-            subject, text = build_ack_email(
-                current_user.name,
-                interview.title if interview else "your interview",
-            )
-
-            review_id = review.id
-            to_email = current_user.email
-
-            db.commit()
-
-            background_tasks.add_task(
-                _send_ack_email_task,
-                review_id,
-                to_email,
-                subject,
-                text,
-            )
+        # remembers that the report mail was handled, so it is never
+        # repeated when the candidate screen calls this again
+        review.ack_sent_at = datetime.now(timezone.utc)
+        db.commit()
 
     else:
         db.commit()

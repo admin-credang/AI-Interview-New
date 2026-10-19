@@ -199,9 +199,10 @@ def resume_text_for(configuration, user) -> str:
         )
         return ""
 
-    if not resume_questions_enabled(record):
-        print(f"RESUME CHECK: resume switched OFF for {email!r}")
-        return ""
+    # NOTE: there is ONE common switch for the whole interview (checked
+    # above). The old per-candidate ON/OFF flag is ignored on purpose:
+    # common ON  -> every candidate who has a resume gets resume questions
+    # common OFF -> nobody does.
 
     resume = record.get("resume") or {}
     text = str(resume.get("text") or "")

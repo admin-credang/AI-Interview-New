@@ -39,6 +39,17 @@ class User(Base):
         nullable=True
     )
 
+    # Gmail OAuth: candidate mails are sent FROM this Gmail account
+    gmail_email: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True
+    )
+
+    gmail_refresh_token_enc: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True
+    )
+
     role: Mapped[str] = mapped_column(
         String(20),
         nullable=False

@@ -62,27 +62,28 @@ from app.models.session_review import SessionReview
 
 
 # =========================================================
-# DATABASE COMPATIBILITY SETUP
+# DATABASE COMPATIBILITY
 # =========================================================
 
 def initialize_database_compatibility():
     """
-    Run compatibility changes when the application starts.
+    Apply compatibility changes to an existing database.
 
-    For production, prefer running schema migrations separately.
-    These operations may run again when a serverless instance starts.
+    Database migrations should ideally be managed separately
+    in production. Errors here are logged without exposing
+    credentials in API responses.
     """
 
-    # Create session_reviews table if it does not exist.
+    # Create session_reviews table if missing.
     try:
         SessionReview.__table__.create(
             bind=engine,
             checkfirst=True,
         )
     except Exception as exc:
-        print(f"Could not create session_reviews table: {exc}")
+        print(f"SessionReview table setup skipped: {exc}")
 
-    # Add gaze_metrics column if missing.
+    # Add gaze_metrics column.
     try:
         with engine.begin() as connection:
             connection.execute(
@@ -92,9 +93,9 @@ def initialize_database_compatibility():
                 )
             )
     except Exception as exc:
-        print(f"gaze_metrics column skipped: {exc}")
+        print(f"gaze_metrics setup skipped: {exc}")
 
-    # Add Gmail OAuth columns if missing.
+    # Add Gmail OAuth columns.
     gmail_statements = [
         """
         ALTER TABLE users
@@ -113,7 +114,7 @@ def initialize_database_compatibility():
         except Exception as exc:
             print(f"Gmail column setup skipped: {exc}")
 
-    # Create indexes if they do not exist.
+    # Create indexes if missing.
     index_statements = [
         """
         CREATE INDEX IF NOT EXISTS ix_interviews_created_by
@@ -155,19 +156,12 @@ def initialize_database_compatibility():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
-    # Keep this only if the application needs these compatibility changes.
     initialize_database_compatibility()
-
     yield
-
-    # Shutdown
-    # Do not dispose the shared engine here unless your deployment
-    # architecture specifically requires it.
 
 
 # =========================================================
-# FASTAPI APP
+# FASTAPI APPLICATION
 # =========================================================
 
 app = FastAPI(
@@ -178,7 +172,7 @@ app = FastAPI(
 
 
 # =========================================================
-# CORS
+# CORS CONFIGURATION
 # =========================================================
 
 frontend_url = (
@@ -203,7 +197,7 @@ allowed_origins.extend(
     if origin.strip()
 )
 
-# Remove duplicates while preserving order.
+# Remove duplicate origins.
 allowed_origins = list(dict.fromkeys(allowed_origins))
 
 app.add_middleware(
@@ -289,7 +283,10 @@ def debug_dialogflow_routes():
     routes = []
 
     for route in app.routes:
-        if hasattr(route, "path") and "/dialogflow" in route.path:
+        if (
+            hasattr(route, "path")
+            and "/dialogflow" in route.path
+        ):
             routes.append(
                 {
                     "path": route.path,
@@ -337,8 +334,9 @@ def database_health():
             "database": "connected",
         }
 
-    except Exception:
-        # Do not expose database credentials or internal errors publicly.
+    except Exception as exc:
+        print(f"Database health check failed: {exc}")
+
         return {
             "status": "unhealthy",
             "database": "disconnected",

@@ -19,16 +19,23 @@ from app.models.question import Question
 
 load_dotenv()
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+class _LazyOpenAI:
+    """Create the OpenAI client on first use, not at import time, so a
+    missing OPENAI_API_KEY cannot crash the whole app on startup
+    (Vercel reports that as: could not import "app/main.py")."""
 
-if not OPENAI_API_KEY:
-    raise RuntimeError(
-        "OPENAI_API_KEY is not configured."
-    )
+    _inst = None
 
-client = OpenAI(
-    api_key=OPENAI_API_KEY
-)
+    def __getattr__(self, name):
+        if _LazyOpenAI._inst is None:
+            key = os.getenv("OPENAI_API_KEY")
+            if not key:
+                raise RuntimeError("OPENAI_API_KEY is not configured.")
+            _LazyOpenAI._inst = OpenAI(api_key=key)
+        return getattr(_LazyOpenAI._inst, name)
+
+
+client = _LazyOpenAI()
 
 
 # =========================================================

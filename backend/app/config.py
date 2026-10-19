@@ -12,10 +12,10 @@ class Settings(BaseSettings):
     # DIALOGFLOW CX
     # =========================================================
 
-    dialogflow_project_id: str
-    dialogflow_location: str
-    dialogflow_agent_id: str
-    dialogflow_flow_id: str
+    dialogflow_project_id: str = ""
+    dialogflow_location: str = ""
+    dialogflow_agent_id: str = ""
+    dialogflow_flow_id: str = ""
 
     # =========================================================
     # E-MAIL (optional - console fallback when not set)

@@ -66,15 +66,8 @@ from app.models.session_review import SessionReview
 # =========================================================
 
 def initialize_database_compatibility():
-    """
-    Apply compatibility changes to an existing database.
+    """Apply compatibility changes to an existing database."""
 
-    Database migrations should ideally be managed separately
-    in production. Errors here are logged without exposing
-    credentials in API responses.
-    """
-
-    # Create session_reviews table if missing.
     try:
         SessionReview.__table__.create(
             bind=engine,
@@ -83,7 +76,6 @@ def initialize_database_compatibility():
     except Exception as exc:
         print(f"SessionReview table setup skipped: {exc}")
 
-    # Add gaze_metrics column.
     try:
         with engine.begin() as connection:
             connection.execute(
@@ -95,7 +87,6 @@ def initialize_database_compatibility():
     except Exception as exc:
         print(f"gaze_metrics setup skipped: {exc}")
 
-    # Add Gmail OAuth columns.
     gmail_statements = [
         """
         ALTER TABLE users
@@ -114,7 +105,6 @@ def initialize_database_compatibility():
         except Exception as exc:
             print(f"Gmail column setup skipped: {exc}")
 
-    # Create indexes if missing.
     index_statements = [
         """
         CREATE INDEX IF NOT EXISTS ix_interviews_created_by
@@ -172,8 +162,21 @@ app = FastAPI(
 
 
 # =========================================================
-# CORS CONFIGURATION
+# API PREFIX MIDDLEWARE
+# Supports /api/health and /api/auth/login
+# by mapping them to /health and /auth/login.
 # =========================================================
+
+@app.middleware("http")
+async def strip_api_prefix(request, call_next):
+    path = request.scope["path"]
+
+    if path == "/api":
+        request.scope["path"] = "/"
+    elif path.startswith("/api/"):
+        request.scope["path"] = path[4:]
+
+    return await call_next(request)
 
 
 # =========================================================
@@ -203,7 +206,6 @@ allowed_origins.extend(
     if origin.strip()
 )
 
-# Remove duplicate origins.
 allowed_origins = list(dict.fromkeys(allowed_origins))
 
 app.add_middleware(
@@ -311,9 +313,7 @@ def root():
 
 @app.get("/health")
 def health():
-    return {
-        "status": "healthy"
-    }
+    return {"status": "healthy"}
 
 
 # =========================================================

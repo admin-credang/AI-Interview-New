@@ -175,6 +175,11 @@ app = FastAPI(
 # CORS CONFIGURATION
 # =========================================================
 
+
+# =========================================================
+# CORS CONFIGURATION
+# =========================================================
+
 frontend_url = (
     getattr(settings, "frontend_url", "") or ""
 ).strip().rstrip("/")
@@ -186,6 +191,7 @@ configured_origins = (
 allowed_origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "https://ai-interview-new-8f5k.vercel.app",
 ]
 
 if frontend_url:
@@ -203,15 +209,6 @@ allowed_origins = list(dict.fromkeys(allowed_origins))
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_origin_regex=(
-        r"^https?://("
-        r"localhost"
-        r"|127\.0\.0\.1"
-        r"|10(?:\.\d{1,3}){3}"
-        r"|192\.168(?:\.\d{1,3}){2}"
-        r"|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}"
-        r")(:\d+)?$"
-    ),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

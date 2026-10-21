@@ -265,6 +265,7 @@ def _send_via_mailbox(
     body: str,
     from_name: str | None,
     attachments: list[tuple[str, bytes, str]] | None,
+    reply_to: str | None = None,
 ) -> tuple[bool, str]:
     """Send through the interviewer's OWN mailbox: From = their address."""
 
@@ -272,12 +273,23 @@ def _send_via_mailbox(
 
     try:
         message = EmailMessage()
+
+        # "from_email" = the interviewer's address (e.g. name@company.com).
+        # Gmail uses it when it is a verified "Send mail as" address of the
+        # connected account and otherwise sends from the connected address,
+        # so the mail is never lost.
+        from_address = account.get("from_email") or account["email"]
+
         message["From"] = (
-            formataddr((from_name, account["email"]))
+            formataddr((from_name, from_address))
             if from_name
-            else account["email"]
+            else from_address
         )
         message["To"] = to_email
+
+        if reply_to:
+            message["Reply-To"] = reply_to
+
         message["Subject"] = subject
         message.set_content(str(body))
 
@@ -350,7 +362,8 @@ def send_email(
 
     if mailbox:
         ok, info = _send_via_mailbox(
-            mailbox, to_email, subject, body, from_name, attachments
+            mailbox, to_email, subject, body, from_name, attachments,
+            reply_to,
         )
 
         if ok:
@@ -711,6 +724,7 @@ def build_invite_email(
     interviewer_name: str | None = None,
     candidate_email: str | None = None,
     candidate_name: str | None = None,
+    interviewer_email: str | None = None,
 ) -> tuple[str, str]:
     """
     Interview invitation sent to ONE candidate.
@@ -761,6 +775,7 @@ def build_invite_email(
         + f"{camera_text}\n\n"
         "Good luck!\n"
         f"{interviewer_name + chr(10) if interviewer_name else ''}"
+        f"{interviewer_email + chr(10) if interviewer_email else ''}"
         f"{org}\n"
     )
 
@@ -833,6 +848,11 @@ def build_invite_email(
             + (
                 f"<strong>{_e(interviewer_name)}</strong><br>"
                 if interviewer_name
+                else ""
+            )
+            + (
+                f"{_e(interviewer_email)}<br>"
+                if interviewer_email
                 else ""
             )
             + f"{_e(org)}",

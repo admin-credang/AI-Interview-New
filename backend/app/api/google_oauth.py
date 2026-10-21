@@ -1,14 +1,5 @@
-"""
-GMAIL OAUTH  (interviewer connects the Gmail they logged in with)
 
-    GET    /google-oauth/status        connected? which Gmail?
-    GET    /google-oauth/connect-url   -> {"url": "https://accounts.google.com/..."}
-    GET    /google-oauth/callback      Google redirects here, then back to the frontend
-    DELETE /google-oauth/disconnect    forget the Gmail
-
-Rule: the Gmail account must be the SAME e-mail the interviewer logged in
-with, so candidate mails always come from the interviewer's own id.
-"""
+"""Google OAuth routes for interviewer Gmail connection."""
 
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
@@ -24,13 +15,17 @@ from app.database import get_db
 from app.models.user import User
 from app.services import gmail_oauth, mailbox
 
+
 router = APIRouter(prefix="/google-oauth", tags=["Gmail OAuth"])
 
 
 def _frontend_redirect(**params) -> RedirectResponse:
     base = settings.frontend_url.rstrip("/")
+    query = urlencode(params)
+
     return RedirectResponse(
-        f"{base}/dashboard/controls?{urlencode(params)}", status_code=302
+        f"{base}/dashboard/controls?{query}",
+        status_code=302,
     )
 
 
@@ -48,6 +43,12 @@ def status(current_user: User = Depends(get_current_user)):
 
 @router.get("/connect-url")
 def connect_url(current_user: User = Depends(get_current_user)):
+    if not gmail_oauth.configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Google OAuth is not configured on the backend.",
+        )
+
     state = jwt.encode(
         {
             "uid": str(current_user.id),
@@ -59,9 +60,12 @@ def connect_url(current_user: User = Depends(get_current_user)):
     )
 
     try:
-        url = gmail_oauth.build_auth_url(state, login_hint=current_user.email)
+        url = gmail_oauth.build_auth_url(
+            state,
+            login_hint=current_user.email,
+        )
     except gmail_oauth.GmailError as exc:
-        raise HTTPException(500, str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from None
 
     return {"url": url}
 
@@ -73,44 +77,114 @@ def callback(
     error: str | None = Query(None),
     db: Session = Depends(get_db),
 ):
+    # Google may redirect here with an error if consent was denied.
     if error:
-        return _frontend_redirect(gmail="error", reason="Google sign-in was cancelled.")
+        return _frontend_redirect(
+            gmail="error",
+            reason="Google sign-in was cancelled or permission was denied.",
+        )
 
+    # Validate the signed, time-limited state token.
     try:
-        payload = jwt.decode(state or "", SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(
+            state or "",
+            SECRET_KEY,
+            algorithms=[ALGORITHM],
+        )
+
         if payload.get("purpose") != "gmail-connect":
-            raise JWTError("wrong purpose")
-        user = db.query(User).filter(User.id == payload["uid"]).first()
+            raise JWTError("Invalid OAuth state.")
+
+        user_id = payload.get("uid")
+        if not user_id:
+            raise JWTError("Missing user ID.")
+
+        user = db.query(User).filter(User.id == user_id).first()
+
     except (JWTError, KeyError, ValueError):
         user = None
 
-    if user is None or not code:
+    if user is None:
         return _frontend_redirect(
-            gmail="error", reason="The connect link expired. Try again."
+            gmail="error",
+            reason="The connect link expired or is invalid. Please try again.",
+        )
+
+    if not code:
+        return _frontend_redirect(
+            gmail="error",
+            reason="Google did not return an authorization code. Please retry.",
         )
 
     try:
+        # Exchange the authorization code for tokens.
         result = gmail_oauth.exchange_code(code)
 
-        # candidate mails must come from the id the interviewer logged in with
-        if result["email"] != (user.email or "").strip().lower():
-            gmail_oauth.revoke(result["refresh_token"])
+        access_token = result.get("access_token")
+        refresh_token = result.get("refresh_token")
+
+        if not access_token:
+            raise gmail_oauth.GmailError(
+                "Google did not return an access token."
+            )
+
+        # Email is returned by the userinfo endpoint, not the token endpoint.
+        google_email = gmail_oauth.get_user_email(access_token)
+        login_email = (user.email or "").strip().lower()
+
+        # The connected Gmail must match the interviewer's login email.
+        if google_email != login_email:
+            if refresh_token:
+                try:
+                    gmail_oauth.revoke(refresh_token)
+                except gmail_oauth.GmailError:
+                    pass
+
             return _frontend_redirect(
                 gmail="error",
                 reason=(
-                    f"You chose {result['email']} but you are logged in as "
-                    f"{user.email}. Choose the same Gmail you logged in with."
+                    f"You connected {google_email}, but your interviewer "
+                    f"login is {login_email}. Please connect the matching account."
                 ),
             )
 
-        user.gmail_email = result["email"]
-        user.gmail_refresh_token_enc = mailbox.encrypt(result["refresh_token"])
+        # Google may omit a refresh token if a previous grant exists.
+        # Preserve the previously stored token in that case.
+        if refresh_token:
+            encrypted_token = mailbox.encrypt(refresh_token)
+            user.gmail_refresh_token_enc = encrypted_token
+
+        elif not user.gmail_refresh_token_enc:
+            raise gmail_oauth.GmailError(
+                "Google did not return a refresh token. Please try connecting "
+                "again and grant permission when prompted."
+            )
+
+        user.gmail_email = google_email
         db.commit()
 
     except (gmail_oauth.GmailError, mailbox.MailboxError) as exc:
-        return _frontend_redirect(gmail="error", reason=str(exc))
+        db.rollback()
+        return _frontend_redirect(
+            gmail="error",
+            reason=str(exc),
+        )
 
-    return _frontend_redirect(gmail="connected", email=user.gmail_email)
+    except Exception:
+        db.rollback()
+        # Avoid returning database details or secrets to the browser.
+        return _frontend_redirect(
+            gmail="error",
+            reason=(
+                "Gmail connection failed while saving the account. "
+                "Check the backend terminal for the actual error."
+            ),
+        )
+
+    return _frontend_redirect(
+        gmail="connected",
+        email=user.gmail_email,
+    )
 
 
 @router.delete("/disconnect")
@@ -118,13 +192,34 @@ def disconnect(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    token = mailbox.decrypt(current_user.gmail_refresh_token_enc or "")
+    try:
+        encrypted_token = current_user.gmail_refresh_token_enc or ""
+        token = mailbox.decrypt(encrypted_token)
 
-    if token:
-        gmail_oauth.revoke(token)
+        if token:
+            try:
+                gmail_oauth.revoke(token)
+            except gmail_oauth.GmailError:
+                # Clear the local connection even if Google is temporarily
+                # unreachable; the token can be revoked in Google Account settings.
+                pass
 
-    current_user.gmail_email = None
-    current_user.gmail_refresh_token_enc = None
-    db.commit()
+        current_user.gmail_email = None
+        current_user.gmail_refresh_token_enc = None
+        db.commit()
 
-    return {"success": True}
+        return {"success": True}
+
+    except mailbox.MailboxError:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Could not safely disconnect the saved Gmail account.",
+        ) from None
+
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Could not disconnect Gmail. Check the backend logs.",
+        ) from None

@@ -1,10 +1,7 @@
 
 import axios from "axios";
 
-// =========================================================
 // API BASE URL
-// =========================================================
-
 const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL ||
   (import.meta.env.PROD
@@ -12,10 +9,7 @@ const API_BASE_URL = (
     : "http://127.0.0.1:8000")
 ).replace(/\/+$/, "");
 
-// =========================================================
 // AXIOS INSTANCE
-// =========================================================
-
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
@@ -25,10 +19,7 @@ const api = axios.create({
   },
 });
 
-// =========================================================
 // REQUEST INTERCEPTOR
-// =========================================================
-
 api.interceptors.request.use(
   (config) => {
     try {
@@ -58,10 +49,7 @@ api.interceptors.request.use(
   }
 );
 
-// =========================================================
 // RESPONSE INTERCEPTOR
-// =========================================================
-
 api.interceptors.response.use(
   (response) => {
     if (import.meta.env.DEV) {
@@ -77,41 +65,15 @@ api.interceptors.response.use(
   (error) => {
     if (error.response) {
       const { status, data } = error.response;
-
       console.error("API ERROR:", status, data);
-
-      if (status === 401) {
-        console.warn(
-          "Authentication required. Check login credentials or access token."
-        );
-      } else if (status === 403) {
-        console.warn("Access forbidden.");
-      } else if (status === 404) {
-        console.error(
-          "API endpoint not found:",
-          error.config?.url
-        );
-      } else if (status === 422) {
-        console.warn("Validation error:", data);
-      } else if (status >= 500) {
-        console.error("Backend server error:", data);
-      }
-    } else if (error.request) {
-      console.error("No response received from backend.");
-      console.error("API base URL:", API_BASE_URL);
-      console.error("Request URL:", error.config?.url);
-      console.error("Error code:", error.code);
-      console.error("Error message:", error.message);
     } else {
-      console.error("Request setup error:", error.message);
+      console.error("API CONNECTION ERROR:", error.message);
+      console.error("API BASE URL:", API_BASE_URL);
+      console.error("REQUEST URL:", error.config?.url);
     }
 
     return Promise.reject(error);
   }
 );
-
-// =========================================================
-// EXPORT
-// =========================================================
 
 export default api;

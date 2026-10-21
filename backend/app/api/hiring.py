@@ -21,6 +21,7 @@ Candidate side (own session only, never sees scores)
 """
 
 import re
+from urllib.parse import urlparse
 from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID
@@ -207,10 +208,16 @@ def _mail_identity(configuration, fallback_user) -> dict:
             configuration, iv["email"]
         )
 
+    # Gmail OAuth: ask Gmail to send "From" the interviewer's own address
+    # (works when it is a verified "Send mail as" address; otherwise Gmail
+    # keeps the connected address, so the mail is never lost)
+    if account and account.get("type") == "gmail_oauth" and iv["email"]:
+        account = {**account, "from_email": iv["email"]}
+
     return {
-        # own mailbox -> "Priya (Acme) <priya@acme.com>", otherwise the company
+        # candidate sees the interviewer's name: "Priya (Acme)"
         "from_name": (
-            f"{iv['name']} ({company})" if account and iv["name"] else company
+            f"{iv['name']} ({company})" if iv["name"] else company
         ),
         "reply_to": iv["email"],
         "mailbox": account,
@@ -1188,6 +1195,24 @@ def _send_invite_task(
             db.close()
 
 
+def _local_link_warning(base: str) -> str | None:
+    """The e-mail link only opens on THIS computer when it points to localhost."""
+
+    host = (urlparse(base).hostname or "").lower()
+
+    if (
+        host in ("localhost", "127.0.0.1", "::1", "0.0.0.0")
+        or host.startswith(("192.168.", "10.", "172.16.", "172.17."))
+    ):
+        return (
+            f"The interview link in the e-mail points to {base}, so it "
+            "opens only on this computer. Set FRONTEND_URL in the backend "
+            ".env to your public (https) site address, then invite again."
+        )
+
+    return None
+
+
 @router.post("/interviews/{interview_id}/invite")
 def invite_candidates(
     interview_id: UUID,
@@ -1332,6 +1357,7 @@ def invite_candidates(
             question_count=extra.get("question_count"),
             access_code=record["code"],
             interviewer_name=interviewer["name"],
+            interviewer_email=interviewer["email"],
             candidate_email=address,
             candidate_name=record.get("name"),
         )
@@ -1365,10 +1391,16 @@ def invite_candidates(
         .all()
     )
 
+    link_warning = _local_link_warning(base)
+
+    if link_warning:
+        print(f"INVITE LINK WARNING: {link_warning}")
+
     return {
         "success": True,
         "queued": len(valid),
         "email_sent": send_now,
+        "link_warning": link_warning,
         "invalid": invalid,
         "role": role,
         "link": f"{base}/interviews/{interview.id}",

@@ -1,7 +1,12 @@
+
 import axios from "axios";
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "/api";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+  ? import.meta.env.VITE_API_BASE_URL.replace(/\/+$/, "")
+  : import.meta.env.PROD
+    ? "/api"
+    : "http://127.0.0.1:8000";
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -21,15 +26,11 @@ api.interceptors.request.use(
 
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
 api.interceptors.response.use(
-  (response) => {
-    return response;
-  },
+  (response) => response,
   (error) => {
     if (error.response) {
       console.error(
@@ -42,14 +43,10 @@ api.interceptors.response.use(
         console.warn("Authentication required.");
       }
     } else if (error.request) {
-      console.error(
-        "No response received from backend."
-      );
+      console.error("No response received from backend.");
+      console.error("Backend URL:", API_BASE_URL);
     } else {
-      console.error(
-        "Request Error:",
-        error.message
-      );
+      console.error("Request Error:", error.message);
     }
 
     return Promise.reject(error);

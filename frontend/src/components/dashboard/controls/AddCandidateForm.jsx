@@ -64,6 +64,7 @@ export default function AddCandidateForm({ interviewId, role, t, onAdded, emailO
       });
 
       let rows = res.data.invitations;
+      const linkWarning = res.data.link_warning;
       let note = emailOn
         ? `${name.trim()} added successfully. The invitation has been sent to ${address}.`
         : `${name.trim()} added successfully. Invitation e-mail is OFF - copy the link from the Candidates tab.`;
@@ -81,6 +82,9 @@ export default function AddCandidateForm({ interviewId, role, t, onAdded, emailO
           note += ` (CV upload failed: ${err?.response?.data?.detail || "error"})`;
         }
       }
+
+      // the e-mail link points to localhost -> it opens only on this PC
+      if (linkWarning) note += ` WARNING: ${linkWarning}`;
 
       onAdded(rows);
       setMessage(note);

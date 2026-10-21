@@ -1,10 +1,5 @@
-"""
-Gmail OAuth helpers (HTTPS only - no SMTP port needed, works on Render/Vercel).
 
-The interviewer clicks "Connect Gmail", approves the `gmail.send` permission
-and we keep a REFRESH TOKEN (encrypted). Candidate mails are then sent with the
-Gmail API, so the candidate sees the interviewer's own Gmail as the sender.
-"""
+"""Google OAuth and Gmail API helpers for the AI Interview app."""
 
 from __future__ import annotations
 
@@ -13,13 +8,16 @@ import json
 import urllib.error
 import urllib.parse
 import urllib.request
+from email.message import EmailMessage
 
 from app.config import settings
+
 
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
 SEND_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
+REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 
 SCOPES = [
     "openid",
@@ -29,20 +27,95 @@ SCOPES = [
 
 
 class GmailError(Exception):
-    """Message is safe to show to the interviewer."""
+    """Raised when Google OAuth or Gmail API operations fail."""
 
 
 def configured() -> bool:
     return bool(
-        settings.google_oauth_client_id and settings.google_oauth_client_secret
+        settings.google_oauth_client_id
+        and settings.google_oauth_client_secret
+        and settings.google_oauth_redirect_uri
     )
 
 
-def build_auth_url(state: str, login_hint: str | None = None) -> str:
+def _request_json(
+    url: str,
+    *,
+    method: str = "GET",
+    data: dict | None = None,
+    headers: dict | None = None,
+) -> dict:
+    """Make an HTTPS request and parse a JSON response."""
+    request_headers = {
+        "Accept": "application/json",
+        "User-Agent": "AI-Interview-App",
+    }
+    if headers:
+        request_headers.update(headers)
+
+    body = None
+    content_type = request_headers.get("Content-Type", "")
+
+    if data is not None:
+        if "application/json" in content_type:
+            body = json.dumps(data).encode("utf-8")
+        else:
+            body = urllib.parse.urlencode(data).encode("utf-8")
+            request_headers.setdefault(
+                "Content-Type",
+                "application/x-www-form-urlencoded",
+            )
+
+    request = urllib.request.Request(
+        url,
+        data=body,
+        headers=request_headers,
+        method=method,
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            result = json.loads(response.read().decode("utf-8"))
+
+        if not isinstance(result, dict):
+            raise GmailError("Google returned an unexpected response.")
+
+        return result
+
+    except urllib.error.HTTPError as exc:
+        try:
+            detail = exc.read().decode("utf-8", errors="replace")
+            parsed = json.loads(detail)
+            detail = str(
+                parsed.get("error_description")
+                or parsed.get("error")
+                or "Google request failed."
+            )
+        except Exception:
+            detail = "Google request failed."
+
+        raise GmailError(
+            f"Google returned HTTP {exc.code}: {detail}"
+        ) from None
+
+    except (urllib.error.URLError, TimeoutError, OSError):
+        raise GmailError(
+            "Could not reach Google. Check your internet connection."
+        ) from None
+
+    except (ValueError, UnicodeDecodeError):
+        raise GmailError("Google returned an invalid response.") from None
+
+
+def build_auth_url(
+    state: str,
+    login_hint: str | None = None,
+) -> str:
+    """Build the Google OAuth consent URL."""
     if not configured():
         raise GmailError(
-            "GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET are not set "
-            "in the server .env."
+            "Google OAuth is not configured. Check the OAuth variables "
+            "in backend/.env."
         )
 
     params = {
@@ -50,7 +123,6 @@ def build_auth_url(state: str, login_hint: str | None = None) -> str:
         "redirect_uri": settings.google_oauth_redirect_uri,
         "response_type": "code",
         "scope": " ".join(SCOPES),
-        # offline + consent = Google always returns a refresh token
         "access_type": "offline",
         "prompt": "consent",
         "include_granted_scopes": "true",
@@ -63,37 +135,18 @@ def build_auth_url(state: str, login_hint: str | None = None) -> str:
     return f"{AUTH_URL}?{urllib.parse.urlencode(params)}"
 
 
-def _post_form(url: str, data: dict, timeout: int = 20) -> dict:
-    request = urllib.request.Request(
-        url,
-        data=urllib.parse.urlencode(data).encode(),
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        method="POST",
-    )
-
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            return json.loads(response.read().decode())
-    except urllib.error.HTTPError as exc:
-        try:
-            detail = json.loads(exc.read().decode())
-        except Exception:
-            detail = {}
-        raise GmailError(
-            detail.get("error_description")
-            or detail.get("error")
-            or f"Google returned HTTP {exc.code}"
-        )
-    except Exception as exc:
-        raise GmailError(f"Could not reach Google: {type(exc).__name__}")
-
-
 def exchange_code(code: str) -> dict:
-    """code -> {access_token, refresh_token, email}"""
+    """Exchange a one-time authorization code for Google tokens."""
+    if not configured():
+        raise GmailError("Google OAuth is not configured.")
 
-    tokens = _post_form(
+    if not code:
+        raise GmailError("Google did not return an authorization code.")
+
+    result = _request_json(
         TOKEN_URL,
-        {
+        method="POST",
+        data={
             "code": code,
             "client_id": settings.google_oauth_client_id,
             "client_secret": settings.google_oauth_client_secret,
@@ -102,48 +155,24 @@ def exchange_code(code: str) -> dict:
         },
     )
 
-    access = tokens.get("access_token")
-    refresh = tokens.get("refresh_token")
-
-    if not access:
+    if not result.get("access_token"):
         raise GmailError("Google did not return an access token.")
 
-    if not refresh:
-        raise GmailError(
-            "Google did not return a refresh token. Remove this app at "
-            "myaccount.google.com/permissions and connect again."
-        )
-
-    if "https://www.googleapis.com/auth/gmail.send" not in (
-        tokens.get("scope") or ""
-    ):
-        raise GmailError(
-            "The 'Send email' permission was not ticked. Connect again and "
-            "allow it."
-        )
-
-    request = urllib.request.Request(
-        USERINFO_URL, headers={"Authorization": f"Bearer {access}"}
-    )
-
-    try:
-        with urllib.request.urlopen(request, timeout=20) as response:
-            info = json.loads(response.read().decode())
-    except Exception as exc:
-        raise GmailError(f"Could not read the Google account: {type(exc).__name__}")
-
-    email = (info.get("email") or "").strip().lower()
-
-    if not email:
-        raise GmailError("Google did not return the account email.")
-
-    return {"access_token": access, "refresh_token": refresh, "email": email}
+    return result
 
 
-def access_token_from_refresh(refresh_token: str) -> str:
-    tokens = _post_form(
+def refresh_access_token(refresh_token: str) -> dict:
+    """Get a new access token using a saved refresh token."""
+    if not configured():
+        raise GmailError("Google OAuth is not configured.")
+
+    if not refresh_token:
+        raise GmailError("No Gmail refresh token is available.")
+
+    result = _request_json(
         TOKEN_URL,
-        {
+        method="POST",
+        data={
             "client_id": settings.google_oauth_client_id,
             "client_secret": settings.google_oauth_client_secret,
             "refresh_token": refresh_token,
@@ -151,51 +180,82 @@ def access_token_from_refresh(refresh_token: str) -> str:
         },
     )
 
-    token = tokens.get("access_token")
+    if not result.get("access_token"):
+        raise GmailError("Could not refresh the Google access token.")
 
+    return result
+
+
+def get_user_email(access_token: str) -> str:
+    """Get the verified Google account email for an access token."""
+    result = _request_json(
+        USERINFO_URL,
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+
+    email = result.get("email")
+
+    if not email or result.get("email_verified") is not True:
+        raise GmailError(
+            "Google account email is missing or not verified."
+        )
+
+    return str(email).strip().lower()
+
+
+def revoke(token: str) -> None:
+    """Revoke a Google OAuth token."""
     if not token:
-        raise GmailError("Gmail access expired. Connect Gmail again.")
-
-    return token
-
-
-def send_raw(refresh_token: str, message_bytes: bytes) -> None:
-    """Send a ready RFC 2822 message through the Gmail API."""
-
-    access = access_token_from_refresh(refresh_token)
-
-    payload = json.dumps(
-        {"raw": base64.urlsafe_b64encode(message_bytes).decode()}
-    ).encode()
+        return
 
     request = urllib.request.Request(
-        SEND_URL,
-        data=payload,
+        REVOKE_URL,
+        data=urllib.parse.urlencode({"token": token}).encode("utf-8"),
         headers={
-            "Authorization": f"Bearer {access}",
-            "Content-Type": "application/json",
+            "Content-Type": "application/x-www-form-urlencoded",
         },
         method="POST",
     )
 
     try:
-        with urllib.request.urlopen(request, timeout=30):
-            return
-    except urllib.error.HTTPError as exc:
-        body = ""
-        try:
-            body = exc.read().decode()[:300]
-        except Exception:
+        with urllib.request.urlopen(request, timeout=15):
             pass
-        raise GmailError(f"Gmail API HTTP {exc.code}: {body}")
-    except Exception as exc:
-        raise GmailError(f"Gmail API failed: {type(exc).__name__}")
+    except urllib.error.HTTPError as exc:
+        # Ignore tokens already expired or revoked.
+        if exc.code not in (400, 401):
+            raise GmailError("Could not revoke the Google token.") from None
+    except (urllib.error.URLError, TimeoutError, OSError):
+        raise GmailError(
+            "Could not reach Google to revoke the token."
+        ) from None
 
 
-def revoke(token: str) -> None:
-    """Best effort: tell Google this app no longer has access."""
+def send_email(
+    access_token: str,
+    *,
+    to_email: str,
+    subject: str,
+    body: str,
+) -> dict:
+    """Send a plain-text email through the connected Gmail account."""
+    if not to_email or not to_email.strip():
+        raise GmailError("Candidate email address is required.")
 
-    try:
-        _post_form("https://oauth2.googleapis.com/revoke", {"token": token}, 10)
-    except Exception:
-        pass
+    message = EmailMessage()
+    message["To"] = to_email.strip()
+    message["Subject"] = subject
+    message.set_content(body)
+
+    raw_message = base64.urlsafe_b64encode(
+        message.as_bytes()
+    ).decode("ascii").rstrip("=")
+
+    return _request_json(
+        SEND_URL,
+        method="POST",
+        data={"raw": raw_message},
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+        },
+    )

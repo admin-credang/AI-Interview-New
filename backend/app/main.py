@@ -162,24 +162,6 @@ app = FastAPI(
 
 
 # =========================================================
-# API PREFIX MIDDLEWARE
-# Supports /api/health and /api/auth/login
-# by mapping them to /health and /auth/login.
-# =========================================================
-
-@app.middleware("http")
-async def strip_api_prefix(request, call_next):
-    path = request.scope["path"]
-
-    if path == "/api":
-        request.scope["path"] = "/"
-    elif path.startswith("/api/"):
-        request.scope["path"] = path[4:]
-
-    return await call_next(request)
-
-
-# =========================================================
 # CORS CONFIGURATION
 # =========================================================
 
@@ -194,6 +176,14 @@ configured_origins = (
 allowed_origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "https://localhost:5173",
+    "https://127.0.0.1:5173",
+
+    # Local network frontend
+    "https://10.13.212.48:5173",
+    "http://10.13.212.48:5173",
+
+    # Deployed frontend
     "https://ai-interview-new-8f5k.vercel.app",
 ]
 
@@ -206,7 +196,10 @@ allowed_origins.extend(
     if origin.strip()
 )
 
+# Remove duplicate origins
 allowed_origins = list(dict.fromkeys(allowed_origins))
+
+print("CORS allowed origins:", allowed_origins)
 
 app.add_middleware(
     CORSMiddleware,
@@ -215,6 +208,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# =========================================================
+# API PREFIX MIDDLEWARE
+# Supports /api/health and /api/auth/login
+# =========================================================
+
+@app.middleware("http")
+async def strip_api_prefix(request, call_next):
+    path = request.scope["path"]
+
+    if path == "/api":
+        request.scope["path"] = "/"
+    elif path.startswith("/api/"):
+        request.scope["path"] = path[4:]
+
+    return await call_next(request)
 
 
 # =========================================================

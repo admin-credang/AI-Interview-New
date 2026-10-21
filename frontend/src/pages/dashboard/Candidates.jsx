@@ -33,15 +33,15 @@ const TABS = [
   { id: "on_hold", label: "On hold" },
 ];
 
-export default function Candidates() {
+export function useReviewState(embeddedInterviewId = "", enabled = true) {
+  const embedded = Boolean(embeddedInterviewId);
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { t } = useDashboard();
-
+  
   // "View candidates" on an interview opens  /dashboard/candidates?interview=<id>
   // -> only the candidates of THAT interview are loaded and shown.
-  const scopeId = searchParams.get("interview") || "";
+  const scopeId = embeddedInterviewId || searchParams.get("interview") || "";
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -51,8 +51,13 @@ export default function Candidates() {
   const [interviewId, setInterviewId] = useState("all");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState("recent");
+  const [openId, setOpenId] = useState("");
+  const [nonce, setNonce] = useState(0);
+  const reload = () => setNonce((n) => n + 1);
 
   useEffect(() => {
+    if (!enabled) return undefined;
+
     let cancelled = false;
 
     setLoading(true);
@@ -78,7 +83,7 @@ export default function Candidates() {
     return () => {
       cancelled = true;
     };
-  }, [scopeId]);
+  }, [scopeId, enabled, nonce]);
 
   // download the candidate page code in the background, so the
   // first click on a candidate does not wait for it
@@ -96,7 +101,11 @@ export default function Candidates() {
 
   const openCandidate = (sessionId) =>
     navigate(`/dashboard/candidates/${sessionId}`, {
-      state: { back: `${location.pathname}${location.search}` },
+      state: {
+        back: embedded
+          ? `/dashboard/controls?interview=${embeddedInterviewId}`
+          : `${location.pathname}${location.search}`,
+      },
     });
 
   const interviewOptions = useMemo(() => {
@@ -164,46 +173,63 @@ export default function Candidates() {
     ]);
   };
 
+  return {
+    openId,
+    setOpenId,
+    reload,
+    embedded,
+    scopeId,
+    scope,
+    loading,
+    error,
+    candidates,
+    summary,
+    tab,
+    setTab,
+    interviewId,
+    setInterviewId,
+    query,
+    setQuery,
+    sort,
+    setSort,
+    list,
+    rankMap,
+    interviewOptions,
+    exportCsv,
+    openCandidate,
+    navigate,
+    setSearchParams,
+  };
+}
+
+export function ReviewTop({ r, t }) {
+  const {
+    embedded,
+    scopeId,
+    scope,
+    loading,
+    error,
+    candidates,
+    summary,
+    tab,
+    setTab,
+    interviewId,
+    setInterviewId,
+    query,
+    setQuery,
+    sort,
+    setSort,
+    list,
+    rankMap,
+    interviewOptions,
+    exportCsv,
+    openCandidate,
+    navigate,
+    setSearchParams,
+  } = r;
+
   return (
-    <div className="space-y-10">
-      <header className="px-1">
-        {scopeId && (
-          <button
-            onClick={() => navigate("/dashboard/controls")}
-            className="text-sm font-bold text-fuchsia-400 hover:underline mb-3"
-          >
-            ← Back to interview controls
-          </button>
-        )}
-
-        <h1 className="text-3xl md:text-4xl font-black tracking-tight">
-          {scopeId ? scope?.title || "Candidates" : "Candidates"}
-        </h1>
-
-        {scopeId ? (
-          <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
-            <span className="px-3 py-1 rounded-full border border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-300 text-xs font-bold">
-              {scope?.role || "This interview"}
-            </span>
-            <span className="opacity-70">
-              {scope ? `${scope.invited} invited · ` : ""}
-              only candidates of this interview
-            </span>
-            <button
-              onClick={() => setSearchParams({})}
-              className="text-xs font-bold underline opacity-80 hover:opacity-100"
-            >
-              Show all interviews
-            </button>
-          </div>
-        ) : (
-          <p className="opacity-70 mt-2 text-sm">
-            Everyone who attended your interviews. Open a candidate to read the AI
-            analysis, check monitoring and select or reject.
-          </p>
-        )}
-      </header>
-
+    <div className={embedded ? "space-y-6" : "space-y-10"}>
       <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
         <StatCard
           title="Attended"
@@ -235,6 +261,17 @@ export default function Candidates() {
         />
       </section>
 
+      {embedded ? (
+        <div className="flex justify-end">
+          <button
+            onClick={exportCsv}
+            disabled={list.length === 0}
+            className="px-4 py-3 rounded-2xl border border-white/15 hover:bg-white/10 text-sm font-bold whitespace-nowrap transition disabled:opacity-40"
+          >
+            Export CSV
+          </button>
+        </div>
+      ) : (
       <section
         className={`p-5 rounded-[2rem] border ${t.card} flex flex-col gap-4 backdrop-blur-2xl`}
       >
@@ -253,17 +290,6 @@ export default function Candidates() {
           </div>
 
           <div className="flex gap-3 w-full md:w-auto">
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value)}
-            className={`px-4 py-3 rounded-2xl border ${t.input} outline-none focus:ring-2 focus:ring-fuchsia-500 w-full md:w-44`}
-          >
-            <option value="recent" className="bg-slate-900 text-white">Most recent</option>
-            <option value="score_desc" className="bg-slate-900 text-white">Highest score</option>
-            <option value="score_asc" className="bg-slate-900 text-white">Lowest score</option>
-            <option value="name" className="bg-slate-900 text-white">Name A-Z</option>
-          </select>
-
           {!scopeId && (
             <select
               value={interviewId}
@@ -307,7 +333,39 @@ export default function Candidates() {
           ))}
         </div>
       </section>
+      )}
+    </div>
+  );
+}
 
+export function ReviewTable({ r, t }) {
+  const {
+    embedded,
+    scopeId,
+    scope,
+    loading,
+    error,
+    candidates,
+    summary,
+    tab,
+    setTab,
+    interviewId,
+    setInterviewId,
+    query,
+    setQuery,
+    sort,
+    setSort,
+    list,
+    rankMap,
+    interviewOptions,
+    exportCsv,
+    openCandidate,
+    navigate,
+    setSearchParams,
+  } = r;
+
+  return (
+    <>
       {loading ? (
         <p className="text-sm opacity-70 animate-pulse px-2">Loading candidates...</p>
       ) : error ? (
@@ -414,6 +472,57 @@ export default function Candidates() {
           </div>
         </section>
       )}
+    </>
+  );
+}
+
+export default function Candidates() {
+  const { t } = useDashboard();
+  const r = useReviewState("");
+  const { scopeId, scope, navigate, setSearchParams } = r;
+
+  return (
+    <div className="space-y-10">
+      <header className="px-1">
+        {scopeId && (
+          <button
+            onClick={() => navigate("/dashboard/controls")}
+            className="text-sm font-bold text-fuchsia-400 hover:underline mb-3"
+          >
+            ← Back to interview controls
+          </button>
+        )}
+
+        <h1 className="text-3xl md:text-4xl font-black tracking-tight">
+          {scopeId ? scope?.title || "Candidates" : "Candidates"}
+        </h1>
+
+        {scopeId ? (
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+            <span className="px-3 py-1 rounded-full border border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-300 text-xs font-bold">
+              {scope?.role || "This interview"}
+            </span>
+            <span className="opacity-70">
+              {scope ? `${scope.invited} invited · ` : ""}
+              only candidates of this interview
+            </span>
+            <button
+              onClick={() => setSearchParams({})}
+              className="text-xs font-bold underline opacity-80 hover:opacity-100"
+            >
+              Show all interviews
+            </button>
+          </div>
+        ) : (
+          <p className="opacity-70 mt-2 text-sm">
+            Everyone who attended your interviews. Open a candidate to read the AI
+            analysis, check monitoring and select or reject.
+          </p>
+        )}
+      </header>
+
+      <ReviewTop r={r} t={t} />
+      <ReviewTable r={r} t={t} />
     </div>
   );
 }

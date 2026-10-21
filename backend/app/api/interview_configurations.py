@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app import features
 from app.database import get_db
 
 from app.models.interview import Interview
@@ -249,28 +250,8 @@ def get_configuration(
                     "voice_name": extra.get("voice_name", DEFAULT_VOICE),
                     # monitoring rules the interviewer chose for THIS
                     # interview (the candidate screen needs them)
-                    "proctoring": {
-                        "enabled": bool(
-                            (extra.get("proctoring") or {}).get(
-                                "enabled", False
-                            )
-                        ),
-                        "face": bool(
-                            (extra.get("proctoring") or {}).get(
-                                "face", True
-                            )
-                        ),
-                        "eye": bool(
-                            (extra.get("proctoring") or {}).get(
-                                "eye", True
-                            )
-                        ),
-                        "phone": bool(
-                            (extra.get("proctoring") or {}).get(
-                                "phone", False
-                            )
-                        ),
-                    },
+                    # ONE switch: face, eye / gaze and phone follow it
+                    "proctoring": features.monitoring_policy(configuration),
                 }
             }
         )

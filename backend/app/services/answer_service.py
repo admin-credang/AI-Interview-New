@@ -111,6 +111,10 @@ def get_follow_up_slots(
             .filter(
                 Question.session_id == session_id,
                 Question.parent_question_id.is_(None),
+
+                # client-written compulsory questions never get a
+                # follow-up, so they are not follow-up candidates
+                Question.category != "compulsory",
             )
             .all()
         )
@@ -810,6 +814,8 @@ def process_answer(
                 and follow_ups_used
                 < follow_up_limit
                 and not candidate_skipped
+                # compulsory questions are asked as written, no follow-up
+                and str(question.category or "").lower() != "compulsory"
             )
 
             print(

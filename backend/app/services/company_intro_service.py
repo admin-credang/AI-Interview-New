@@ -524,11 +524,28 @@ def clean_intro_text(text: str) -> str:
     return value.strip()[:MAX_INTRO_CHARS]
 
 
+def _job_lines(job: dict | None) -> str:
+    """The interviewer's Job Details as plain lines (empty ones left out)."""
+
+    job = job or {}
+    skills = ", ".join(str(s).strip() for s in (job.get("skills") or []) if str(s).strip())
+
+    lines = [
+        ("Location", str(job.get("location") or "").strip()),
+        ("Experience", str(job.get("experience") or "").strip()),
+        ("Skills", skills),
+        ("Responsibilities", str(job.get("responsibilities") or "").strip()),
+    ]
+
+    return "\n".join(f"- {label}: {value}" for label, value in lines if value)
+
+
 def generate_company_intro(
     page_text: str,
     role: str | None = None,
     company: str | None = None,
     role_context: str | None = None,
+    job: dict | None = None,
 ) -> str:
 
     system = (
@@ -540,25 +557,33 @@ def generate_company_intro(
 
     user = f"""
 Write a spoken introduction in TWO parts. Spoken at a normal pace it
-should take about 25 seconds for part 1 and about 25 seconds for part 2.
+should take about 25 seconds for part 1 and about 40 seconds for part 2.
 
 PART 1 - the company (about 55 to 65 words, short and crisp):
 - who the company is and what it does
 - its key business areas
 
-PART 2 - the role (about 55 to 65 words), only if a role is given below
+PART 2 - the role (about 85 to 100 words), only if a role is given below
 (you MUST include it):
 - first say this interview is for the <role> role
 - then explain in plain words what a person in that role does, in the style:
   "A data analyst is someone who collects, cleans, interprets and visualizes
   organizational data to turn raw numbers into actionable decisions."
-  Use the interview description and the page text if they help, otherwise
-  the usual meaning of the job title. Keep it general (no long lists, no
-  salary, no promises).
+- then work in EVERY item listed under "Job details" below, in natural
+  spoken sentences: where the job is based (location), the experience
+  expected, the key skills (say them in a sentence, not as a list of
+  bullets) and what the person will mainly be responsible for (summarise
+  the responsibilities in one or two sentences).
+- Leave out any detail that is not listed. Never invent details.
+- Use the interview description and the page text if they help. No salary,
+  no promises.
 
 Rules:
-- Use ONLY facts found in the page text. Do not invent numbers, clients,
-  locations or awards. If something is not stated, leave it out.
+- Company facts: use ONLY facts found in the page text. Do not invent
+  numbers, clients, locations or awards. If something is not stated, leave
+  it out.
+- Job facts (role, location, experience, skills, responsibilities): use the
+  "Job details" below exactly as given by the interviewer; they are trusted.
 - Spoken style: plain sentences, no bullet points, no markdown, no emojis,
   no URLs.
 - Start with a warm welcome, for example "Welcome to <company>."
@@ -569,6 +594,8 @@ Rules:
 Company name (may be empty): {company or ""}
 Role being hired (may be empty): {role or ""}
 Interview description from the interviewer (trusted, may be empty): {role_context or ""}
+Job details from the interviewer (trusted, may be empty):
+{_job_lines(job) or "(none)"}
 
 <page_text>
 {page_text}
@@ -600,13 +627,14 @@ def build_intro_from_url(
     role: str | None = None,
     company: str | None = None,
     role_context: str | None = None,
+    job: dict | None = None,
 ) -> tuple[str, str]:
     """Returns (final_url, intro_text)."""
 
     final_url, html = fetch_page(url)
     page_text = extract_page_text(html)
 
-    text = generate_company_intro(page_text, role, company, role_context)
+    text = generate_company_intro(page_text, role, company, role_context, job)
 
     # Safety net: the role must always be spoken, even if the AI skipped it.
     role_name = (role or "").strip()

@@ -12,7 +12,6 @@ import {
   IconDashboard,
   IconHelp,
   IconLogOut,
-  IconMail,
   IconMoon,
   IconSearch,
   IconSettings,
@@ -29,12 +28,8 @@ import {
 
 const INTERVIEWER_NAV = [
   { to: "/dashboard", label: "Overview Dashboard", icon: IconDashboard, end: true },
-  { to: "/dashboard/candidates", label: "Candidates", icon: IconUsers },
   { to: "/dashboard/controls", label: "Interview Controls", icon: IconShield },
-  { to: "/dashboard/client-settings", label: "Client Settings", icon: IconMail },
-  { to: "/dashboard/assessments", label: "My Assessments", icon: IconBriefcase },
   { to: "/dashboard/analytics", label: "Analytics & Reports", icon: IconBarChart },
-  { to: "/dashboard/configuration", label: "Configuration", icon: IconSettings },
 ];
 
 // Candidates only see their interviews and the process. No scores, no reports.

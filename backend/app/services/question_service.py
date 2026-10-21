@@ -19,16 +19,23 @@ from app.models.question import Question
 
 load_dotenv()
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+class _LazyOpenAI:
+    """Create the OpenAI client on first use, not at import time, so a
+    missing OPENAI_API_KEY cannot crash the whole app on startup
+    (Vercel reports that as: could not import "app/main.py")."""
 
-if not OPENAI_API_KEY:
-    raise RuntimeError(
-        "OPENAI_API_KEY is not configured."
-    )
+    _inst = None
 
-client = OpenAI(
-    api_key=OPENAI_API_KEY
-)
+    def __getattr__(self, name):
+        if _LazyOpenAI._inst is None:
+            key = os.getenv("OPENAI_API_KEY")
+            if not key:
+                raise RuntimeError("OPENAI_API_KEY is not configured.")
+            _LazyOpenAI._inst = OpenAI(api_key=key)
+        return getattr(_LazyOpenAI._inst, name)
+
+
+client = _LazyOpenAI()
 
 
 # =========================================================
@@ -49,6 +56,26 @@ VALID_QUESTION_COUNTS = (
     QUESTION_COUNT,
     QUESTION_COUNT + RESUME_EXTRA_QUESTIONS,
 )
+
+
+# Compulsory questions (written by the client) are saved as extra MAIN
+# questions AFTER the generated ones. They are not part of the 5 / 7 above.
+COMPULSORY_CATEGORY = "compulsory"
+
+
+def is_compulsory(question) -> bool:
+    """True for a client-written compulsory question."""
+
+    return (
+        str(getattr(question, "category", "") or "").strip().lower()
+        == COMPULSORY_CATEGORY
+    )
+
+
+def generated_only(questions) -> list:
+    """The AI-generated main questions (compulsory ones left out)."""
+
+    return [q for q in questions if not is_compulsory(q)]
 
 
 def expected_question_count(candidate_resume: str | None) -> int:
@@ -771,7 +798,7 @@ def save_generated_questions(
     # CHECK EXISTING MAIN QUESTIONS
     # =====================================================
 
-    existing_main_questions = (
+    existing_main_questions = generated_only(
         db.query(Question)
         .filter(
             Question.session_id == session_id,
@@ -909,6 +936,68 @@ def save_generated_questions(
 
 
 # =========================================================
+# COMPULSORY QUESTIONS (client-written, always LAST)
+# =========================================================
+
+def append_compulsory_questions(
+    db: Session,
+    session_id,
+    texts: list[str] | None,
+) -> list[Question]:
+    """
+    Add the client's compulsory questions after the generated ones.
+
+    * Asked exactly as written (no AI rewriting).
+    * They are normal MAIN questions, so the interview moves through them
+      like any other question, but they never get a follow-up.
+    * Safe to call twice: if the session already has them, nothing is added.
+
+    This function does NOT commit.
+    """
+
+    texts = [t for t in (texts or []) if str(t or "").strip()]
+
+    if not texts:
+        return []
+
+    main = (
+        db.query(Question)
+        .filter(
+            Question.session_id == session_id,
+            Question.parent_question_id.is_(None),
+        )
+        .order_by(Question.question_order.asc())
+        .all()
+    )
+
+    if any(is_compulsory(q) for q in main):
+        return [q for q in main if is_compulsory(q)]
+
+    next_order = max((q.question_order or 0 for q in main), default=0) + 1
+
+    saved: list[Question] = []
+
+    for offset, text in enumerate(texts):
+
+        question = Question(
+            question=str(text).strip(),
+            category=COMPULSORY_CATEGORY,
+            difficulty="medium",
+            type="behavioral",
+            session_id=session_id,
+            question_order=next_order + offset,
+            parent_question_id=None,
+        )
+
+        db.add(question)
+        saved.append(question)
+
+    db.flush()
+
+    return saved
+
+
+# =========================================================
 # GENERATE + SAVE QUESTIONS
 # =========================================================
 
@@ -922,9 +1011,11 @@ def generate_and_save_questions(
     construct_from_answers: bool,
     extra_config: dict | None = None,
     candidate_resume: str | None = None,
+    compulsory_questions: list[str] | None = None,
 ) -> list[Question]:
     """
-    Generate and save the MAIN questions (5, or 7 with a resume).
+    Generate and save the MAIN questions (5, or 7 with a resume), then the
+    client's compulsory questions (if any) as the LAST main questions.
 
     This function does NOT commit.
 
@@ -935,7 +1026,7 @@ def generate_and_save_questions(
     # CHECK EXISTING MAIN QUESTIONS
     # =====================================================
 
-    existing_main_questions = (
+    existing_main_questions = generated_only(
         db.query(Question)
         .filter(
             Question.session_id == session_id,
@@ -1004,6 +1095,12 @@ def generate_and_save_questions(
             session_id=session_id,
             questions=generated_questions,
         )
+    )
+
+    append_compulsory_questions(
+        db=db,
+        session_id=session_id,
+        texts=compulsory_questions,
     )
 
     return saved_questions

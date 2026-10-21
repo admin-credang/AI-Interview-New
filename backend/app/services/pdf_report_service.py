@@ -23,7 +23,15 @@ from reportlab.platypus import (
 )
 from sqlalchemy.orm import Session
 
+from app.models.answer import Answer
+from app.models.feedback import Feedback
+from app.models.interview import Interview
+from app.models.interview_configuration import InterviewConfiguration
+from app.models.question import Question
+from app.models.score import Score
+from app.models.session import InterviewSession
 from app.models.session_review import SessionReview
+from app.models.user import User
 from app.services.gaze_analysis_service import build_gaze_report
 from app.services.report_service import generate_interview_report
 
@@ -122,69 +130,223 @@ def _rating_text(score):
 # =========================================================
 
 def collect_report_data(db: Session, session_id) -> dict:
+    session = (
+        db.query(InterviewSession)
+        .filter(InterviewSession.id == session_id)
+        .first()
+    )
+    if session is None:
+        raise ValueError("Interview session not found")
+
     report = generate_interview_report(db, session_id)
-    canonical = report.report_data or {}
-    candidate = canonical.get("candidate") or {}
-    interview = canonical.get("interview") or {}
-    session = canonical.get("session") or {}
+    interview = (
+        db.query(Interview)
+        .filter(Interview.id == session.interview_id)
+        .first()
+    )
+    candidate = (
+        db.query(User)
+        .filter(User.id == session.candidate_id)
+        .first()
+    )
+    configuration = (
+        db.query(InterviewConfiguration)
+        .filter(InterviewConfiguration.interview_id == session.interview_id)
+        .first()
+    )
     review = (
         db.query(SessionReview)
         .filter(SessionReview.session_id == session_id)
         .first()
     )
+    reviewer = (
+        db.query(User)
+        .filter(User.id == review.decided_by)
+        .first()
+        if review and review.decided_by
+        else None
+    )
 
-    skills = {
-        item["criterion"]: item["score"]
-        for item in (canonical.get("score") or {}).get("competencies", [])
-    }
+    questions = (
+        db.query(Question)
+        .filter(Question.session_id == session_id)
+        .all()
+    )
+    answers = (
+        db.query(Answer)
+        .filter(Answer.session_id == session_id)
+        .order_by(Answer.answered_at.asc(), Answer.id.asc())
+        .all()
+    )
+    answer_by_question = {}
+    for answer in answers:
+        answer_by_question[answer.question_id] = answer
+
+    answer_ids = [answer.id for answer in answer_by_question.values()]
+    scores = (
+        db.query(Score)
+        .filter(Score.answer_id.in_(answer_ids))
+        .all()
+        if answer_ids
+        else []
+    )
+    feedbacks = (
+        db.query(Feedback)
+        .filter(Feedback.answer_id.in_(answer_ids))
+        .all()
+        if answer_ids
+        else []
+    )
+    score_by_answer = {score.answer_id: score for score in scores}
+    feedback_by_answer = {item.answer_id: item for item in feedbacks}
+
+    mains = sorted(
+        (question for question in questions if question.parent_question_id is None),
+        key=lambda question: question.question_order,
+    )
+    children = {}
+    for question in questions:
+        if question.parent_question_id is not None:
+            children.setdefault(question.parent_question_id, []).append(question)
+
+    ordered_questions = []
+    for main in mains:
+        ordered_questions.append(main)
+        ordered_questions.extend(
+            sorted(
+                children.get(main.id, []),
+                key=lambda question: question.created_at,
+            )
+        )
+
+    criteria = (
+        "relevance",
+        "accuracy",
+        "technical_knowledge",
+        "completeness",
+        "communication",
+    )
+    skill_values = {criterion: [] for criterion in criteria}
     qa = []
-    for item in canonical.get("questions", []):
-        scores = item.get("scores") or {}
+    for question in ordered_questions:
+        answer = answer_by_question.get(question.id)
+        score = score_by_answer.get(answer.id) if answer else None
+        feedback = feedback_by_answer.get(answer.id) if answer else None
+        score_data = (
+            {
+                **{
+                    criterion: _num(getattr(score, criterion))
+                    for criterion in criteria
+                },
+                "overall_score": _num(score.overall_score),
+            }
+            if score
+            else {}
+        )
+        if score:
+            for criterion in criteria:
+                value = score_data[criterion]
+                if value is not None:
+                    skill_values[criterion].append(value)
+
         qa.append(
             {
-                **item,
-                "overall": scores.get("overall_score"),
-                "feedback": item.get("explanation"),
+                "question_id": str(question.id),
+                "order": question.question_order,
+                "is_follow_up": question.parent_question_id is not None,
+                "question": question.question,
+                "answer": answer.answer_text if answer else None,
+                "scores": score_data,
+                "overall": score_data.get("overall_score"),
+                "feedback": feedback.feedback_text if feedback else None,
+                "explanation": feedback.feedback_text if feedback else None,
+                "evidence": [],
+                "risk_observations": [],
             }
         )
 
-    duration = session.get("duration_seconds")
-    try:
-        duration_text = (
-            f"{int(duration) // 60} min {int(duration) % 60} sec"
-            if duration is not None
-            else "Unavailable"
-        )
-    except (TypeError, ValueError, OverflowError):
-        duration_text = "Unavailable"
+    skills = {
+        criterion: _avg(values)
+        for criterion, values in skill_values.items()
+    }
+    competencies = [
+        {
+            "criterion": criterion,
+            "name": SKILL_LABELS[criterion],
+            "score": score,
+            "weight": None,
+            "rating": _rating_text(score),
+            "weighted_contribution": None,
+        }
+        for criterion, score in skills.items()
+        if score is not None
+    ]
+    events = review.proctoring_events or [] if review else []
+    job = (
+        (configuration.extra_config or {}).get("job") or {}
+        if configuration
+        else {}
+    )
+    candidate_name = candidate.name if candidate else None
+    candidate_email = candidate.email if candidate else None
+    started_at = session.started_at.isoformat() if session.started_at else None
+    decision = review.decision if review else "pending"
+    canonical = {
+        "score": {
+            "overall": _num(report.overall_score),
+            "formula": (
+                "The stored report score uses the existing report workflow "
+                "and its latest scored answer per main question."
+            ),
+            "competencies": competencies,
+        },
+        "recommendation": {},
+        "strengths": [],
+        "concerns": [],
+        "communication": {
+            "note": "Communication is represented by the saved answer scores."
+        },
+        "monitoring": {
+            "events": events,
+            "event_note": "Monitoring events are observations, not proof of misconduct.",
+            "termination_reason": review.termination_reason if review else None,
+        },
+        "human_review": {
+            "status": "reviewed" if review and review.decided_at else "pending",
+            "decision": decision,
+            "reviewer": reviewer.name if reviewer else None,
+            "decided_at": review.decided_at.isoformat()
+            if review and review.decided_at
+            else None,
+            "note": review.decision_note if review else None,
+            "ai_decision_disagreement": None,
+        },
+        "disclaimer": (
+            "Saved evaluation scores and feedback are shown as recorded. "
+            "Monitoring indicators are observational and require human review."
+        ),
+    }
 
     return {
-        "candidate_name": candidate.get("name") or "Unavailable",
-        "candidate_email": candidate.get("email") or "Unavailable",
-        "interview_title": interview.get("title") or "Interview",
-        "role": interview.get("role") or "Unavailable",
-        "company": interview.get("company") or "Unavailable",
-        "location": interview.get("location") or "Unavailable",
-        "status": session.get("status") or "unknown",
-        "started_at": session.get("started_at") or "-",
-        "interview_date": _display_datetime(
-            session.get("started_at"),
-            date_only=True,
-        ),
-        "duration": duration_text,
-        "overall_score": (canonical.get("score") or {}).get("overall"),
+        "candidate_name": candidate_name or "Unavailable",
+        "candidate_email": candidate_email or "Unavailable",
+        "interview_title": interview.title if interview else "Interview",
+        "role": job.get("role") or "Unavailable",
+        "company": job.get("company") or "Unavailable",
+        "location": job.get("location") or "Unavailable",
+        "status": session.status or "unknown",
+        "started_at": started_at or "-",
+        "interview_date": _display_datetime(started_at, date_only=True),
+        "duration": _duration(session),
+        "overall_score": _num(report.overall_score),
         "summary": report.summary,
         "skills": skills,
-        "competencies": (canonical.get("score") or {}).get("competencies", []),
+        "competencies": competencies,
         "qa": qa,
-        "events": (canonical.get("monitoring") or {}).get("events", []),
+        "events": events,
         "gaze": build_gaze_report(review.gaze_metrics) if review else None,
-        "terminated_reason": (
-            (canonical.get("monitoring") or {}).get("termination_reason")
-        ),
-        "decision": (canonical.get("human_review") or {}).get(
-            "decision", "pending"
-        ),
+        "terminated_reason": review.termination_reason if review else None,
+        "decision": decision,
         "canonical": canonical,
     }
 

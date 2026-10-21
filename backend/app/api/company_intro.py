@@ -58,6 +58,11 @@ class GenerateIntroRequest(BaseModel):
     url: str = Field(..., max_length=2048)
     role: str | None = Field(None, max_length=120)
     company: str | None = Field(None, max_length=120)
+    # the rest of the Job Details form - the AI uses all of it
+    location: str | None = Field(None, max_length=120)
+    experience: str | None = Field(None, max_length=60)
+    skills: list[str] = Field(default_factory=list, max_length=30)
+    responsibilities: str | None = Field(None, max_length=3000)
 
 
 class SaveIntroRequest(BaseModel):
@@ -150,6 +155,23 @@ def generate_intro(
         or str(saved_job.get("company") or "").strip()
     )
 
+    # Job details: what is typed in the form now, else what is saved.
+    def _pick(typed, key):
+        return (typed or "").strip() or str(saved_job.get(key) or "").strip()
+
+    skills = [
+        s.strip() for s in (body.skills or []) if s and s.strip()
+    ] or [
+        str(s).strip() for s in (saved_job.get("skills") or []) if str(s).strip()
+    ]
+
+    job_details = {
+        "location": _pick(body.location, "location"),
+        "experience": _pick(body.experience, "experience"),
+        "skills": skills[:30],
+        "responsibilities": _pick(body.responsibilities, "responsibilities")[:2000],
+    }
+
     try:
         # cheap URL check first so a bad link never reaches the network code
         validate_public_url(body.url)
@@ -159,6 +181,7 @@ def generate_intro(
             role,
             company,
             (interview.description or "").strip()[:1200],
+            job_details,
         )
 
     except CompanyIntroError as exc:

@@ -23,7 +23,11 @@ export default function InviteAccept() {
   const [checking, setChecking] = useState(true);
   const started = useRef(false);
 
-  const isRecruiter = Boolean(user) && user.role !== "candidate";
+  // The interviewer chose "continue as candidate" in this browser
+  const [switching, setSwitching] = useState(false);
+
+  const isRecruiter =
+    Boolean(user) && user.role !== "candidate" && !switching;
 
   useEffect(() => {
     if (isRecruiter) {
@@ -33,11 +37,14 @@ export default function InviteAccept() {
 
     if (started.current) return;
     started.current = true;
+    setChecking(true);
 
     const fail = (err) => {
       setError(
         err?.response?.data?.detail ||
-          "We could not open this interview. Please try again."
+          (!err?.response
+            ? "Cannot reach the interview server. Please check your internet connection and try again in a minute. (Interviewer: make sure the backend is running and VITE_API_BASE_URL is correct.)"
+            : "We could not open this interview. Please try again.")
       );
       setChecking(false);
     };
@@ -74,7 +81,7 @@ export default function InviteAccept() {
           .catch(fail);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [code, isRecruiter]);
+  }, [code, isRecruiter, switching]);
 
   if (checking && !error) {
     return (
@@ -104,8 +111,13 @@ export default function InviteAccept() {
             <div className="flex flex-col gap-3">
               <button
                 onClick={() => {
+                  // sign the interviewer out of THIS browser and open the
+                  // candidate interview straight away (no reload needed)
                   logout();
-                  window.location.reload();
+                  started.current = false;
+                  setError("");
+                  setChecking(true);
+                  setSwitching(true);
                 }}
                 className="w-full py-3 rounded-2xl bg-gradient-to-r from-fuchsia-600 to-purple-600 font-bold text-sm"
               >

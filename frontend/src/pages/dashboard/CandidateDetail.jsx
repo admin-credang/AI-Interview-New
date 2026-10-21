@@ -47,8 +47,9 @@ function Field({ label, children }) {
   );
 }
 
-export default function CandidateDetail() {
-  const { sessionId } = useParams();
+export default function CandidateDetail({ sessionId: propId, onClose, onSwitch, onChanged } = {}) {
+  const params = useParams();
+  const sessionId = propId || params.sessionId;
   const navigate = useNavigate();
   const location = useLocation();
   const { t, reloadHiring } = useDashboard();
@@ -110,6 +111,7 @@ export default function CandidateDetail() {
 
       await load();
       reloadHiring?.();
+      onChanged?.();
     } catch (err) {
       setFeedback(err?.response?.data?.detail || "Could not save the decision.");
     } finally {
@@ -148,7 +150,7 @@ export default function CandidateDetail() {
   if (error) {
     return (
       <div className="space-y-6">
-        <button onClick={() => navigate(backTo)} className="text-sm font-bold text-fuchsia-400">
+        <button onClick={() => (onClose ? onClose() : navigate(backTo))} className="text-sm font-bold text-fuchsia-400">
           ← Back to candidates
         </button>
         <div className="p-6 rounded-2xl border border-rose-500/30 bg-rose-500/10 text-sm text-rose-300">
@@ -183,10 +185,10 @@ export default function CandidateDetail() {
     <div className="space-y-8">
       <div className="flex items-center justify-between gap-4 print:hidden">
         <button
-          onClick={() => navigate(backTo)}
+          onClick={() => (onClose ? onClose() : navigate(backTo))}
           className="text-sm font-bold text-fuchsia-400 hover:underline"
         >
-          ← Back to candidates
+          {onClose ? "✕ Close" : "← Back to candidates"}
         </button>
 
         <div className="flex items-center gap-2">
@@ -569,7 +571,6 @@ export default function CandidateDetail() {
                 <Field label="Role">{job.role}</Field>
                 <Field label="Company">{job.company}</Field>
                 <Field label="Location">{job.location}</Field>
-                <Field label="Type">{job.employment_type}</Field>
               </div>
             )}
           </Card>
@@ -581,7 +582,9 @@ export default function CandidateDetail() {
                 {history.map((h) => (
                   <li key={h.session_id}>
                     <button
-                      onClick={() => navigate(`/dashboard/candidates/${h.session_id}`)}
+                      onClick={() =>
+                        onSwitch ? onSwitch(h.session_id) : navigate(`/dashboard/candidates/${h.session_id}`)
+                      }
                       className="w-full flex items-center justify-between gap-3 text-left px-4 py-3 rounded-xl bg-black/20 hover:bg-white/10 transition"
                     >
                       <span className="text-sm font-semibold truncate">{h.interview_title}</span>

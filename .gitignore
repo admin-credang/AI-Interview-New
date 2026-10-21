@@ -19,3 +19,31 @@ backend/venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# Node dependencies and build output
+node_modules/
+frontend/node_modules/
+frontend/dist/
+dist/
+
+# Vercel local settings
+.vercel/
+
+# Local environment files
+.env
+.env.*
+!.env.example
+# Node dependencies and build files
+node_modules/
+frontend/node_modules/
+frontend/dist/
+dist/
+
+# Vercel local files
+.vercel/
+
+# Environment files
+.env
+.env.*
+!.env.example
+node_modules/

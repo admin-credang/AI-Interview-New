@@ -110,10 +110,6 @@ def upload_resume(
             400, "Configure the interview first, then add resumes"
         )
 
-    # module "CV upload" OFF
-    if not features.is_on(configuration, "cv_upload"):
-        raise HTTPException(400, "CV upload is turned off for this interview.")
-
     address = _record_for(configuration, body.email)
 
     try:
@@ -158,8 +154,9 @@ def upload_resume(
             if row.get("status") in {"started", "completed", "ended"}
             else (
                 "Resume saved, but resume questions are switched OFF for "
-                "this candidate. Turn the switch ON to use it."
-                if record.get("resume_questions") is False
+                "this interview. Turn the Resume questions switch ON in "
+                "Features to use it."
+                if not features.is_on(configuration, "resume_questions")
                 else None
             )
         ),

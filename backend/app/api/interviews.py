@@ -277,9 +277,8 @@ def get_interview_lobby(
     follow_ups = follow_up_policy(configuration)
     module = features.simple(configuration)
 
-    # module "Job details for candidate" OFF -> only the role is shown
-    if not module["job_details"]:
-        job = {"role": job.get("role") or ""}
+    # candidates only see the role (the "Job details" module was removed)
+    job = {"role": job.get("role") or ""}
 
     # candidate sees the role the interviewer fixed for them
     assigned_role = (

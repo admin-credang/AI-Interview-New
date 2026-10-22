@@ -350,9 +350,8 @@ def send_email(
     reply_to  -> where the candidate's reply goes (the interviewer)
     attachments -> [(filename, bytes, "application/pdf"), ...]
     mailbox   -> the interviewer's own mailbox (see services/mailbox.py).
-                 When given, the mail is sent FROM that address. If that
-                 fails, the mail is sent the normal way (system address,
-                 Reply-To = interviewer) so the candidate still gets it.
+                 When Gmail OAuth is given, a send failure is returned rather
+                 than silently sending from a different account.
     """
 
     if not to_email:
@@ -368,6 +367,9 @@ def send_email(
 
         if ok:
             return True, "sent (from the interviewer's mailbox)"
+
+        if mailbox.get("type") == "gmail_oauth":
+            return False, info
 
         print(f"Interviewer mailbox failed, using system mail: {info}")
         mailbox_note = f"{info} | sent from system address instead | "

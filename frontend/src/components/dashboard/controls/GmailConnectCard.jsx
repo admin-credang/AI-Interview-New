@@ -4,7 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import api from "../../../services/api";
 
 /* ------------------------------------------------------------------
- * Connect the Gmail the interviewer logged in with. Candidate mails
+ * Connect an interviewer's own Gmail account. Candidate mails
  * (invitation, selected / rejected) are then sent FROM that Gmail.
  * ------------------------------------------------------------------ */
 export default function GmailConnectCard({ onChange }) {
@@ -86,8 +86,7 @@ export default function GmailConnectCard({ onChange }) {
       <div className="flex-1 min-w-0">
         <p className="font-bold text-sm text-white/90">Send candidate mails from my Gmail</p>
         <p className="text-xs text-white/50 mt-1 leading-relaxed">
-          Invitation, selected and rejected mails reach the candidate FROM the Gmail you logged in with
-          {info?.login_email ? ` (${info.login_email})` : ""}.
+          Invitation, selected and rejected mails are sent FROM the Google account you connect here.
         </p>
 
         <p className={`text-[11px] font-bold mt-2 ${connected ? "text-emerald-400" : "text-amber-300"}`}>
@@ -97,7 +96,7 @@ export default function GmailConnectCard({ onChange }) {
         {info?.loadError && <p className="text-[11px] text-rose-300 mt-1">{info.loadError}</p>}
         {info && !info.configured && (
           <p className="text-[11px] text-rose-300 mt-1">
-            Server has no Google OAuth keys yet (GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET).
+            Server Gmail connection settings are incomplete. Configure the OAuth client keys, redirect URI, and FRONTEND_URL.
           </p>
         )}
         {error && <p className="text-xs text-rose-400 mt-2">{error}</p>}

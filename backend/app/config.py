@@ -1,4 +1,9 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+BACKEND_ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
 
 
 class Settings(BaseSettings):
@@ -7,6 +12,7 @@ class Settings(BaseSettings):
     # =========================================================
 
     database_url: str
+    secret_key: str | None = None
 
     # =========================================================
     # DIALOGFLOW CX
@@ -43,20 +49,18 @@ class Settings(BaseSettings):
 
     google_oauth_client_id: str | None = None
     google_oauth_client_secret: str | None = None
-    # must match "Authorized redirect URIs" in Google Cloud exactly
-    google_oauth_redirect_uri: str = (
-        "http://localhost:8000/google-oauth/callback"
-    )
+    # Must match the browser-facing Google Cloud redirect URI exactly.
+    google_oauth_redirect_uri: str = ""
     # extra allowed browser origins (comma separated), e.g. the Vercel URL
     cors_origins: str = ""
-    frontend_url: str = "http://localhost:5173"
+    frontend_url: str = ""
 
     # =========================================================
     # SETTINGS
     # =========================================================
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=BACKEND_ENV_FILE,
         extra="ignore"
     )
 

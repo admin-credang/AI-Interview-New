@@ -34,10 +34,12 @@ def status(current_user: User = Depends(get_current_user)):
     account = mailbox.gmail_account(current_user)
 
     return {
-        "configured": gmail_oauth.configured(),
+        "configured": (
+            gmail_oauth.configured()
+            and bool(settings.frontend_url.strip())
+        ),
         "connected": bool(account),
         "email": account["email"] if account else None,
-        "login_email": current_user.email,
     }
 
 
@@ -47,6 +49,12 @@ def connect_url(current_user: User = Depends(get_current_user)):
         raise HTTPException(
             status_code=503,
             detail="Google OAuth is not configured on the backend.",
+        )
+
+    if not settings.frontend_url.strip():
+        raise HTTPException(
+            status_code=503,
+            detail="FRONTEND_URL is not configured on the backend.",
         )
 
     state = jwt.encode(
@@ -77,6 +85,12 @@ def callback(
     error: str | None = Query(None),
     db: Session = Depends(get_db),
 ):
+    if not settings.frontend_url.strip():
+        raise HTTPException(
+            status_code=503,
+            detail="FRONTEND_URL is not configured on the backend.",
+        )
+
     # Google may redirect here with an error if consent was denied.
     if error:
         return _frontend_redirect(
@@ -130,31 +144,17 @@ def callback(
 
         # Email is returned by the userinfo endpoint, not the token endpoint.
         google_email = gmail_oauth.get_user_email(access_token)
-        login_email = (user.email or "").strip().lower()
 
-        # The connected Gmail must match the interviewer's login email.
-        if google_email != login_email:
-            if refresh_token:
-                try:
-                    gmail_oauth.revoke(refresh_token)
-                except gmail_oauth.GmailError:
-                    pass
-
-            return _frontend_redirect(
-                gmail="error",
-                reason=(
-                    f"You connected {google_email}, but your interviewer "
-                    f"login is {login_email}. Please connect the matching account."
-                ),
-            )
-
-        # Google may omit a refresh token if a previous grant exists.
-        # Preserve the previously stored token in that case.
+        # Google may omit a refresh token for an existing grant. Only reuse a
+        # saved token when it belongs to this same connected Google account.
         if refresh_token:
             encrypted_token = mailbox.encrypt(refresh_token)
             user.gmail_refresh_token_enc = encrypted_token
 
-        elif not user.gmail_refresh_token_enc:
+        elif (
+            not user.gmail_refresh_token_enc
+            or (user.gmail_email or "").strip().lower() != google_email
+        ):
             raise gmail_oauth.GmailError(
                 "Google did not return a refresh token. Please try connecting "
                 "again and grant permission when prompted."

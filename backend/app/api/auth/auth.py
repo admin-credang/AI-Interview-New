@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta, timezone
-import os
 
 from fastapi import (
     APIRouter,
@@ -15,6 +14,7 @@ from jose import jwt
 
 from pwdlib import PasswordHash
 
+from app.config import settings
 from app.database import get_db
 from app.models.user import User
 from app.schemas.user import UserCreate, UserResponse
@@ -42,10 +42,12 @@ password_hash = PasswordHash.recommended()
 # JWT CONFIGURATION
 # =========================================================
 
-SECRET_KEY = os.getenv(
-    "SECRET_KEY",
-    "change-this-secret-key"
-)
+SECRET_KEY = (settings.secret_key or "").strip()
+
+if not SECRET_KEY:
+    raise RuntimeError(
+        "SECRET_KEY must be set in the backend environment."
+    )
 
 ALGORITHM = "HS256"
 

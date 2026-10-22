@@ -32,9 +32,9 @@ class GmailError(Exception):
 
 def configured() -> bool:
     return bool(
-        settings.google_oauth_client_id
-        and settings.google_oauth_client_secret
-        and settings.google_oauth_redirect_uri
+        (settings.google_oauth_client_id or "").strip()
+        and (settings.google_oauth_client_secret or "").strip()
+        and settings.google_oauth_redirect_uri.strip()
     )
 
 
@@ -240,6 +240,8 @@ def send_email(
     """Send a plain-text email through the connected Gmail account."""
     if not to_email or not to_email.strip():
         raise GmailError("Candidate email address is required.")
+    if not access_token:
+        raise GmailError("No Gmail access token is available.")
 
     message = EmailMessage()
     message["To"] = to_email.strip()
@@ -255,7 +257,38 @@ def send_email(
         method="POST",
         data={"raw": raw_message},
         headers={
-            "Authorization": f"Bearer {access_token}",
+            "Authorization": "Bearer " + access_token,
+            "Content-Type": "application/json",
+        },
+    )
+
+
+def send_raw(refresh_token: str, message_bytes: bytes) -> dict:
+    """Refresh a saved token, then send a MIME message through Gmail."""
+    result = refresh_access_token(refresh_token)
+    access_token = result.get("access_token")
+
+    if not access_token:
+        raise GmailError("Could not refresh the Google access token.")
+
+    raw_message = base64.urlsafe_b64encode(
+        message_bytes
+    ).decode("ascii").rstrip("=")
+
+    return _send_raw_message(
+        access_token,
+        raw_message,
+    )
+
+
+def _send_raw_message(access_token: str, raw_message: str) -> dict:
+    """Send a base64url-encoded MIME message with a Google access token."""
+    return _request_json(
+        SEND_URL,
+        method="POST",
+        data={"raw": raw_message},
+        headers={
+            "Authorization": "Bearer " + access_token,
             "Content-Type": "application/json",
         },
     )

@@ -208,12 +208,6 @@ def _mail_identity(configuration, fallback_user) -> dict:
             configuration, iv["email"]
         )
 
-    # Gmail OAuth: ask Gmail to send "From" the interviewer's own address
-    # (works when it is a verified "Send mail as" address; otherwise Gmail
-    # keeps the connected address, so the mail is never lost)
-    if account and account.get("type") == "gmail_oauth" and iv["email"]:
-        account = {**account, "from_email": iv["email"]}
-
     return {
         # candidate sees the interviewer's name: "Priya (Acme)"
         "from_name": (

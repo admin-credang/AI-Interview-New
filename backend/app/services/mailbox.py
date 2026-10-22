@@ -164,7 +164,7 @@ def account_from_config(configuration, interviewer_email: str) -> dict | None:
 def gmail_account(user) -> dict | None:
     """
     The interviewer's connected Gmail (OAuth), ready to send with (or None).
-    Only valid while it is the SAME address the interviewer logs in with.
+    The OAuth token is bound to this user's own database record.
     """
 
     if user is None:
@@ -174,9 +174,6 @@ def gmail_account(user) -> dict | None:
     gmail = (getattr(user, "gmail_email", None) or "").strip().lower()
 
     if not token_enc or not gmail:
-        return None
-
-    if gmail != (getattr(user, "email", "") or "").strip().lower():
         return None
 
     refresh = decrypt(token_enc)

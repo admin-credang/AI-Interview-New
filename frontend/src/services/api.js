@@ -1,13 +1,13 @@
-
 import axios from "axios";
 
 // API BASE URL
-const API_BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL ||
-  (import.meta.env.PROD
-    ? "/api"
-    : "http://127.0.0.1:8000")
-).replace(/\/+$/, "");
+
+const API_BASE_URL = import.meta.env.PROD
+  ? "/api"
+  : (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000").replace(
+      /\/+$/,
+      "",
+    );
 
 // AXIOS INSTANCE
 const api = axios.create({
@@ -34,7 +34,7 @@ api.interceptors.request.use(
         console.debug(
           "API REQUEST:",
           config.method?.toUpperCase(),
-          `${config.baseURL || ""}${config.url || ""}`
+          `${config.baseURL || ""}${config.url || ""}`,
         );
       }
     } catch (error) {
@@ -46,18 +46,14 @@ api.interceptors.request.use(
   (error) => {
     console.error("Request configuration error:", error);
     return Promise.reject(error);
-  }
+  },
 );
 
 // RESPONSE INTERCEPTOR
 api.interceptors.response.use(
   (response) => {
     if (import.meta.env.DEV) {
-      console.debug(
-        "API RESPONSE:",
-        response.status,
-        response.config?.url
-      );
+      console.debug("API RESPONSE:", response.status, response.config?.url);
     }
 
     return response;
@@ -73,7 +69,7 @@ api.interceptors.response.use(
     }
 
     return Promise.reject(error);
-  }
+  },
 );
 
 export default api;

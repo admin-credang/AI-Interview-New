@@ -1,11 +1,13 @@
-
 import axios from "axios";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
-  ? import.meta.env.VITE_API_BASE_URL.replace(/\/+$/, "")
-  : import.meta.env.PROD
-    ? "/api"
-    : "http://127.0.0.1:8000";
+const API_BASE_URL = import.meta.env.PROD
+  ? "/api"
+  : (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000").replace(
+      /\/+$/,
+      "",
+    );
+
+console.log("API BASE URL:", API_BASE_URL);
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -26,18 +28,14 @@ api.interceptors.request.use(
 
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => Promise.reject(error),
 );
 
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response) {
-      console.error(
-        "API Error:",
-        error.response.status,
-        error.response.data
-      );
+      console.error("API Error:", error.response.status, error.response.data);
 
       if (error.response.status === 401) {
         console.warn("Authentication required.");
@@ -50,7 +48,7 @@ api.interceptors.response.use(
     }
 
     return Promise.reject(error);
-  }
+  },
 );
 
 export default api;

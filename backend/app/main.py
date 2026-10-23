@@ -185,6 +185,7 @@ allowed_origins = [
 
     # Deployed frontend
     "https://ai-interview-new-8f5k.vercel.app",
+    "https://ai-interview-version-b.vercel.app",
 ]
 
 if frontend_url:

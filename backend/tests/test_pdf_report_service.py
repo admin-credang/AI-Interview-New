@@ -137,4 +137,5 @@ def test_pdf_uses_persisted_report_and_session_data_without_report_data_column()
     page_count = len(re.findall(rb"/Type\s*/Page\b", pdf))
     assert filename == "interview_report_Candidate.pdf"
     assert pdf.startswith(b"%PDF")
-    assert page_count <= 2
+    assert page_count >= 1
+    assert b"%%EOF" in pdf[-16:]

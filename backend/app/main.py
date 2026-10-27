@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from app.api.interview_speech import router as interview_speech_router
+from app.api.interview_transcription import router as interview_transcription_router
 from app.database import engine
 from app.config import settings
 
@@ -252,6 +253,7 @@ app.include_router(interview_router)
 app.include_router(interview_configuration_router)
 app.include_router(company_intro_router)
 app.include_router(interview_speech_router)
+app.include_router(interview_transcription_router)
 
 # =========================================================
 # INTERVIEW PROCESS ROUTES

@@ -2,6 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "../api";
 import {
+  canRecordAudio,
+  createAnswerRecorder,
+  transcribeAnswer,
+} from "../services/answerRecorder";
+import {
   createGazeTracker,
   computeHeadPose,
   GAZE_CONFIG,
@@ -735,6 +740,11 @@ export default function InterviewSession() {
     setVoiceSupported,
   ] = useState(false);
 
+  const [
+    transcribing,
+    setTranscribing,
+  ] = useState(false);
+
   /*
    * ============================================================
    * MONITORING STATE
@@ -1151,6 +1161,18 @@ export default function InterviewSession() {
   const recognitionRef =
     useRef(null);
 
+  // records the whole spoken answer; the server transcribes it
+  const recorderRef =
+    useRef(null);
+
+  if (!recorderRef.current) {
+    recorderRef.current = createAnswerRecorder();
+  }
+
+  // true when the candidate typed / edited the answer by hand
+  const userEditedRef =
+    useRef(false);
+
   const streamRef =
     useRef(null);
 
@@ -1291,6 +1313,11 @@ export default function InterviewSession() {
 recognitionRef.current.stop();
         } catch {}
       }
+
+      /*
+       * Stop answer audio recording
+       */
+      recorderRef.current?.cancel();
 
       /*
        * Stop camera
@@ -2776,15 +2803,91 @@ recognitionRef.current.stop();
           return;
         }
 
-        const cleanAnswer =
+        /*
+         * Lock the screen while the recording is transcribed so
+         * the answer cannot be sent twice.
+         */
+        processingRef.current =
+          true;
+
+        setProcessing(true);
+
+        let finalText =
           String(
             answerText || ""
-          ).trim();
+          );
+
+        /*
+         * ACCURATE TRANSCRIPT: the browser's live recognition
+         * (preview only) misses words. If the answer was spoken,
+         * transcribe the complete recording on the server and use
+         * that text. If the candidate typed / edited the answer
+         * by hand, the typed text is used as it is.
+         */
+        if (
+          recorderRef.current?.isActive()
+        ) {
+          wantListeningRef.current = false;
+
+          try {
+            recognitionRef.current?.stop();
+          } catch {}
+
+          setTranscribing(true);
+
+          const blob =
+            await recorderRef.current.stop();
+
+          if (
+            blob &&
+            !userEditedRef.current
+          ) {
+            try {
+              const accurate =
+                await transcribeAnswer(
+                  interviewId,
+                  blob
+                );
+
+              if (accurate) {
+                finalText =
+                  accurate;
+
+                if (
+                  mountedRef.current
+                ) {
+                  setAnswer(accurate);
+                }
+              }
+            } catch (transcribeError) {
+              // keep the live text so the answer is never lost
+              console.error(
+                "Server transcription failed, using live text:",
+                transcribeError
+              );
+            }
+          }
+
+          if (mountedRef.current) {
+            setTranscribing(false);
+            setIsListening(false);
+          }
+        }
+
+        const cleanAnswer =
+          finalText.trim();
 
         if (!cleanAnswer) {
-          setError(
-            "Please provide an answer before submitting."
-          );
+          processingRef.current =
+            false;
+
+          if (mountedRef.current) {
+            setProcessing(false);
+
+            setError(
+              "Please provide an answer before submitting."
+            );
+          }
 
           return;
         }
@@ -2793,17 +2896,19 @@ recognitionRef.current.stop();
           currentQuestionRef.current;
 
         if (!question?.id) {
-          setError(
-            "Current question is missing."
-          );
+          processingRef.current =
+            false;
+
+          if (mountedRef.current) {
+            setProcessing(false);
+
+            setError(
+              "Current question is missing."
+            );
+          }
 
           return;
         }
-
-        processingRef.current =
-          true;
-
-        setProcessing(true);
 
         setError("");
 
@@ -3173,7 +3278,9 @@ recognitionRef.current.stop();
       window.webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      setVoiceSupported(false);
+      // no live preview in this browser, but audio recording + server
+      // transcription still works
+      setVoiceSupported(canRecordAudio());
       return;
     }
 
@@ -3410,7 +3517,8 @@ recognitionRef.current.stop();
   const startListening =
     () => {
       if (
-        !recognitionRef.current ||
+        (!recognitionRef.current &&
+          !canRecordAudio()) ||
         processingRef.current ||
         completedRef.current ||
         terminatedRef.current
@@ -3421,6 +3529,23 @@ recognitionRef.current.stop();
       wantListeningRef.current =
         phaseRef.current ===
         "question";
+
+      // record the whole answer as audio (accurate transcript later)
+      if (phaseRef.current === "question") {
+        userEditedRef.current = false;
+
+        if (canRecordAudio()) {
+          void recorderRef.current.start();
+
+          if (!recognitionRef.current) {
+            setIsListening(true);
+          }
+        }
+      }
+
+      if (!recognitionRef.current) {
+        return;
+      }
 
       speechBaseRef.current =
         answerValueRef.current ||
@@ -5695,21 +5820,22 @@ recognitionRef.current?.stop();
       recognitionRef.current?.stop();
     } catch {}
 
+    // small delay so the last live words settle, then the full
+    // recording is transcribed on the server and submitted
     setTimeout(() => {
-      const finalAnswer = String(
-        answerValueRef.current || ""
-      ).trim();
-
       if (
-        finalAnswer &&
         mountedRef.current &&
         !processingRef.current &&
         !completedRef.current &&
         !terminatedRef.current
       ) {
-        submitAnswerWithText(finalAnswer);
+        submitAnswerWithText(
+          String(
+            answerValueRef.current || ""
+          )
+        );
       }
-    }, 600);
+    }, 400);
   };
 
   const lastAiIndex = chatLog.reduce(
@@ -5724,7 +5850,9 @@ recognitionRef.current?.stop();
   const questionText = currentQuestion?.question || "";
   const typing = typedLength < questionText.length;
 
-  const assistantStatus = processing
+  const assistantStatus = transcribing
+    ? "Transcribing..."
+    : processing
     ? "Evaluating..."
     : isSpeaking
     ? "Speaking..."
@@ -5881,7 +6009,7 @@ recognitionRef.current?.stop();
                         : "bg-emerald-600 hover:bg-emerald-500 text-white"
                     }`}
                   >
-                    🎤 {processing ? "Submitting..." : isListening ? "Stop Recording" : "Start Recording"}
+                    🎤 {transcribing ? "Transcribing..." : processing ? "Submitting..." : isListening ? "Stop Recording" : "Start Recording"}
                   </button>
                 )}
               </div>
@@ -6090,7 +6218,10 @@ recognitionRef.current?.stop();
               <div className="shrink-0 flex gap-2">
                 <input
                   value={answer}
-                  onChange={(event) => setAnswer(event.target.value)}
+                  onChange={(event) => {
+                    userEditedRef.current = true;
+                    setAnswer(event.target.value);
+                  }}
                   onKeyDown={(event) => {
                     if (
                       event.key === "Enter" &&
@@ -6106,7 +6237,7 @@ recognitionRef.current?.stop();
                 />
 
                 <button
-                  disabled={processing || !answer.trim()}
+                  disabled={processing || (!answer.trim() && !isListening)}
                   onClick={() => submitAnswerWithText(answer)}
                   className="px-5 rounded-md bg-slate-600 hover:bg-slate-500 text-white font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed"
                 >

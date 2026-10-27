@@ -1,4 +1,4 @@
-"""Build the compact, two-page candidate interview evaluation PDF."""
+"""Build the candidate interview report PDF (interviewer copy)."""
 
 from collections import Counter
 from datetime import datetime
@@ -11,7 +11,6 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import (
-    KeepInFrame,
     ListFlowable,
     ListItem,
     PageBreak,
@@ -593,18 +592,6 @@ def _report_section(title, styles):
     return Paragraph(escape(title), styles["h2"])
 
 
-def _draw_page(canvas, doc):
-    canvas.saveState()
-    canvas.setStrokeColor(LINE)
-    canvas.setLineWidth(0.5)
-    canvas.line(18 * mm, 13 * mm, A4[0] - 18 * mm, 13 * mm)
-    canvas.setFont("Helvetica", 8)
-    canvas.setFillColor(MUTED)
-    canvas.drawString(18 * mm, 8.5 * mm, "Confidential · Interview evaluation")
-    canvas.drawRightString(A4[0] - 18 * mm, 8.5 * mm, f"Page {doc.page}")
-    canvas.restoreState()
-
-
 def _gaze_story(gaze: dict, st: dict) -> list:
     """
     "Eye Movement Detection (AI-Assisted Answer Check)".
@@ -792,17 +779,145 @@ def _gaze_story(gaze: dict, st: dict) -> list:
     return story
 
 
-def build_report_pdf(data: dict) -> bytes:
-    st = _styles()
-    ana = analyse(data)
-    canonical = data.get("canonical") or {}
-    score_data = canonical.get("score") or {}
-    recommendation = canonical.get("recommendation") or {}
-    human_review = canonical.get("human_review") or {}
-    monitoring = canonical.get("monitoring") or {}
-    competencies = data.get("competencies") or []
-    questions = data.get("qa") or []
+# =========================================================
+# PDF CONTENT (skill-based summary shown in the interviewer PDF)
+# =========================================================
+
+STRONG_FROM = 70
+WEAK_BELOW = 60
+
+IMPROVE_TIPS = {
+    "communication": (
+        "Speak in short, clear sentences and avoid long pauses or fillers.",
+        "Practise explaining technical ideas aloud with a concrete example.",
+    ),
+    "accuracy": (
+        "Revise the core concepts and verify definitions before the interview.",
+        "Say clearly when unsure instead of guessing a wrong fact.",
+    ),
+    "completeness": (
+        "Use a simple structure: context, approach, example, result.",
+        "Cover edge cases, failures and alternatives in each answer.",
+    ),
+    "technical_knowledge": (
+        "Practise hands-on projects using the required stack end to end.",
+        "Study real-world trade-offs (why this tool / design, not just what).",
+    ),
+    "relevance": (
+        "Answer exactly what is asked first, then add detail.",
+        "Avoid drifting to nearby topics; keep each answer on the question.",
+    ),
+}
+
+
+def _fmt_score(value) -> str:
+    """74.2 -> '74.2', 80.0 -> '80'."""
+    return f"{round(float(value), 1):g}"
+
+
+def _fmt_started(value) -> str:
+    if not value or value == "-":
+        return "-"
+    try:
+        return datetime.fromisoformat(
+            str(value).replace("Z", "+00:00")
+        ).strftime("%d %b %Y, %H:%M")
+    except ValueError:
+        return str(value)
+
+
+def _skill_summary(skills: dict) -> dict:
+    """Strengths / areas to improve / how to improve from the skill scores."""
+
+    scored = [
+        (key, float(value))
+        for key, value in (skills or {}).items()
+        if value is not None and key in SKILL_LABELS
+    ]
+
+    strengths = [
+        f"{SKILL_LABELS[key]} is strong ({value:.0f}/100)."
+        for key, value in sorted(scored, key=lambda item: -item[1])
+        if value >= STRONG_FROM
+    ]
+    if not strengths and scored:
+        key, value = max(scored, key=lambda item: item[1])
+        strengths = [f"Best area: {SKILL_LABELS[key]} ({value:.0f}/100)."]
+
+    weak = [
+        (key, value)
+        for key, value in sorted(scored, key=lambda item: item[1])
+        if value < WEAK_BELOW
+    ]
+    improve = [
+        f"{SKILL_LABELS[key]} needs work ({value:.0f}/100)."
+        for key, value in weak
+    ]
+    how = [
+        f"{SKILL_LABELS[key]}: {tip}"
+        for key, _value in weak
+        for tip in IMPROVE_TIPS.get(key, ())
+    ]
+
+    return {"strengths": strengths, "improve": improve, "how": how}
+
+
+def _monitoring_lines(data: dict) -> list:
     events = data.get("events") or []
+    counts = Counter(
+        event.get("type")
+        for event in events
+        if event.get("type") and event.get("type") not in INFO_EVENTS
+    )
+
+    lines = [
+        f"{EVENT_LABELS.get(kind, kind)}: {count} time(s)"
+        for kind, count in counts.most_common()
+    ]
+
+    reason = data.get("terminated_reason")
+    if reason:
+        lines.insert(
+            0,
+            "Interview was STOPPED by monitoring: "
+            f"{EVENT_LABELS.get(reason, reason)}",
+        )
+
+    return lines or ["No monitoring events were recorded."]
+
+
+def build_report_pdf(data: dict) -> bytes:
+    """Candidate Interview Report - the interviewer PDF."""
+
+    st = _styles()
+    base = getSampleStyleSheet()
+
+    bullet = ParagraphStyle(
+        "pdf-bullet", parent=st["body"], fontSize=9.5, leading=13.5,
+    )
+    detail = ParagraphStyle(
+        "pdf-detail", parent=st["body"], fontSize=8.5, leading=11.5,
+        textColor=MUTED,
+    )
+    cell = ParagraphStyle(
+        "pdf-cell", parent=base["Normal"], fontSize=9, leading=11.5,
+        textColor=INK,
+    )
+    cell_label = ParagraphStyle(
+        "pdf-cell-label", parent=cell, textColor=MUTED,
+    )
+    cell_head = ParagraphStyle(
+        "pdf-cell-head", parent=cell, textColor=colors.white,
+    )
+    question_style = ParagraphStyle(
+        "pdf-question", parent=st["q"], fontSize=10, leading=12.5,
+        spaceBefore=8,
+    )
+
+    skills = data.get("skills") or {}
+    summary = _skill_summary(skills)
+    questions = data.get("qa") or []
+    score = data.get("overall_score")
 
     buffer = BytesIO()
     doc = SimpleDocTemplate(
@@ -810,454 +925,159 @@ def build_report_pdf(data: dict) -> bytes:
         pagesize=A4,
         leftMargin=18 * mm,
         rightMargin=18 * mm,
-        topMargin=13 * mm,
-        bottomMargin=17 * mm,
+        topMargin=16 * mm,
+        bottomMargin=18 * mm,
         title=f"Interview report - {data.get('candidate_name') or 'Candidate'}",
     )
 
-    body_style = ParagraphStyle(
-        "report-compact-body",
-        parent=st["body"],
-        fontSize=8.2,
-        leading=10,
-        spaceAfter=0,
-    )
-    small_style = ParagraphStyle(
-        "report-compact-small",
-        parent=st["small"],
-        fontSize=7.7,
-        leading=9.2,
-        spaceAfter=0,
-    )
-    header_style = ParagraphStyle(
-        "report-compact-header",
-        parent=st["table_header"],
-        fontSize=7.7,
-        leading=9,
-    )
-    section_style = ParagraphStyle(
-        "report-compact-section",
-        parent=st["h2"],
-        fontSize=11.5,
-        leading=13,
-        spaceBefore=5,
-        spaceAfter=3,
-    )
+    def para(value, style=cell):
+        return Paragraph(escape(str(value)), style)
 
-    def paragraph(value, style=body_style, limit=None):
-        text = _excerpt(value, limit) if limit else str(value or "Unavailable")
-        return Paragraph(escape(text), style)
-
-    def section(title):
-        return _report_section(title, {"h2": section_style})
-
-    def compact_table(rows, widths, header=True):
-        table = Table(rows, colWidths=widths, repeatRows=1 if header else 0)
-        commands = [
-            ("GRID", (0, 0), (-1, -1), 0.35, LINE),
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 4),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-            ("TOPPADDING", (0, 0), (-1, -1), 3),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8F7FB")]),
-        ]
-        if header:
-            commands.append(("BACKGROUND", (0, 0), (-1, 0), INK))
-        table.setStyle(TableStyle(commands))
-        return table
-
-    def limited_items(items, limit):
-        items = list(items or [])
-        return items[:limit], max(0, len(items) - limit)
-
-    score = data.get("overall_score")
-    score_text = f"{float(score):.2f} / 100" if score is not None else "Unavailable"
-    status_text = str(data.get("status") or "Unavailable").replace("_", " ").title()
-    human_decision = human_review.get("decision") or data.get("decision")
-    ai_recommendation = recommendation.get("recommendation")
-    reviewer_note = human_review.get("note")
-    if reviewer_note is None or not str(reviewer_note).strip():
-        reviewer_note = "No reviewer note recorded"
-    disagreement = bool(human_review.get("ai_decision_disagreement"))
-
-    page_one = [
-        Paragraph("Candidate Interview Evaluation", st["title"]),
-        Paragraph(
-            f"{escape(str(data.get('interview_title') or 'Interview'))} &nbsp;|&nbsp; "
-            f"{datetime.now().strftime('%d %b %Y')}",
-            st["sub"],
-        ),
-        section("Evaluation summary"),
-    ]
-
-    details = [
-        [
-            paragraph("Candidate", st["label"]),
-            paragraph(
-                f"{data.get('candidate_name') or 'Unavailable'} · "
-                f"{data.get('candidate_email') or 'Email unavailable'}",
-                body_style,
-                100,
-            ),
-            paragraph("Overall score", st["label"]),
-            paragraph(score_text, st["score"]),
-        ],
-        [
-            paragraph("Role / company", st["label"]),
-            paragraph(
-                f"{data.get('role') or 'Unavailable'} · "
-                f"{data.get('company') or 'Unavailable'} · "
-                f"{data.get('location') or 'Location unavailable'}",
-                body_style,
-                120,
-            ),
-            paragraph("Interview date", st["label"]),
-            paragraph(data.get("interview_date"), body_style),
-        ],
-        [
-            paragraph("Interview", st["label"]),
-            paragraph(data.get("interview_title"), body_style, 80),
-            paragraph("Status / duration", st["label"]),
-            paragraph(f"{status_text} · {data.get('duration') or 'Unavailable'}", body_style, 70),
-        ],
-        [
-            paragraph("Human review", st["label"]),
-            paragraph(human_review.get("status"), body_style),
-            paragraph("Final decision", st["label"]),
-            paragraph(str(human_decision or "Unavailable").replace("_", " "), body_style),
-        ],
-    ]
-    page_one.append(
-        compact_table(
-            details,
-            [25 * mm, 62 * mm, 29 * mm, 58 * mm],
-            header=False,
-        )
-    )
-
-    page_one.append(section("Competency scores"))
-    skill_rows = [[
-        paragraph("Competency", header_style),
-        paragraph("Weight", header_style),
-        paragraph("Score / 100", header_style),
-        paragraph("Rating", header_style),
-        paragraph("Contribution", header_style),
-    ]]
-    for item in competencies:
-        skill_rows.append([
-            paragraph(item.get("name"), body_style, 40),
-            paragraph(_score_text(item.get("weight"), "%"), body_style),
-            paragraph(_score_text(item.get("score")), body_style),
-            paragraph(item.get("rating") or _rating_text(item.get("score")), body_style),
-            paragraph(_score_text(item.get("weighted_contribution")), body_style),
-        ])
-    if not competencies:
-        skill_rows.append([
-            paragraph("Competency scores unavailable.", body_style),
-            paragraph("Unavailable", body_style),
-            paragraph("Unavailable", body_style),
-            paragraph("Unavailable", body_style),
-            paragraph("Unavailable", body_style),
-        ])
-    page_one.append(
-        compact_table(
-            skill_rows,
-            [57 * mm, 24 * mm, 30 * mm, 32 * mm, 31 * mm],
-        )
-    )
-    weights_complete = bool(competencies) and all(
-        item.get("weight") is not None for item in competencies
-    )
-    contributions_complete = bool(competencies) and all(
-        item.get("weighted_contribution") is not None
-        for item in competencies
-    )
-    page_one.append(
-        paragraph(
-            f"{_excerpt(score_data.get('formula') or 'Overall score is the sum of competency averages multiplied by configured weights.', 240)} "
-            f"Weights: {_score_text(sum(item['weight'] for item in competencies), '%') if weights_complete else 'Unavailable'}; "
-            f"contributions: {_score_text(sum(item['weighted_contribution'] for item in competencies)) if contributions_complete else 'Unavailable'}.",
-            small_style,
-            450,
-        )
-    )
-
-    page_one.append(section("AI recommendation and human decision"))
-    recommendation_rows = [[
-        paragraph("AI recommendation", st["label"]),
-        paragraph(
-            str(ai_recommendation).replace("_", " ")
-            if ai_recommendation
-            else recommendation.get("rationale") or "Unavailable",
-            body_style,
-            70,
-        ),
-        paragraph("Human decision", st["label"]),
-        paragraph(str(human_decision or "Unavailable").replace("_", " "), body_style),
-    ]]
-    page_one.append(
-        compact_table(
-            recommendation_rows,
-            [29 * mm, 59 * mm, 29 * mm, 57 * mm],
-            header=False,
-        )
-    )
-    page_one.append(
-        paragraph(
-            recommendation.get("rationale") or "AI recommendation reason unavailable.",
-            small_style,
-            230,
-        )
-    )
-    if disagreement:
-        page_one.append(
-            paragraph(
-                "AI and human decisions differ; neither is automatically treated as incorrect.",
-                body_style,
-                150,
-            )
+    def bullets(items, style=bullet):
+        return ListFlowable(
+            [ListItem(para(item, style), leftIndent=14) for item in items],
+            bulletType="bullet",
+            start="•",
+            leftIndent=14,
+            bulletFontSize=9,
         )
 
-    strengths = ana["strengths"]
-    concerns = ana["improve"]
-    improvement = ana["how"]
-    page_one.append(section("Strengths and areas to improve"))
-    page_one.append(
-        compact_table(
-            [
-                [
-                    paragraph("Evidence-backed strengths", header_style),
-                    paragraph("Areas for improvement", header_style),
-                ],
-                [
-                    paragraph("; ".join(strengths[:2]), small_style, 230),
-                    paragraph("; ".join(concerns[:2]), small_style, 230),
-                ],
-                [
-                    paragraph("Actionable guidance", st["label"]),
-                    paragraph("; ".join(improvement[:2]), small_style, 230),
-                ],
-            ],
-            [90 * mm, 90 * mm],
-            header=False,
-        )
-    )
+    # ---------- title + details ----------
 
-    page_one.append(section("Question-by-question scores and feedback"))
-    question_rows = [[
-        paragraph("Question", header_style),
-        paragraph("Score", header_style),
-        paragraph("Assessment feedback", header_style),
-    ]]
-    shown_questions, omitted_questions = limited_items(questions, 9)
-    for index, item in enumerate(shown_questions, start=1):
-        label = "Follow-up" if item.get("is_follow_up") else f"Q{item.get('order') or index}"
-        if not (item.get("answer") or "").strip():
-            label += " · unanswered"
-        question_rows.append([
-            paragraph(
-                f"{label}: {item.get('question') or 'Question unavailable'}",
-                small_style,
-                115,
-            ),
-            paragraph(_score_text(item.get("overall")), small_style),
-            paragraph(item.get("feedback"), small_style, 125),
-        ])
-    if not question_rows[1:]:
-        question_rows.append([
-            paragraph("No questions recorded.", small_style),
-            paragraph("Unavailable", small_style),
-            paragraph("Feedback unavailable.", small_style),
-        ])
-    page_one.append(
-        compact_table(question_rows, [74 * mm, 22 * mm, 78 * mm])
-    )
-    if omitted_questions:
-        page_one.append(
-            paragraph(
-                f"{omitted_questions} additional question(s) are available in the full report data.",
-                small_style,
-            )
-        )
-
-    page_two = [
-        Paragraph("Supporting details", st["title"]),
-        Paragraph("Answer excerpts, monitoring summary, and human review", st["sub"]),
-        section("Answer excerpts and assessment evidence"),
-    ]
-    evidence_rows = [[
-        paragraph("Question / candidate answer excerpt", header_style),
-        paragraph("Assessment evidence", header_style),
-    ]]
-    answered_questions = [item for item in questions if (item.get("answer") or "").strip()]
-    shown_answers, omitted_answers = limited_items(answered_questions, 6)
-    for item in shown_answers:
-        evidence = (item.get("evidence") or [])[:1]
-        answer_excerpt = _excerpt(item.get("answer"), 180)
-        if len(str(item.get("answer") or "")) > 180:
-            answer_excerpt += " (excerpt)"
-        question_label = item.get("question") or "Question unavailable"
-        evidence_text = (
-            f"{evidence[0].get('criterion') or 'Evidence'}: "
-            f'“{_excerpt(evidence[0].get("quote"), 100)}” — '
-            f"{_excerpt(evidence[0].get('explanation'), 100)}"
-            if evidence
-            else "No structured supporting evidence recorded."
-        )
-        evidence_rows.append([
-            Paragraph(
-                f"<b>{escape(_excerpt(question_label, 90))}</b>"
-                f"<br/><br/>Answer: {escape(answer_excerpt)}",
-                small_style,
-            ),
-            paragraph(evidence_text, small_style, 220),
-        ])
-    if not shown_answers:
-        evidence_rows.append([
-            paragraph("No answered questions are available.", small_style),
-            paragraph("No structured supporting evidence recorded.", small_style),
-        ])
-    page_two.append(
-        compact_table(evidence_rows, [108 * mm, 66 * mm])
-    )
-    if omitted_answers:
-        page_two.append(
-            paragraph(
-                f"{omitted_answers} additional answer(s) remain available in the application report.",
-                small_style,
-            )
-        )
-
-    page_two.append(section("Monitoring observations"))
-    event_counts = Counter(
-        event.get("type")
-        for event in events
-        if event.get("type") and event.get("type") not in INFO_EVENTS
-    )
-    monitoring_rows = [[
-        paragraph("Observation type", header_style),
-        paragraph("Count", header_style),
-        paragraph("Question-linked", header_style),
-        paragraph("Latest timestamp", header_style),
-    ]]
-    for event_type, count in event_counts.most_common(6):
-        type_events = [event for event in events if event.get("type") == event_type]
-        timestamps = sorted(
-            event.get("at")
-            for event in type_events
-            if isinstance(event.get("at"), str)
-        )
-        linked_count = sum(bool(event.get("question_id")) for event in type_events)
-        monitoring_rows.append([
-            paragraph(
-                EVENT_LABELS.get(event_type, event_type.replace("_", " ")),
-                small_style,
-                60,
-            ),
-            paragraph(str(count), small_style),
-            paragraph(str(linked_count), small_style),
-            paragraph(
-                _display_datetime(timestamps[-1]) if timestamps else "Unavailable",
-                small_style,
-            ),
-        ])
-    if not event_counts:
-        monitoring_rows.append([
-            paragraph("No monitoring events recorded.", small_style),
-            paragraph("0", small_style),
-            paragraph("0", small_style),
-            paragraph("Unavailable", small_style),
-        ])
-    page_two.append(
-        compact_table(
-            monitoring_rows,
-            [62 * mm, 22 * mm, 36 * mm, 52 * mm],
-        )
-    )
-    if len(event_counts) > 6:
-        page_two.append(
-            paragraph(
-                f"{len(event_counts) - 6} additional monitoring event type(s) are omitted from this summary.",
-                small_style,
-            )
-        )
-    if data.get("terminated_reason"):
-        reason = data["terminated_reason"]
-        page_two.append(
-            paragraph(
-                f"Session termination signal: {EVENT_LABELS.get(reason, reason.replace('_', ' '))}.",
-                small_style,
-            )
-        )
-    monitoring_note = (
-        "Eye/face events are observation signals for human review, not proof of misconduct. "
-        "Identity verification, voice identity, and direct second-screen activity are not "
-        "available."
-    )
-    if data.get("gaze"):
-        monitoring_note += (
-            " Gaze-derived estimates are included below and should be interpreted as signals."
-        )
-    else:
-        monitoring_note += (
-            " Numerical gaze direction, off-screen duration, and reading-pattern metrics "
-            "are not available."
-        )
-    page_two.append(paragraph(monitoring_note, small_style, 350))
-
-    if data.get("gaze"):
-        page_two.append(section("Eye-movement analysis"))
-        page_two.extend(_gaze_story(data["gaze"], st))
-
-    unanswered_followups = [
-        item for item in questions
-        if item.get("is_follow_up") and not (item.get("answer") or "").strip()
-    ]
-    page_two.append(section("Unanswered follow-ups and next-round questions"))
-    followup_lines = [
-        f"Unanswered follow-up: {_excerpt(item.get('question'), 120)}"
-        for item in unanswered_followups[:3]
-    ]
-    if len(unanswered_followups) > 3:
-        followup_lines.append(
-            f"{len(unanswered_followups) - 3} additional unanswered follow-up(s) omitted."
-        )
-    if not followup_lines:
-        followup_lines.append("No unanswered follow-up questions.")
-    next_round = recommendation.get("next_round_questions") or []
-    followup_lines.extend(
-        f"Next round: {_excerpt(question, 150)}"
-        for question in next_round[:3]
-    )
-    if not next_round:
-        followup_lines.append("No evidence-based next-round questions available.")
-    page_two.append(_bullets(followup_lines, small_style))
-
-    page_two.append(section("Human review details"))
-    reviewer = human_review.get("reviewer") or "Unavailable"
-    decision_time = _display_datetime(human_review.get("decided_at"))
-    review_detail = (
-        f"Reviewer: {_excerpt(reviewer, 80)} · "
-        f"Decision time: {decision_time} · "
-        f"Reviewer note: {_excerpt(reviewer_note, 260)}"
-    )
-    page_two.append(paragraph(review_detail, body_style, 430))
-    page_two.append(
-        paragraph(
-            canonical.get("disclaimer")
-            or "AI-generated information supports and does not replace human review.",
-            small_style,
-            260,
-        )
-    )
+    role = data.get("role")
+    if not role or role == "Unavailable":
+        role = data.get("interview_title") or "Interview"
+    generated = datetime.now().strftime("%d %b %Y, %H:%M")
 
     story = [
-        KeepInFrame(doc.width, doc.height, page_one, mode="shrink"),
-        PageBreak(),
-        KeepInFrame(doc.width, doc.height, page_two, mode="shrink"),
+        Paragraph("Candidate Interview Report", st["title"]),
+        Paragraph(f"{escape(str(role))} &nbsp;|&nbsp; generated {generated}", st["sub"]),
     ]
-    doc.build(story, onFirstPage=_draw_page, onLaterPages=_draw_page)
+
+    status = str(data.get("status") or "Unavailable").replace("_", " ").title()
+    score_text = (
+        f"<b>{_fmt_score(score)} / 100</b>" if score is not None else "Unavailable"
+    )
+    details = Table(
+        [
+            [para("Candidate", cell_label), para(data.get("candidate_name") or "Unavailable")],
+            [para("Email", cell_label), para(data.get("candidate_email") or "Unavailable")],
+            [para("Started", cell_label), para(_fmt_started(data.get("started_at")))],
+            [para("Duration", cell_label), para(data.get("duration") or "-")],
+            [para("Status", cell_label), para(status)],
+            [para("Overall score", cell_label), Paragraph(score_text, cell)],
+        ],
+        colWidths=[34 * mm, 134 * mm],
+    )
+    details.setStyle(
+        TableStyle(
+            [
+                ("LINEBELOW", (0, 0), (-1, -1), 0.4, LINE),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]
+        )
+    )
+    story.append(details)
+
+    main_scored = [
+        item for item in questions
+        if not item.get("is_follow_up") and item.get("overall") is not None
+    ]
+    main_count = len(main_scored) or sum(
+        1 for item in questions if not item.get("is_follow_up")
+    )
+    if score is not None:
+        story += [
+            Spacer(1, 4),
+            Paragraph(
+                f"Weighted interview score: {float(score):.2f}/100 "
+                f"across {main_count} main questions.",
+                st["body"],
+            ),
+        ]
+
+    # ---------- skill scores ----------
+
+    story.append(Paragraph("Skill scores", st["h2"]))
+    skill_rows = [[para("Skill", cell_head), para("Score", cell_head)]]
+    for key, label in SKILL_LABELS.items():
+        value = skills.get(key)
+        skill_rows.append([
+            para(label),
+            para(f"{float(value):.0f} / 100" if value is not None else "-"),
+        ])
+    skill_table = Table(skill_rows, colWidths=[86 * mm, 39 * mm], hAlign="CENTER")
+    skill_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), INK),
+                ("GRID", (0, 0), (-1, -1), 0.4, LINE),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]
+        )
+    )
+    story.append(skill_table)
+
+    # ---------- strengths / improve ----------
+
+    for title, items in (
+        ("Strengths", summary["strengths"]),
+        ("Areas to improve", summary["improve"]),
+        ("How to improve", summary["how"]),
+    ):
+        if not items:
+            continue
+        story += [Paragraph(title, st["h2"]), bullets(items)]
+
+    # ---------- monitoring + eye movement (page 2) ----------
+
+    story += [
+        PageBreak(),
+        Paragraph("Monitoring summary (face / eye detection)", st["h2"]),
+        bullets(_monitoring_lines(data)),
+    ]
+    story += _gaze_story(data.get("gaze"), st)
+
+    # ---------- question-by-question feedback ----------
+
+    story.append(Paragraph("Question-by-question feedback", st["h2"]))
+    answered = [
+        item for item in questions if (item.get("answer") or "").strip()
+    ]
+    if not answered:
+        story.append(para("No answered questions were recorded.", detail))
+
+    for index, item in enumerate(answered, start=1):
+        label = (
+            "Follow-up"
+            if item.get("is_follow_up")
+            else f"Q{item.get('order') or index}"
+        )
+        overall = item.get("overall")
+        score_tag = (
+            f" &nbsp;<font color='{ACCENT.hexval().replace('0x', '#')}'>"
+            f"[{float(overall):.0f}/100]</font>"
+            if overall is not None
+            else ""
+        )
+        story.append(
+            Paragraph(
+                f"{label}: {escape(str(item.get('question') or 'Question unavailable'))}"
+                f"{score_tag}",
+                question_style,
+            )
+        )
+        lines = [f"Answer: {' '.join(str(item['answer']).split())}"]
+        feedback = " ".join(str(item.get("feedback") or "").split())
+        if feedback:
+            lines.append(f"Feedback: {feedback}")
+        story.append(bullets(lines, detail))
+
+    doc.build(story)
     return buffer.getvalue()
 
 

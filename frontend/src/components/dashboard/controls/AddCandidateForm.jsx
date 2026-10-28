@@ -51,7 +51,7 @@ export default function AddCandidateForm({ interviewId, role, t, onAdded, emailO
     }
     if (!cv) return setError("Upload the candidate's CV (PDF or DOCX). It is required.");
     if (!validResume(cv)) {
-      return setError("The CV must be a PDF or DOCX file, up to 5 MB.");
+      return setError("The CV must be a non-empty PDF or DOCX file, up to 5 MB.");
     }
 
     setBusy(true);

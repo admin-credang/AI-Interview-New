@@ -8,6 +8,7 @@ from app.api.interview_speech import router as interview_speech_router
 from app.api.interview_transcription import router as interview_transcription_router
 from app.database import engine
 from app.config import settings
+from app.services.url_config import is_vercel_deployment
 
 # =========================================================
 # AUTH
@@ -174,20 +175,7 @@ configured_origins = (
     getattr(settings, "cors_origins", "") or ""
 )
 
-allowed_origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "https://localhost:5173",
-    "https://127.0.0.1:5173",
-
-    # Local network frontend
-    "https://10.13.212.48:5173",
-    "http://10.13.212.48:5173",
-
-    # Deployed frontend
-    "https://ai-interview-new-8f5k.vercel.app",
-    "https://ai-interview-version-b.vercel.app",
-]
+allowed_origins = []
 
 if frontend_url:
     allowed_origins.append(frontend_url)
@@ -197,6 +185,19 @@ allowed_origins.extend(
     for origin in configured_origins.split(",")
     if origin.strip()
 )
+
+# Vite's default local development origins are allowed only outside Vercel.
+if not is_vercel_deployment():
+    allowed_origins.extend(
+        [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "https://localhost:5173",
+            "https://127.0.0.1:5173",
+            "https://10.13.212.48:5173",
+            "http://10.13.212.48:5173",
+        ]
+    )
 
 # Remove duplicate origins
 allowed_origins = list(dict.fromkeys(allowed_origins))

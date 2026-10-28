@@ -6,6 +6,11 @@ import {
 } from "react";
 
 import api from "../services/api";
+import {
+  clearStoredSession,
+  getStoredUser,
+  storeSession,
+} from "../authStorage";
 
 const AuthContext = createContext(null);
 
@@ -29,19 +34,12 @@ function loginErrorMessage(error) {
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
-    // a broken "user" value in localStorage must never white-screen the app
-    try {
-      const savedUser = localStorage.getItem("user");
-
-      return savedUser ? JSON.parse(savedUser) : null;
-    } catch {
-      return null;
-    }
+    return getStoredUser();
   });
 
   const [loading, setLoading] = useState(false);
 
-  const login = async (email, password) => {
+  const login = async (email, password, remember = true) => {
     setLoading(true);
 
     try {
@@ -55,15 +53,7 @@ export function AuthProvider({ children }) {
         user,
       } = response.data;
 
-      localStorage.setItem(
-        "access_token",
-        access_token
-      );
-
-      localStorage.setItem(
-        "user",
-        JSON.stringify(user)
-      );
+      storeSession(access_token, user, remember);
 
       setUser(user);
 
@@ -82,15 +72,14 @@ export function AuthProvider({ children }) {
   };
 
   // Google sign-in: `credential` is the ID token from Google Identity Services
-  const googleLogin = async (credential) => {
+  const googleLogin = async (credential, remember = true) => {
     setLoading(true);
 
     try {
       const response = await api.post("/auth/google", { credential });
       const { access_token, user } = response.data;
 
-      localStorage.setItem("access_token", access_token);
-      localStorage.setItem("user", JSON.stringify(user));
+      storeSession(access_token, user, remember);
       setUser(user);
 
       return { success: true, user };
@@ -142,15 +131,13 @@ export function AuthProvider({ children }) {
   // Used by the e-mail invitation link: the server already signed the
   // candidate in, so just store the session (no password screen).
   const setSession = (access_token, sessionUser) => {
-    localStorage.setItem("access_token", access_token);
-    localStorage.setItem("user", JSON.stringify(sessionUser));
+    storeSession(access_token, sessionUser);
 
     setUser(sessionUser);
   };
 
   const logout = () => {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("user");
+    clearStoredSession();
 
     setUser(null);
   };

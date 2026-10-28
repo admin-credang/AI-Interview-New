@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.api.auth.dependencies import get_current_user
+from app.models.interview import Interview
 from app.models.user import User
 from app.models.session import InterviewSession
 from app.models.session_review import SessionReview
@@ -58,15 +59,35 @@ def terminate_interview(
             detail="Interview session not found",
         )
 
-    # Only the candidate who owns the session may end it
-    # (the page ends it when cheating is detected).
-    if (
-        current_user.role == "candidate"
-        and interview_session.candidate_id != current_user.id
-    ):
+    if current_user.role == "candidate":
+        if interview_session.candidate_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This is not your interview session",
+            )
+    elif current_user.role in {"interviewer", "admin"}:
+        interview = (
+            db.query(Interview)
+            .filter(Interview.id == interview_session.interview_id)
+            .first()
+        )
+        if interview is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Interview not found",
+            )
+        if (
+            current_user.role != "admin"
+            and interview.created_by != current_user.id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not own this interview",
+            )
+    else:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="This is not your interview session",
+            detail="You cannot terminate interview sessions",
         )
 
     # Already terminated

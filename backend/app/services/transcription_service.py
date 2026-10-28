@@ -11,6 +11,7 @@ import os
 import tempfile
 from pathlib import Path
 
+from app.config import settings
 from app.services.transcript_normalizer import normalize_transcript
 
 logger = logging.getLogger(__name__)
@@ -51,7 +52,7 @@ class _LazyOpenAI:
 
     def __getattr__(self, name):
         if _LazyOpenAI._inst is None:
-            key = os.getenv("OPENAI_API_KEY")
+            key = (settings.openai_api_key or os.getenv("OPENAI_API_KEY") or "").strip()
             if not key:
                 raise RuntimeError("OPENAI_API_KEY is not configured.")
             from openai import OpenAI

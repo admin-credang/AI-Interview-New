@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.api.auth.dependencies import get_current_user
 from app.database import get_db
 
 from app.models.session import InterviewSession
@@ -13,6 +14,7 @@ from app.models.question import Question
 from app.models.answer import Answer
 from app.models.interview import Interview
 from app.models.interview_configuration import InterviewConfiguration
+from app.models.user import User
 
 from app.schemas.answer import AnswerCreate
 
@@ -2646,11 +2648,47 @@ def dialogflow_webhook(
 @router.post("/chat")
 def dialogflow_chat(
     request: DialogflowChatRequest,
-
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
 
     try:
+        if current_user.role != "candidate":
+            raise HTTPException(
+                status_code=403,
+                detail="Only candidates can use interview chat.",
+            )
+
+        try:
+            session_uuid = UUID(request.session_id)
+        except ValueError:
+            session_uuid = None
+
+        if session_uuid is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Interview session not found.",
+            )
+
+        owned_session = (
+            db.query(InterviewSession)
+            .filter(
+                InterviewSession.id == session_uuid,
+                InterviewSession.candidate_id == current_user.id,
+            )
+            .first()
+        )
+        if owned_session is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Interview session not found.",
+            )
+
+        if owned_session.status not in {"in_progress", "completed"}:
+            raise HTTPException(
+                status_code=409,
+                detail="Interview is not in progress.",
+            )
 
         # =================================================
         # COPY PARAMETERS
@@ -2720,34 +2758,16 @@ def dialogflow_chat(
         # SESSION
         # =================================================
 
-        try:
-
-            session_uuid = UUID(
-                request.session_id
-            )
-
-        except ValueError:
-
-            session_uuid = None
-
         interview_session = None
 
-        if session_uuid:
-
-            interview_session = (
-                db.query(InterviewSession)
-                .filter(
-                    InterviewSession.id
-                    == session_uuid
-                )
-                .first()
+        interview_session = (
+            db.query(InterviewSession)
+            .filter(
+                InterviewSession.id == session_uuid,
+                InterviewSession.candidate_id == current_user.id,
             )
-
-        if interview_session is None:
-
-            interview_session = (
-                find_fresh_interview_session(db)
-            )
+            .first()
+        )
 
         if interview_session is None:
 

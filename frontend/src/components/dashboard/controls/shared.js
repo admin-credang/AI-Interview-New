@@ -9,4 +9,6 @@ export const readBase64 = (file) =>
   });
 
 export const validResume = (file) =>
-  /\.(pdf|docx)$/i.test(file.name) && file.size <= 5 * 1024 * 1024;
+  /\.(pdf|docx)$/i.test(file.name) &&
+  file.size > 0 &&
+  file.size <= 5 * 1024 * 1024;

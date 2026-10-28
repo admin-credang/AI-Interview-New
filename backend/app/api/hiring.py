@@ -69,6 +69,11 @@ from app.services.pdf_report_service import (
     build_report_pdf_for_session,
     candidate_feedback_for_session,
 )
+from app.services.url_config import (
+    FrontendURLConfigurationError,
+    build_invite_url,
+    frontend_base_url,
+)
 from app.services.interview_policy import (
     follow_up_policy,
     format_code,
@@ -103,6 +108,16 @@ def _require_recruiter(user: User) -> None:
 
 def _num(value):
     return float(value) if value is not None else None
+
+
+def _configured_frontend_base_url() -> str:
+    try:
+        return frontend_base_url(settings.frontend_url)
+    except FrontendURLConfigurationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
 
 
 def _iso(value):
@@ -488,7 +503,7 @@ def notify_interviewer_task(session_id) -> None:
             len(events),
             reason,
             (
-                f"{settings.frontend_url.rstrip('/')}"
+                f"{_configured_frontend_base_url()}"
                 f"/dashboard/candidates/{session.id}"
             ),
         )
@@ -718,7 +733,10 @@ def _invitation_rows(
                 "code": record.get("code"),
                 # the personal link - used when the e-mail module is OFF
                 "link": (
-                    f"{settings.frontend_url.rstrip('/')}/invite/{record['code']}"
+                    build_invite_url(
+                        _configured_frontend_base_url(),
+                        record["code"],
+                    )
                     if record.get("code")
                     else None
                 ),
@@ -1294,7 +1312,7 @@ def invite_candidates(
         (r or {}).get("code") for r in records.values()
     }
 
-    base = settings.frontend_url.rstrip("/")
+    base = _configured_frontend_base_url()
 
     interviewer = _interviewer(configuration, current_user)
     identity = _mail_identity(configuration, current_user)
@@ -1344,7 +1362,7 @@ def invite_candidates(
 
         subject, text = build_invite_email(
             role,
-            f"{base}/invite/{record['code']}",
+            build_invite_url(base, record["code"]),
             policy["enabled"],
             company=company,
             duration=interview.duration,

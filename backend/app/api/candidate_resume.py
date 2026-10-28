@@ -63,7 +63,9 @@ class ResumeToggle(BaseModel):
 class ResumeUpload(BaseModel):
     email: str = Field(..., max_length=254)
     filename: str | None = Field(None, max_length=255)
-    content_base64: str = Field(..., max_length=_MAX_B64_CHARS)
+    content_base64: str = Field(
+        ..., min_length=1, max_length=_MAX_B64_CHARS
+    )
 
 
 def _rows(db: Session, interview_id, configuration):

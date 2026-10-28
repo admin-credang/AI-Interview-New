@@ -596,8 +596,8 @@ const MONITOR_INTERVAL_MS = 100; // face/eye check ~10x per second (was every fr
 const LOOK_DOWN_CALIBRATION_MS = 3000; // learn the normal "reading the screen" eye angle
 const LOOK_DOWN_MARGIN = 0.2; // must be this much below the learned normal
 
-const GREETING_SPEECH =
-  "Hello! Welcome to the AI Interview. I will guide you through the interview and ask you a series of questions based on your interview configuration. Are you ready to start your interview?";
+const WARMUP_GREETING =
+  "Hi, welcome to your interview. How has your day been so far?";
 
 const CLOSING_SPEECH =
   "Thank you. Your interview is complete. The interviewer will review your answers.";
@@ -617,6 +617,35 @@ const parseYesNo = (text) => {
   return null;
 };
 
+function getSessionFlag(sessionId, flag) {
+  if (!sessionId) {
+    return false;
+  }
+
+  try {
+    return localStorage.getItem(
+      `interview_${flag}_${sessionId}`
+    ) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function setSessionFlag(sessionId, flag) {
+  if (!sessionId) {
+    return;
+  }
+
+  try {
+    localStorage.setItem(
+      `interview_${flag}_${sessionId}`,
+      "1"
+    );
+  } catch {
+    // The session can continue without persistence when storage is unavailable.
+  }
+}
+
 export default function InterviewSession() {
   const {
     interviewId,
@@ -633,16 +662,67 @@ export default function InterviewSession() {
    */
 
   const [phase, setPhase] =
-    useState("greeting");
+    useState(() =>
+      getSessionFlag(sessionId, "ready") ||
+      getSessionFlag(sessionId, "warmup_complete")
+        ? "loading"
+        : "warmup"
+    );
 
   // becomes true when the candidate says / clicks "Yes"
   const [ready, setReady] =
+    useState(() =>
+      getSessionFlag(sessionId, "ready") ||
+      getSessionFlag(sessionId, "warmup_complete")
+    );
+
+  const [warmupDraft, setWarmupDraft] =
+    useState("");
+
+  const [warmupVoiceError, setWarmupVoiceError] =
+    useState("");
+
+  const [warmupResponse, setWarmupResponse] =
+    useState("");
+
+  const [warmupManualInput, setWarmupManualInput] =
     useState(false);
+
+  const [warmupSubmitting, setWarmupSubmitting] =
+    useState(false);
+
+  const [warmupRecording, setWarmupRecording] =
+    useState(false);
+
+  const [warmupListening, setWarmupListening] =
+    useState(false);
+
+  const [warmupTranscribing, setWarmupTranscribing] =
+    useState(false);
+
+  const warmupRecognitionRef =
+    useRef(null);
+
+  const warmupRecorderRef =
+    useRef(null);
+
+  if (warmupRecorderRef.current === null) {
+    warmupRecorderRef.current = createAnswerRecorder();
+  }
+
+  const warmupHandledRef =
+    useRef(
+      getSessionFlag(sessionId, "warmup_complete")
+    );
+
+  const warmupRequestInFlightRef = useRef(false);
 
   // Company introduction: spoken once (voice only, never shown as
   // text) after "Yes, I'm ready" and before the first question.
   const [introDone, setIntroDone] =
-    useState(false);
+    useState(() =>
+      getSessionFlag(sessionId, "intro_played")
+    );
 
   const introPromiseRef =
     useRef(null);
@@ -1574,6 +1654,7 @@ recognitionRef.current.stop();
       mountedRef.current = false;
 
       stopMedia();
+      warmupRecorderRef.current?.cancel();
 
       if (
         faceLandmarkerRef.current
@@ -1766,6 +1847,244 @@ recognitionRef.current.stop();
     },
     [speakText],
   );
+
+  const confirmReady = useCallback(() => {
+    setSessionFlag(sessionId, "ready");
+    setReady(true);
+    setPhase("loading");
+  }, [sessionId]);
+
+  const finishWarmup = useCallback(
+    async (reply) => {
+      const cleanReply = String(reply || "").trim().slice(0, 400);
+
+      if (
+        !cleanReply ||
+        warmupHandledRef.current ||
+        warmupRequestInFlightRef.current
+      ) {
+        return;
+      }
+
+      warmupRecorderRef.current?.cancel();
+      setWarmupRecording(false);
+      warmupRequestInFlightRef.current = true;
+      setWarmupSubmitting(true);
+      setWarmupVoiceError("");
+      setWarmupDraft(cleanReply);
+
+      try {
+        const result = await api.post(
+          `/interviews/${interviewId}/warmup-response`,
+          {
+            session_id: sessionId,
+            answer: cleanReply,
+          },
+        );
+
+        const response = String(result?.data?.text || "").trim();
+        if (!response) {
+          throw new Error("Warm-up response was empty.");
+        }
+
+        warmupHandledRef.current = true;
+        setSessionFlag(sessionId, "warmup_complete");
+        setWarmupResponse(response);
+        setWarmupVoiceError("");
+
+        try {
+          await speakText(response);
+        } catch (error) {
+          console.error("Warm-up response speech failed:", error);
+          if (mountedRef.current) {
+            setWarmupVoiceError(
+              "Your response is shown below, but spoken playback failed."
+            );
+          }
+        }
+        confirmReady();
+      } catch (error) {
+        console.error("Warm-up response generation failed:", error);
+        if (mountedRef.current) {
+          setWarmupVoiceError(
+            error?.response?.data?.detail ||
+              "The AI warm-up response is temporarily unavailable. Try again or continue to the interview."
+          );
+        }
+      } finally {
+        warmupRequestInFlightRef.current = false;
+        if (mountedRef.current) {
+          setWarmupSubmitting(false);
+        }
+      }
+    },
+    [confirmReady, interviewId, sessionId, speakText],
+  );
+
+  const continueWithoutWarmup = useCallback(() => {
+    try {
+      warmupRecognitionRef.current?.abort();
+    } catch (error) {
+      console.warn("Warm-up speech recognition cleanup failed:", error);
+    }
+    warmupRecognitionRef.current = null;
+    setWarmupListening(false);
+    warmupRecorderRef.current?.cancel();
+    setWarmupRecording(false);
+    warmupHandledRef.current = true;
+    setSessionFlag(sessionId, "warmup_complete");
+    confirmReady();
+    setWarmupVoiceError("");
+  }, [confirmReady, sessionId]);
+
+  const toggleWarmupSpeechRecognition = useCallback(() => {
+    if (warmupListening) {
+      warmupRecognitionRef.current?.stop();
+      return;
+    }
+
+    if (warmupSubmitting || warmupTranscribing) {
+      return;
+    }
+
+    const SpeechRecognitionApi =
+      window.SpeechRecognition ||
+      window.webkitSpeechRecognition;
+
+    if (!SpeechRecognitionApi) {
+      setWarmupManualInput(true);
+      setWarmupVoiceError(
+        "Speech recognition is unavailable in this browser. Type your reply or use the recording fallback."
+      );
+      return;
+    }
+
+    const recognition = new SpeechRecognitionApi();
+    let transcript = "";
+    let failed = false;
+
+    recognition.lang = "en-US";
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    warmupRecognitionRef.current = recognition;
+    setWarmupDraft("");
+    setWarmupVoiceError("");
+    setWarmupListening(true);
+
+    recognition.onresult = (event) => {
+      transcript = Array.from(event.results)
+        .map((result) => result[0]?.transcript || "")
+        .join(" ")
+        .trim();
+      setWarmupDraft(transcript);
+    };
+
+    recognition.onerror = (event) => {
+      if (event?.error === "aborted") {
+        return;
+      }
+
+      failed = true;
+      setWarmupListening(false);
+      setWarmupManualInput(true);
+      setWarmupVoiceError(
+        event?.error === "not-allowed" || event?.error === "service-not-allowed"
+          ? "Microphone permission was denied. Allow microphone access or type your reply."
+          : event?.error === "audio-capture"
+            ? "No microphone was found. Check your microphone or type your reply."
+            : "Speech recognition failed. You can try again or type your reply."
+      );
+    };
+
+    recognition.onend = () => {
+      if (warmupRecognitionRef.current === recognition) {
+        warmupRecognitionRef.current = null;
+      }
+      setWarmupListening(false);
+
+      if (failed) {
+        return;
+      }
+
+      if (transcript) {
+        setWarmupDraft(transcript);
+        void finishWarmup(transcript);
+      } else {
+        setWarmupManualInput(true);
+        setWarmupVoiceError(
+          "No speech was recognized. Try again or type your reply."
+        );
+      }
+    };
+
+    try {
+      recognition.start();
+    } catch (error) {
+      console.warn("Warm-up speech recognition could not start:", error);
+      failed = true;
+      warmupRecognitionRef.current = null;
+      setWarmupListening(false);
+      setWarmupManualInput(true);
+      setWarmupVoiceError(
+        "Microphone could not start. Check permission or type your reply."
+      );
+    }
+  }, [finishWarmup, warmupListening, warmupSubmitting, warmupTranscribing]);
+
+  const startWarmupRecording = useCallback(async () => {
+    if (!canRecordAudio() || warmupSubmitting || warmupTranscribing) {
+      setWarmupVoiceError(
+        "Microphone recording is unavailable. Type your reply instead."
+      );
+      return;
+    }
+
+    const started = await warmupRecorderRef.current.start();
+    if (!started) {
+      setWarmupVoiceError(
+        "Microphone access failed. Check permission or type your reply instead."
+      );
+      return;
+    }
+
+    setWarmupVoiceError("");
+    setWarmupRecording(true);
+  }, [warmupSubmitting, warmupTranscribing]);
+
+  const stopWarmupRecording = useCallback(async () => {
+    if (!warmupRecording || warmupTranscribing) {
+      return;
+    }
+
+    setWarmupRecording(false);
+    setWarmupTranscribing(true);
+    setWarmupVoiceError("");
+
+    try {
+      const audio = await warmupRecorderRef.current.stop();
+      const transcript = await transcribeAnswer(interviewId, audio);
+      if (!transcript) {
+        throw new Error(
+          "No speech was transcribed. Try recording again or type your reply."
+        );
+      }
+
+      await finishWarmup(transcript);
+    } catch (error) {
+      console.error("Warm-up microphone transcription failed:", error);
+      if (mountedRef.current) {
+        setWarmupVoiceError(
+          error?.response?.data?.detail ||
+            error?.message ||
+            "The recording could not be transcribed. Try again or type your reply."
+        );
+      }
+    } finally {
+      if (mountedRef.current) {
+        setWarmupTranscribing(false);
+      }
+    }
+  }, [finishWarmup, interviewId, warmupRecording, warmupTranscribing]);
 
   /*
    * ============================================================
@@ -2353,84 +2672,69 @@ recognitionRef.current.stop();
 
   /*
    * ============================================================
-   * GREETING  ("Are you ready?" -> candidate says / clicks Yes)
+   * PRE-INTERVIEW WARM-UP
    * ============================================================
-   * The AI speaks the welcome message, then listens for "yes".
-   * The first question is requested only after that.
+   * Warm-up replies stay in local state and never enter the interview
+   * answer, recording, transcription, or Dialogflow submission flow.
    */
   useEffect(() => {
-    if (phase !== "greeting") {
+    if (phase !== "warmup") {
       return;
     }
 
     let stopped = false;
-    let rec = null;
 
     const SpeechRecognitionApi =
       window.SpeechRecognition ||
       window.webkitSpeechRecognition;
 
-    const listen = () => {
-      if (stopped || !SpeechRecognitionApi) {
-        return;
-      }
+    if (!SpeechRecognitionApi) {
+      setWarmupManualInput(true);
+      setWarmupVoiceError(
+        "Speech recognition is unavailable in this browser. Type your reply or use the recording fallback."
+      );
+    }
 
-      rec = new SpeechRecognitionApi();
-      rec.lang = "en-US";
-      rec.continuous = false;
-      rec.interimResults = false;
+    const promptAlreadyPlayed =
+      getSessionFlag(sessionId, "warmup_prompted");
+    let promptTimer = null;
 
-      rec.onresult = (event) => {
-        const heard = Array.from(event.results)
-          .map((result) => result[0]?.transcript || "")
-          .join(" ");
-
-        if (YES_WORDS.test(heard) && !NO_WORDS.test(heard)) {
-          stopped = true;
-          setReady(true);
+    if (!promptAlreadyPlayed) {
+      promptTimer = window.setTimeout(() => {
+        if (stopped) {
+          return;
         }
-      };
 
-      rec.onend = () => {
-        if (!stopped) {
-          setTimeout(() => {
-            try {
-              rec.start();
-            } catch {}
-          }, 300);
-        }
-      };
-
-      rec.onerror = () => {};
-
-      try {
-        rec.start();
-      } catch {}
-    };
-
-    const greetingSpeech = speakText(GREETING_SPEECH);
-    const greetingGeneration = speechGenerationRef.current;
-
-    void greetingSpeech
-      .catch((error) => {
-        console.error("Greeting speech failed:", error);
-      })
-      .then(() => {
-        if (!stopped && mountedRef.current) {
-          listen();
-        }
-      });
+        setSessionFlag(sessionId, "warmup_prompted");
+        void speakText(WARMUP_GREETING)
+          .catch((error) => {
+            console.error("Warm-up prompt speech failed:", error);
+            setWarmupVoiceError(
+              "Spoken playback is unavailable. You can still answer by voice or type your reply."
+            );
+          });
+      }, 0);
+    }
 
     return () => {
       stopped = true;
-      try {
-        rec?.abort();
-      } catch {}
-      if (greetingGeneration === speechGenerationRef.current) {
-        cancelSpeech();
+      if (promptTimer !== null) {
+        window.clearTimeout(promptTimer);
       }
+      try {
+        warmupRecognitionRef.current?.abort();
+      } catch (error) {
+        console.warn("Warm-up speech recognition cleanup failed:", error);
+      }
+      warmupRecognitionRef.current = null;
+      cancelSpeech();
     };
-  }, [phase, speakText, cancelSpeech]);
+  }, [
+    phase,
+    sessionId,
+    speakText,
+    cancelSpeech,
+  ]);
 
   /*
    * ============================================================
@@ -2481,30 +2785,20 @@ recognitionRef.current.stop();
 
     let cancelled = false;
 
-    const playedKey = `intro_played_${sessionId}`;
-
     const finish = () => {
       if (cancelled) {
         return;
       }
 
-      try {
-        sessionStorage.setItem(playedKey, "1");
-      } catch {}
-
+      setSessionFlag(sessionId, "intro_played");
       setIntroDone(true);
     };
 
     // resumed interview: the candidate already heard it
-    let alreadyPlayed = false;
-
-    try {
-      alreadyPlayed =
-        sessionStorage.getItem(playedKey) === "1";
-    } catch {}
+    const alreadyPlayed =
+      getSessionFlag(sessionId, "intro_played");
 
     if (alreadyPlayed) {
-      setIntroDone(true);
       return undefined;
     }
 
@@ -2517,7 +2811,7 @@ recognitionRef.current.stop();
       }
 
       if (!text) {
-        setIntroDone(true);
+        finish();
         return;
       }
 
@@ -3515,7 +3809,7 @@ recognitionRef.current.stop();
    */
 
   const startListening =
-    () => {
+    async () => {
       if (
         (!recognitionRef.current &&
           !canRecordAudio()) ||
@@ -3535,9 +3829,22 @@ recognitionRef.current.stop();
         userEditedRef.current = false;
 
         if (canRecordAudio()) {
-          void recorderRef.current.start();
+          const recordingStarted =
+            await recorderRef.current.start();
 
-          if (!recognitionRef.current) {
+          if (!recordingStarted && !recognitionRef.current) {
+            setError(
+              "Microphone recording could not start. Check microphone permission or type your answer instead."
+            );
+            return;
+          }
+
+          if (!recordingStarted) {
+            setError(
+              "Audio recording is unavailable. You can continue with the live transcript or type your answer."
+            );
+          } else if (!recognitionRef.current) {
+            setError("");
             setIsListening(true);
           }
         }
@@ -5578,7 +5885,7 @@ recognitionRef.current?.stop();
    * ============================================================
    */
 
-  if (phase === "greeting") {
+  if (phase === "warmup") {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6 relative overflow-hidden font-sans">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-indigo-500/20 rounded-full blur-[120px] pointer-events-none" />
@@ -5589,29 +5896,116 @@ recognitionRef.current?.stop();
           </div>
 
           <h1 className="text-2xl font-bold text-white">
-            Hello! Welcome to the AI Interview.
+            Welcome to your interview
           </h1>
 
-          <p className="text-slate-300 text-sm leading-relaxed">
-            I'll guide you through the interview and ask you a series of
-            questions based on your interview configuration.
-          </p>
-
-          <p className="text-slate-100 font-semibold">
-            Are you ready to start your interview?
-          </p>
-
-          <button
-            type="button"
-            onClick={() => setReady(true)}
-            className="w-full py-3 rounded-2xl font-bold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-90 transition"
-          >
-            Yes, I'm ready
-          </button>
-
-          <p className="text-xs text-slate-500">
-            You can also just say "Yes".
-          </p>
+          <>
+              <p className="text-slate-100 font-semibold">
+                How has your day been so far?
+              </p>
+              <p className="text-slate-400 text-sm">
+                {warmupManualInput
+                  ? "Voice input isn't available right now. Type a short reply below."
+                  : "You can answer out loud or type a short reply below."}
+              </p>
+              {warmupVoiceError && (
+                <p className="text-amber-300 text-sm" role="status">
+                  {warmupVoiceError}
+                </p>
+              )}
+              {(typeof window !== "undefined" &&
+                (window.SpeechRecognition ||
+                  window.webkitSpeechRecognition)) && (
+                <button
+                  type="button"
+                  onClick={toggleWarmupSpeechRecognition}
+                  disabled={warmupTranscribing || warmupSubmitting}
+                  aria-pressed={warmupListening}
+                  className={`w-full py-3 rounded-2xl font-bold text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                    warmupListening
+                      ? "bg-rose-700 hover:bg-rose-600"
+                      : "bg-indigo-700 hover:bg-indigo-600"
+                  }`}
+                >
+                  {warmupListening
+                    ? "🎙 Listening... click to finish"
+                    : "🎙 Answer with your voice"}
+                </button>
+              )}
+              {warmupListening && (
+                <p className="text-slate-400 text-sm" role="status">
+                  Listening. Your recognized words will appear below.
+                </p>
+              )}
+              {warmupManualInput && canRecordAudio() && (
+                <button
+                  type="button"
+                  onClick={
+                    warmupRecording
+                      ? stopWarmupRecording
+                      : startWarmupRecording
+                  }
+                  disabled={warmupTranscribing || warmupSubmitting}
+                  className="w-full py-3 rounded-2xl font-bold text-white bg-slate-700 hover:bg-slate-600 transition disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {warmupTranscribing
+                    ? "Transcribing your reply..."
+                    : warmupRecording
+                      ? "Stop recording and send"
+                      : "Record a spoken reply"}
+                </button>
+              )}
+              {warmupResponse && (
+                <p className="text-slate-300 text-sm leading-relaxed">
+                  {warmupResponse}
+                </p>
+              )}
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void finishWarmup(warmupDraft);
+                }}
+                className="space-y-3"
+              >
+                <textarea
+                  value={warmupDraft}
+                  onChange={(event) => setWarmupDraft(event.target.value)}
+                  maxLength={400}
+                  rows={3}
+                  disabled={warmupSubmitting}
+                  aria-label="Your response about how your day has been"
+                  placeholder="Your reply"
+                  className="w-full resize-none rounded-2xl border border-slate-700 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-indigo-400 focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={!warmupDraft.trim() || warmupSubmitting}
+                  className="w-full py-3 rounded-2xl font-bold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-90 transition disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {warmupSubmitting ? "Getting a response..." : "Continue"}
+                </button>
+              </form>
+              {warmupVoiceError && !warmupSubmitting && (
+                <button
+                  type="button"
+                  onClick={continueWithoutWarmup}
+                  className="text-xs text-slate-400 underline underline-offset-4 hover:text-slate-200 transition"
+                >
+                  Continue to interview
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  void speakText(WARMUP_GREETING).catch((error) =>
+                    console.error("Warm-up prompt speech failed:", error)
+                  );
+                }}
+                className="text-xs text-slate-400 underline underline-offset-4 hover:text-slate-200 transition"
+              >
+                Replay question
+              </button>
+          </>
         </div>
       </div>
     );

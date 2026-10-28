@@ -1,8 +1,5 @@
 import { useEffect, useRef } from "react";
-
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ||
-  "https://greasily-parkway-annually.ngrok-free.dev";
+import API_BASE_URL from "../apiBaseUrl";
 
 function InterviewPage({ sessionId }) {
   const terminatedRef = useRef(false);

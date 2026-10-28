@@ -22,6 +22,7 @@ function InterviewLobby() {
   const [micStatus, setMicStatus] = useState("checking");
   const [isVideoMuted, setIsVideoMuted] = useState(false);
   const [isAudioMuted, setIsAudioMuted] = useState(false);
+  const [monitoringRequired, setMonitoringRequired] = useState(false);
   const [audioTesting, setAudioTesting] = useState(false);
   const [networkQuality, setNetworkQuality] = useState("Checking...");
   const [bandwidthMbps, setBandwidthMbps] = useState(null);
@@ -30,12 +31,11 @@ function InterviewLobby() {
   const [selectedAudioDevice, setSelectedAudioDevice] = useState("");
   const [selectedVideoDevice, setSelectedVideoDevice] = useState("");
   const [audioLevel, setAudioLevel] = useState(0);
-  const [fpsRate, setFpsRate] = useState(30);
+  const [fpsRate, setFpsRate] = useState(null);
   const [networkLatency, setNetworkLatency] = useState(null);
   
   // Advanced Real features
   const [noiseDetected, setNoiseDetected] = useState(false);
-  const [faceDetected, setFaceDetected] = useState(true);
   const [showDiagnosticsModal, setShowDiagnosticsModal] = useState(false);
 
   // Ready Check & Success Modal
@@ -91,12 +91,15 @@ function InterviewLobby() {
   };
 
   async function initMediaStream(constraints = { video: true, audio: true }) {
+    const requiresCamera = Boolean(constraints.video);
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
-        setCamStatus("warning");
+        setCamStatus(requiresCamera ? "warning" : "not required");
         setMicStatus("warning");
         setIsVideoMuted(true);
         setIsAudioMuted(true);
+        setFpsRate(null);
+        setError("Microphone access is unavailable. You can type your answers instead.");
         return;
       }
       stopAllMediaStreams();
@@ -110,10 +113,21 @@ function InterviewLobby() {
 
       const hasVideo = stream.getVideoTracks().length > 0;
       const hasAudio = stream.getAudioTracks().length > 0;
-      setCamStatus(hasVideo ? "success" : "warning");
+      const frameRate = stream.getVideoTracks()[0]?.getSettings()?.frameRate;
+      setCamStatus(
+        requiresCamera ? (hasVideo ? "success" : "warning") : "not required"
+      );
       setMicStatus(hasAudio ? "success" : "warning");
-      setIsVideoMuted(!hasVideo);
+      setIsVideoMuted(!requiresCamera || !hasVideo);
       setIsAudioMuted(!hasAudio);
+      setFpsRate(
+        requiresCamera && typeof frameRate === "number"
+          ? Math.round(frameRate)
+          : null
+      );
+      if (!hasAudio) {
+        setError("Microphone access is unavailable. You can type your answers instead.");
+      }
 
       if (hasAudio) setupAudioVisualizer(stream);
 
@@ -128,11 +142,13 @@ function InterviewLobby() {
         setSelectedAudioDevice(stream.getAudioTracks()[0].getSettings()?.deviceId || "");
       }
     } catch (err) {
-      setCamStatus("warning");
+      setCamStatus(requiresCamera ? "warning" : "not required");
       setMicStatus("warning");
       setIsVideoMuted(true);
       setIsAudioMuted(true);
       setAudioLevel(0);
+      setFpsRate(null);
+      setError("Microphone access is unavailable. You can type your answers instead.");
       if (videoRef.current) videoRef.current.srcObject = null;
     }
   }
@@ -189,9 +205,12 @@ function InterviewLobby() {
         const lobbyRes = await api.get(`/interviews/${interviewId}/lobby`);
         if (!mounted) return;
         setConfiguration(lobbyRes.data.configuration);
-        setInterview(
-          lobbyRes.data.interview || { id: interviewId, title: "AI Interview Session" }
-        );
+        const interviewData =
+          lobbyRes.data.interview || { id: interviewId, title: "AI Interview Session" };
+        setInterview(interviewData);
+        const requiresCamera = Boolean(interviewData.monitoring_required);
+        setMonitoringRequired(requiresCamera);
+        void initMediaStream({ video: requiresCamera, audio: true });
       } catch (err) {
         if (mounted) setError(getErrorMessage(err));
       } finally {
@@ -200,7 +219,6 @@ function InterviewLobby() {
     }
 
     loadData();
-    initMediaStream();
 
     // Real bandwidth & latency estimator
     const measureNetwork = async () => {
@@ -212,16 +230,13 @@ function InterviewLobby() {
         const duration = performance.now() - start;
         setNetworkLatency(Math.round(duration));
         
-        // Approximate bandwidth simulation based on latency
-        const simulatedBw = Math.max(12.5, Math.min(85.4, (100 / (duration + 5)) * 35)).toFixed(1);
-        setBandwidthMbps(simulatedBw);
-        setFpsRate(60);
-        setNetworkQuality(duration < 80 ? "Optimal (High Speed)" : "Moderate");
+        setBandwidthMbps(null);
+        setNetworkQuality(duration < 80 ? "Low latency" : "High latency");
       } catch (e) {
         if (!mounted) return;
-        setNetworkLatency(24);
-        setBandwidthMbps("18.4");
-        setNetworkQuality("Stable");
+        setNetworkLatency(null);
+        setBandwidthMbps(null);
+        setNetworkQuality("Unavailable");
       }
     };
     measureNetwork();
@@ -233,9 +248,17 @@ function InterviewLobby() {
   }, [interviewId]);
 
   const toggleVideo = async () => {
+    if (!monitoringRequired) {
+      setError("Camera access is not required for this interview.");
+      return;
+    }
     if (mediaStreamRef.current) {
       const t = mediaStreamRef.current.getVideoTracks()[0];
       if (t) {
+        if (t.enabled) {
+          setError("Camera monitoring is required and cannot be switched off.");
+          return;
+        }
         t.enabled = !t.enabled;
         setIsVideoMuted(!t.enabled);
       } else {
@@ -254,10 +277,10 @@ function InterviewLobby() {
         setIsAudioMuted(!t.enabled);
         if (!t.enabled) setAudioLevel(0);
       } else {
-        await initMediaStream({ video: !isVideoMuted, audio: true });
+        await initMediaStream({ video: monitoringRequired, audio: true });
       }
     } else {
-      await initMediaStream({ video: true, audio: true });
+      await initMediaStream({ video: monitoringRequired, audio: true });
     }
   };
 
@@ -292,6 +315,10 @@ function InterviewLobby() {
     }
     if (!allChecksPassed) {
       setError("Please finish all 4 ready checks first.");
+      return;
+    }
+    if (monitoringRequired && (camStatus !== "success" || isVideoMuted)) {
+      setError("Camera monitoring is required. Enable the camera before continuing.");
       return;
     }
 
@@ -386,16 +413,18 @@ function InterviewLobby() {
               {interview?.title || "AI Evaluation Session"}
             </h2>
             <p className="text-slate-400 text-sm mt-2 max-w-xl">
-              Verify your video feed, check background ambient sound levels, and finish the ready checks to launch.
+              {monitoringRequired
+                ? "Check your required camera and microphone, then finish the ready checks to launch."
+                : "Camera monitoring is disabled for this interview. Check your microphone or use text answers, then finish the ready checks."}
             </p>
           </div>
 
           <div className="flex gap-2.5 self-start sm:self-center">
             <span className="px-3.5 py-2 rounded-2xl bg-white/[0.04] border border-white/10 text-xs font-mono font-bold text-cyan-400">
-              {fpsRate} FPS
+              {fpsRate ? `${fpsRate} FPS` : "FPS unavailable"}
             </span>
             <span className="px-3.5 py-2 rounded-2xl bg-white/[0.04] border border-white/10 text-xs font-mono font-bold text-indigo-400">
-              ⚡ {bandwidthMbps ? `${bandwidthMbps} Mbps` : "Sync..."}
+              {bandwidthMbps ? `${bandwidthMbps} Mbps` : "Bandwidth not measured"}
             </span>
           </div>
         </div>
@@ -417,13 +446,13 @@ function InterviewLobby() {
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                  AI Face & Cam Feed
+                  Camera preview
                 </h3>
                 <div className="flex items-center gap-2">
-                  <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold border ${
-                    faceDetected ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" : "bg-amber-500/10 text-amber-400 border-amber-500/30"
-                  }`}>
-                    {faceDetected ? "👤 Face Detected" : "⚠️ Adjust Position"}
+                  <span className="text-[10px] px-2.5 py-0.5 rounded-full font-bold border bg-slate-500/10 text-slate-300 border-slate-500/30">
+                    {monitoringRequired
+                      ? "Face monitoring begins in interview"
+                      : "Monitoring disabled"}
                   </span>
                 </div>
               </div>
@@ -460,14 +489,19 @@ function InterviewLobby() {
 
               {/* Device Selectors & Real Audio Noise Indicator */}
               <div className="mt-5 space-y-3">
-                {videoDevices.length > 0 && (
+                {monitoringRequired && videoDevices.length > 0 && (
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-400 mb-1">Camera Input</label>
                     <select
                       value={selectedVideoDevice}
                       onChange={(e) => {
                         setSelectedVideoDevice(e.target.value);
-                        initMediaStream({ video: { deviceId: { exact: e.target.value } }, audio: true });
+                        initMediaStream({
+                          video: { deviceId: { exact: e.target.value } },
+                          audio: selectedAudioDevice
+                            ? { deviceId: { exact: selectedAudioDevice } }
+                            : true,
+                        });
                       }}
                       className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
                     >
@@ -485,7 +519,14 @@ function InterviewLobby() {
                       value={selectedAudioDevice}
                       onChange={(e) => {
                         setSelectedAudioDevice(e.target.value);
-                        initMediaStream({ video: true, audio: { deviceId: { exact: e.target.value } } });
+                        initMediaStream({
+                          video: monitoringRequired
+                            ? selectedVideoDevice
+                              ? { deviceId: { exact: selectedVideoDevice } }
+                              : true
+                            : false,
+                          audio: { deviceId: { exact: e.target.value } },
+                        });
                       }}
                       className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
                     >
@@ -512,14 +553,16 @@ function InterviewLobby() {
 
                 {/* Toggle Buttons */}
                 <div className="grid grid-cols-3 gap-2.5 pt-2">
-                  <button
-                    onClick={toggleVideo}
-                    className={`py-2.5 rounded-xl text-xs font-bold transition border ${
-                      isVideoMuted ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30" : "bg-rose-500/10 text-rose-300 border-rose-500/30"
-                    }`}
-                  >
-                    {isVideoMuted ? "Turn Cam ON" : "Turn Cam OFF"}
-                  </button>
+                  {monitoringRequired && (
+                    <button
+                      onClick={toggleVideo}
+                      className={`py-2.5 rounded-xl text-xs font-bold transition border ${
+                        isVideoMuted ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30" : "bg-rose-500/10 text-rose-300 border-rose-500/30"
+                      }`}
+                    >
+                      {isVideoMuted ? "Turn Cam ON" : "Turn Cam OFF"}
+                    </button>
+                  )}
                   <button
                     onClick={toggleAudio}
                     className={`py-2.5 rounded-xl text-xs font-bold transition border ${
@@ -565,7 +608,12 @@ function InterviewLobby() {
                   {[
                     { key: "quietPlace", label: "I am in a quiet place with proper lighting" },
                     { key: "internet", label: "My internet connection & speed is stable" },
-                    { key: "mic", label: "My microphone and camera are fully functional" },
+                    {
+                      key: "mic",
+                      label: monitoringRequired
+                        ? "My microphone and required camera are functional"
+                        : "I can use the microphone or type my answers",
+                    },
                     { key: "stayPage", label: "I agree not to switch tabs during interview" },
                   ].map((item) => (
                     <label
@@ -597,7 +645,9 @@ function InterviewLobby() {
                 </div>
                 <div className="p-3 rounded-2xl bg-white/[0.02] border border-white/5">
                   <span className="block text-[10px] text-slate-400 font-semibold">AI Proctoring</span>
-                  <span className="text-xs font-bold text-purple-300 truncate block mt-0.5">Strict Mode Active</span>
+                  <span className="text-xs font-bold text-purple-300 truncate block mt-0.5">
+                    {monitoringRequired ? "Monitoring enabled" : "Monitoring disabled"}
+                  </span>
                 </div>
               </div>
             </div>
@@ -717,7 +767,9 @@ function InterviewLobby() {
             <div>
               <h3 className="text-lg font-black text-white">All Checks Verified!</h3>
               <p className="text-slate-300 text-xs mt-1.5 leading-relaxed">
-                Your hardware, camera face view, and internet bandwidth are fully optimized. Ready to begin.
+                {monitoringRequired
+                  ? "Your required device checks are complete. Ready to begin."
+                  : "Your setup checks are complete. Camera monitoring is disabled. Ready to begin."}
               </p>
             </div>
             <div className="flex gap-2.5 pt-2">

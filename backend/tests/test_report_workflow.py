@@ -18,6 +18,7 @@ from fastapi import HTTPException
 
 from app.api.reports import get_interview_report
 from app.models.answer import Answer
+from app.models.interview import Interview
 from app.models.question import Question
 from app.models.report import Report
 from app.models.score import Score
@@ -260,8 +261,10 @@ def test_candidate_cannot_access_the_interviewer_report():
 
 def test_interviewer_can_request_report_and_generation_errors_are_client_errors():
     session_id = uuid4()
+    user_id = uuid4()
     session = SimpleNamespace(interview_id=uuid4())
-    db = Database({InterviewSession: session})
+    interview = SimpleNamespace(created_by=user_id)
+    db = Database({InterviewSession: session, Interview: interview})
     report = SimpleNamespace(
         id=uuid4(),
         session_id=session_id,
@@ -278,7 +281,7 @@ def test_interviewer_can_request_report_and_generation_errors_are_client_errors(
         result = get_interview_report(
             session_id,
             db=db,
-            current_user=SimpleNamespace(role="interviewer", id=uuid4()),
+            current_user=SimpleNamespace(role="interviewer", id=user_id),
         )
 
     assert result is report
@@ -292,8 +295,47 @@ def test_interviewer_can_request_report_and_generation_errors_are_client_errors(
             get_interview_report(
                 session_id,
                 db=db,
-                current_user=SimpleNamespace(role="interviewer", id=uuid4()),
+                current_user=SimpleNamespace(role="interviewer", id=user_id),
             )
 
     assert error.value.status_code == 400
     assert error.value.detail == "No answers found for this interview session."
+
+
+def test_interviewer_cannot_access_another_interviewers_report():
+    session_id = uuid4()
+    session = SimpleNamespace(interview_id=uuid4())
+    interview = SimpleNamespace(created_by=uuid4())
+    db = Database({InterviewSession: session, Interview: interview})
+
+    with patch("app.api.reports.generate_interview_report") as generate:
+        with pytest.raises(HTTPException) as error:
+            get_interview_report(
+                session_id,
+                db=db,
+                current_user=SimpleNamespace(role="interviewer", id=uuid4()),
+            )
+
+    assert error.value.status_code == 403
+    generate.assert_not_called()
+
+
+def test_admin_can_access_another_interviewers_report():
+    session_id = uuid4()
+    session = SimpleNamespace(interview_id=uuid4())
+    interview = SimpleNamespace(created_by=uuid4())
+    db = Database({InterviewSession: session, Interview: interview})
+    report = SimpleNamespace(id=uuid4())
+
+    with patch(
+        "app.api.reports.generate_interview_report",
+        return_value=report,
+    ) as generate:
+        result = get_interview_report(
+            session_id,
+            db=db,
+            current_user=SimpleNamespace(role="admin", id=uuid4()),
+        )
+
+    assert result is report
+    generate.assert_called_once_with(db=db, session_id=session_id)

@@ -1,13 +1,6 @@
 import axios from "axios";
-
-// API BASE URL
-
-const API_BASE_URL = import.meta.env.PROD
-  ? "/api"
-  : (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000").replace(
-      /\/+$/,
-      "",
-    );
+import API_BASE_URL from "../apiBaseUrl";
+import { getAccessToken } from "../authStorage";
 
 // AXIOS INSTANCE
 const api = axios.create({
@@ -23,7 +16,7 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     try {
-      const token = localStorage.getItem("access_token");
+      const token = getAccessToken();
 
       if (token) {
         config.headers = config.headers || {};

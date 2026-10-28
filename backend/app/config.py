@@ -13,6 +13,7 @@ class Settings(BaseSettings):
 
     database_url: str
     secret_key: str | None = None
+    openai_api_key: str | None = None
 
     # =========================================================
     # DIALOGFLOW CX

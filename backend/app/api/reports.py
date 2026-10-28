@@ -7,11 +7,13 @@ from app.database import get_db
 from app.api.auth.dependencies import get_current_user
 
 from app.models.user import User
+from app.models.interview import Interview
 from app.models.session import InterviewSession
 
 from app.schemas.report import ReportResponse
 
 from app.services.report_service import generate_interview_report
+from app.services.interview_policy import is_recruiter, owns_interview
 
 
 router = APIRouter(
@@ -44,15 +46,24 @@ def get_interview_report(
             detail="Interview session not found"
         )
 
-    # Evaluation reports are for the hiring team only.
-    # Candidates are told the result by call / e-mail.
-    if current_user.role == "candidate":
+    if not is_recruiter(current_user):
         raise HTTPException(
             status_code=403,
-            detail=(
-                "Interview reports are shared by the "
-                "hiring team only"
-            )
+            detail="Only interviewers and admins can access reports"
+        )
+
+    interview = (
+        db.query(Interview)
+        .filter(Interview.id == session.interview_id)
+        .first()
+    )
+    if interview is None:
+        raise HTTPException(status_code=404, detail="Interview not found")
+
+    if not owns_interview(current_user, interview):
+        raise HTTPException(
+            status_code=403,
+            detail="This candidate belongs to another interviewer"
         )
 
     try:

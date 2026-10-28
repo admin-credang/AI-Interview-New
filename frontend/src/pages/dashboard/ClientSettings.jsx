@@ -700,8 +700,13 @@ function AddCandidateColumn({ interviewId, t, onAdded, emailOn, cvOn }) {
     if (!/^\+?\d{7,15}$/.test(digits)) {
       return setError("Enter a valid phone number (7-15 digits, e.g. +919876543210).");
     }
-    if (cv && (!/\.(pdf|docx)$/i.test(cv.name) || cv.size > 5 * 1024 * 1024)) {
-      return setError("The CV must be a PDF or DOCX file, up to 5 MB.");
+    if (
+      cv &&
+      (!/\.(pdf|docx)$/i.test(cv.name) ||
+        cv.size === 0 ||
+        cv.size > 5 * 1024 * 1024)
+    ) {
+      return setError("The CV must be a non-empty PDF or DOCX file, up to 5 MB.");
     }
 
     setBusy(true);
@@ -936,8 +941,12 @@ export default function ClientSettings() {
   const uploadResume = async (email, file) => {
     if (!file) return;
     clearNotes();
-    if (!/\.(pdf|docx)$/i.test(file.name) || file.size > 5 * 1024 * 1024) {
-      setResumeErr("Upload a PDF or DOCX resume, up to 5 MB.");
+    if (
+      !/\.(pdf|docx)$/i.test(file.name) ||
+      file.size === 0 ||
+      file.size > 5 * 1024 * 1024
+    ) {
+      setResumeErr("Upload a non-empty PDF or DOCX resume, up to 5 MB.");
       return;
     }
     setResumeBusy(email);

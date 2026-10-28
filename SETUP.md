@@ -1,3 +1,61 @@
+# Local and Vercel environment configuration
+
+The production frontend is `https://ai-interview-version-b.vercel.app`. Keep
+local settings in `backend/.env` and `frontend/.env.local`; configure production
+values in the Vercel project settings. Do not copy production credentials into
+local files or commit secret values.
+
+## Local development
+
+Use the following URL settings in `backend/.env`:
+
+```text
+FRONTEND_URL=http://localhost:5173
+CORS_ORIGINS=http://localhost:5173
+GOOGLE_OAUTH_REDIRECT_URI=http://localhost:8000/google-oauth/callback
+```
+
+Create `frontend/.env.local` from `frontend/.env.example`:
+
+```text
+VITE_API_BASE_URL=http://127.0.0.1:8000
+```
+
+Start the backend on port `8000` and the Vite frontend on port `5173`.
+The backend permits the local Vite origins only outside Vercel.
+
+## Vercel production settings
+
+Configure these backend variables in Vercel. The frontend and backend share a
+Vercel domain, so `/api` is routed to FastAPI by `vercel.json`.
+
+```text
+FRONTEND_URL=https://ai-interview-version-b.vercel.app
+CORS_ORIGINS=https://ai-interview-version-b.vercel.app
+GOOGLE_OAUTH_REDIRECT_URI=https://ai-interview-version-b.vercel.app/api/google-oauth/callback
+```
+
+The tracked `frontend/.env.production` sets the same-origin API route for
+production builds. Set this frontend build variable in Vercel as well to make
+the deployment setting explicit:
+
+```text
+VITE_API_BASE_URL=/api
+```
+
+Vercel build variables override the tracked production default. If using a
+separately hosted backend, set this to that backend's absolute public HTTPS URL
+and set the backend `CORS_ORIGINS` accordingly. The local `.env.local` value is
+overridden by `.env.production` for production builds.
+Production frontend builds reject `localhost` API URLs, and backend-generated
+links reject a localhost `FRONTEND_URL` on Vercel.
+
+Also configure the application's normal backend variables, including
+`DATABASE_URL`, `SECRET_KEY`, `OPENAI_API_KEY`, and any enabled mail, Dialogflow,
+Google OAuth, and voice integrations. Missing `DATABASE_URL` prevents backend
+startup; Gmail OAuth requires its client ID, client secret, redirect URI, and
+`FRONTEND_URL`.
+
 # Gmail OAuth setup
 
 Gmail OAuth lets each interviewer connect their own Google account. The
@@ -15,54 +73,26 @@ invitations and hiring-decision emails are sent through that account's Gmail.
 3. If the consent screen is in Testing mode, add each interviewer as a test
    user. Google may require app verification before public production use of
    the Gmail send scope.
-4. Create a **Web application** OAuth client. Add the dev frontend origin to
-   **Authorized JavaScript origins**. For this repository's Vercel routing,
-   add this exact browser-facing callback to **Authorized redirect URIs**:
-
-   `https://ai-interview-new-8f5k.vercel.app/api/google-oauth/callback`
-
-   The `/api` prefix is required: Vercel routes `/api/*` to FastAPI, and the
-   backend removes that prefix before matching its `/google-oauth/callback`
-   route. If the backend is deployed on a separate public host instead, use
-   `https://<DEV-BACKEND-DOMAIN>/google-oauth/callback` and set the frontend's
-   API base URL to that backend host. In either case, the Google Cloud URI and
-   `GOOGLE_OAUTH_REDIRECT_URI` must match exactly.
-
-## Dev deployment environment
-
-Set these as backend environment variables in the **dev deployment**
-(deployment-platform variables take precedence over `backend/.env`):
+4. Create a **Web application** OAuth client. Add the local and production
+   frontend origins to **Authorized JavaScript origins**. Add the callbacks
+   used by the relevant environment to **Authorized redirect URIs**:
 
 ```text
-GOOGLE_OAUTH_CLIENT_ID=<OAuth client ID>
-GOOGLE_OAUTH_CLIENT_SECRET=<OAuth client secret>
-GOOGLE_OAUTH_REDIRECT_URI=https://ai-interview-new-8f5k.vercel.app/api/google-oauth/callback
-SECRET_KEY=<long random application signing secret>
-MAIL_SECRET_KEY=<long random stable secret used to encrypt saved refresh tokens>
-FRONTEND_URL=https://ai-interview-new-8f5k.vercel.app
-CORS_ORIGINS=https://ai-interview-new-8f5k.vercel.app
-VITE_API_BASE_URL=/api
+https://ai-interview-version-b.vercel.app/api/google-oauth/callback
+http://localhost:8000/google-oauth/callback
 ```
 
-Use the same deployment domain in the callback URI registered in Google
-Cloud. For a separate backend host, set `GOOGLE_OAUTH_REDIRECT_URI` to that
-host's `/google-oauth/callback` URL instead. Keep the OAuth client secret,
-`SECRET_KEY`, and `MAIL_SECRET_KEY` only in backend deployment settings; never
-put them in Vite/frontend variables or commit them. Keep both keys stable:
-changing `SECRET_KEY` invalidates existing app sessions, while changing
-`MAIL_SECRET_KEY` makes already stored encrypted tokens unreadable.
+The `/api` prefix on the Vercel callback is required: Vercel routes `/api/*`
+to FastAPI, and the backend removes that prefix before matching its
+`/google-oauth/callback` route. The configured
+`GOOGLE_OAUTH_REDIRECT_URI` must exactly match the URI used for that
+environment. For a separately hosted backend, use that host's
+`/google-oauth/callback` URL instead.
 
-The backend also requires its normal `DATABASE_URL` setting.
-For a same-domain Vercel frontend, set `VITE_API_BASE_URL=/api`; for a
-separately hosted backend, set it to the backend base URL. Rebuild/redeploy the
-frontend after changing its Vite variable.
-
-`Settings` loads `backend/.env` regardless of the backend process working
-directory, but deployed services should use their environment-variable
-settings. `FRONTEND_URL` is required for Gmail OAuth redirects; set it to
-`http://localhost:5173` locally. For local development, register
-`http://localhost:8000/google-oauth/callback` in Google Cloud and set that
-exact value as `GOOGLE_OAUTH_REDIRECT_URI` in `backend/.env`.
+Keep the OAuth client secret, `SECRET_KEY`, and `MAIL_SECRET_KEY` only in
+backend settings; never put them in Vite/frontend variables or commit them.
+Keep `SECRET_KEY` and `MAIL_SECRET_KEY` stable: changing them invalidates
+application sessions or makes saved encrypted tokens unreadable.
 
 ## Connecting and sending
 

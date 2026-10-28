@@ -140,7 +140,10 @@ function ControlCard({ item, t, catalog, groups, defaultOpen = false }) {
     setNotice({ msg: "", err: "" });
 
     if (!validResume(file)) {
-      setNotice({ msg: "", err: "Upload a PDF or DOCX resume, up to 5 MB." });
+      setNotice({
+        msg: "",
+        err: "Upload a non-empty PDF or DOCX resume, up to 5 MB.",
+      });
       return;
     }
 

@@ -14,13 +14,25 @@ from app.config import settings
 from app.database import get_db
 from app.models.user import User
 from app.services import gmail_oauth, mailbox
+from app.services.url_config import (
+    FrontendURLConfigurationError,
+    frontend_base_url,
+    google_oauth_redirect_uri,
+)
 
 
 router = APIRouter(prefix="/google-oauth", tags=["Gmail OAuth"])
 
 
+def _configured_frontend_base_url() -> str:
+    try:
+        return frontend_base_url(settings.frontend_url)
+    except FrontendURLConfigurationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
 def _frontend_redirect(**params) -> RedirectResponse:
-    base = settings.frontend_url.rstrip("/")
+    base = _configured_frontend_base_url()
     query = urlencode(params)
 
     return RedirectResponse(
@@ -33,10 +45,22 @@ def _frontend_redirect(**params) -> RedirectResponse:
 def status(current_user: User = Depends(get_current_user)):
     account = mailbox.gmail_account(current_user)
 
+    try:
+        frontend_base = _configured_frontend_base_url()
+        google_oauth_redirect_uri(
+            settings.google_oauth_redirect_uri,
+            frontend_base,
+        )
+        urls_configured = True
+    except HTTPException:
+        urls_configured = False
+    except FrontendURLConfigurationError:
+        urls_configured = False
+
     return {
         "configured": (
             gmail_oauth.configured()
-            and bool(settings.frontend_url.strip())
+            and urls_configured
         ),
         "connected": bool(account),
         "email": account["email"] if account else None,
@@ -45,17 +69,21 @@ def status(current_user: User = Depends(get_current_user)):
 
 @router.get("/connect-url")
 def connect_url(current_user: User = Depends(get_current_user)):
+    _configured_frontend_base_url()
+
     if not gmail_oauth.configured():
         raise HTTPException(
             status_code=503,
             detail="Google OAuth is not configured on the backend.",
         )
 
-    if not settings.frontend_url.strip():
-        raise HTTPException(
-            status_code=503,
-            detail="FRONTEND_URL is not configured on the backend.",
+    try:
+        google_oauth_redirect_uri(
+            settings.google_oauth_redirect_uri,
+            settings.frontend_url,
         )
+    except FrontendURLConfigurationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     state = jwt.encode(
         {
@@ -85,11 +113,7 @@ def callback(
     error: str | None = Query(None),
     db: Session = Depends(get_db),
 ):
-    if not settings.frontend_url.strip():
-        raise HTTPException(
-            status_code=503,
-            detail="FRONTEND_URL is not configured on the backend.",
-        )
+    _configured_frontend_base_url()
 
     # Google may redirect here with an error if consent was denied.
     if error:

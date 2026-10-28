@@ -1052,6 +1052,12 @@ def generate_and_save_questions(
                 f"Expected one of {VALID_QUESTION_COUNTS}."
             )
 
+        append_compulsory_questions(
+            db=db,
+            session_id=session_id,
+            texts=compulsory_questions,
+        )
+
         print()
         print(
             "Complete main question set already exists."

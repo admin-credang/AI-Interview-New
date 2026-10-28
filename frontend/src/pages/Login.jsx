@@ -25,7 +25,7 @@ function Login() {
     e.preventDefault();
     setError("");
 
-    const result = await login(email, password);
+    const result = await login(email, password, remember);
 
     if (!result.success) {
       setError(result.message);
@@ -46,6 +46,9 @@ function Login() {
 
     try {
       pending = sessionStorage.getItem("pending_invite");
+      if (pending) {
+        sessionStorage.removeItem("pending_invite");
+      }
     } catch {
       /* ignore */
     }
@@ -69,7 +72,7 @@ function Login() {
         client_id: googleClientId,
         callback: async (response) => {
           setError("");
-          const result = await googleLogin(response.credential);
+          const result = await googleLogin(response.credential, remember);
 
           if (!result.success) {
             setError(result.message);
@@ -226,12 +229,9 @@ function Login() {
                 />
                 Remember me
               </label>
-              <Link
-                to="/forgot-password"
-                className="font-medium text-stone-500 underline-offset-4 hover:text-orange-600 hover:underline"
-              >
-                Forgot password?
-              </Link>
+              <span className="text-right text-xs text-stone-500">
+                Password recovery is unavailable. Contact your administrator.
+              </span>
             </div>
 
             <button

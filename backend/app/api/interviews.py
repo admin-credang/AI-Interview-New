@@ -1,7 +1,9 @@
 from uuid import UUID
 from datetime import datetime, timezone
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
@@ -25,7 +27,10 @@ from app.schemas.session import (
     SessionResponse,
 )
 
-from app.services.question_service import generate_questions
+from app.services.question_service import (
+    append_compulsory_questions,
+    generate_questions,
+)
 from app.services.resume_service import resume_text_for
 from app.services.interview_policy import (
     NOT_INVITED_MESSAGE,
@@ -34,12 +39,66 @@ from app.services.interview_policy import (
     invited_role,
     owns_interview,
 )
+from app.services.warmup_service import generate_warmup_response
 
 
 router = APIRouter(
     prefix="/interviews",
     tags=["Interviews"],
 )
+
+logger = logging.getLogger(__name__)
+
+
+class WarmupReplyRequest(BaseModel):
+    session_id: UUID
+    answer: str = Field(min_length=1, max_length=400)
+
+
+@router.post("/{interview_id}/warmup-response")
+def create_warmup_response(
+    interview_id: UUID,
+    request: WarmupReplyRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != "candidate":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only candidates can use interview warm-up.",
+        )
+
+    session = (
+        db.query(InterviewSession)
+        .filter(
+            InterviewSession.id == request.session_id,
+            InterviewSession.interview_id == interview_id,
+            InterviewSession.candidate_id == current_user.id,
+            InterviewSession.status == "in_progress",
+        )
+        .first()
+    )
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Active interview session not found.",
+        )
+
+    try:
+        response = generate_warmup_response(request.answer)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        logger.exception("Interview warm-up response generation failed")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Warm-up response is temporarily unavailable.",
+        ) from exc
+
+    return {"text": response}
 
 
 # =========================================================
@@ -549,6 +608,13 @@ def create_session(
         )
 
         if saved_questions > 0:
+            append_compulsory_questions(
+                db=db,
+                session_id=existing_session.id,
+                texts=features.compulsory_questions(configuration),
+            )
+            db.commit()
+            db.refresh(existing_session)
             return existing_session
 
     # =====================================================
@@ -677,6 +743,13 @@ def create_session(
             )
 
             db.add(question)
+
+        db.flush()
+        append_compulsory_questions(
+            db=db,
+            session_id=session.id,
+            texts=features.compulsory_questions(configuration),
+        )
 
         # ---------------------------------------------
         # First question

@@ -83,7 +83,7 @@ function Register() {
   };
 
   const inputClass =
-    "w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none";
+    "w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-500 outline-none";
   const labelClass = "mb-2 block text-xs font-semibold text-slate-600";
 
   return (
@@ -106,16 +106,16 @@ function Register() {
             className="visual-main relative h-full w-full object-contain"
           />
 
-          <div className="brand flex items-center gap-2 text-white">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/20 text-xs font-bold backdrop-blur">
+          <div className="brand flex items-center gap-2 text-slate-900">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold backdrop-blur">
               AI
             </div>
             <span className="text-sm font-semibold">Interview Agent</span>
           </div>
 
-          <div className="glass-chip rounded-2xl p-4 text-white">
+          <div className="glass-chip rounded-2xl p-4 text-slate-900">
             <p className="text-sm font-semibold">Your first interview is a minute away</p>
-            <p className="mt-1 text-xs text-white/75">
+            <p className="mt-1 text-xs text-slate-500">
               Create an account, pick a role, and start practicing with live feedback.
             </p>
           </div>
@@ -191,11 +191,11 @@ function Register() {
                     minLength={8}
                     className={`${inputClass} pr-12`}
                   />
-                  <button
+                  <button data-plain
                     type="button"
                     onClick={() => setShowPassword((s) => !s)}
                     aria-label={showPassword ? "Hide password" : "Show password"}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 transition hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-500 transition hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                   >
                     <EyeIcon off={showPassword} />
                   </button>
@@ -261,7 +261,7 @@ function Register() {
                     />
                     <label
                       htmlFor={`role-${r.value}`}
-                      className="role-card block cursor-pointer rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 peer-checked:border-blue-600 peer-checked:bg-blue-50 peer-checked:shadow-[0_0_0_3px_rgba(29,91,216,0.12)] peer-focus-visible:ring-2 peer-focus-visible:ring-blue-400"
+ className="role-card block cursor-pointer rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 peer-checked:border-slate-300 peer-checked:bg-slate-100 peer-checked:shadow-md peer-focus-visible:ring-2 peer-focus-visible:ring-slate-400"
                     >
                       <span className="block text-sm font-semibold text-slate-800">
                         {r.label}
@@ -276,7 +276,7 @@ function Register() {
             <button
               type="submit"
               disabled={loading}
-              className="btn-primary mt-8 flex w-full items-center justify-center gap-2 rounded-full px-4 py-3.5 text-sm font-semibold text-white focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-60"
+              className="btn-primary mt-8 flex w-full items-center justify-center gap-2 rounded-full px-4 py-3.5 text-sm font-semibold text-slate-900 focus:outline-none focus-visible:ring-4 focus-visible:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading && <span className="spinner" />}
               {loading ? "Creating account..." : "Create account"}
@@ -287,7 +287,7 @@ function Register() {
               Already have an account?{" "}
               <Link
                 to="/login"
-                className="font-semibold text-blue-600 underline-offset-4 hover:underline"
+                className="font-semibold text-slate-700 underline-offset-4 hover:underline"
               >
                 Sign in
               </Link>

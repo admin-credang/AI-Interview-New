@@ -168,18 +168,18 @@ function InterviewConfiguration() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
-      <header className="border-b border-slate-800 bg-slate-900/70">
+    <div className="min-h-screen bg-white text-slate-900">
+      <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <div>
             <h1 className="text-xl font-bold">AI Interview Agent</h1>
-            <p className="text-sm text-slate-400">Interview Configuration</p>
+            <p className="text-sm text-slate-500">Interview Configuration</p>
           </div>
 
           <button
             type="button"
             onClick={() => navigate("/dashboard")}
-            className="rounded-xl border border-slate-700 px-4 py-2 text-sm transition hover:bg-slate-800"
+            className="rounded-xl border border-slate-200 px-4 py-2 text-sm transition hover:bg-slate-100"
           >
             Dashboard
           </button>
@@ -190,13 +190,13 @@ function InterviewConfiguration() {
         <FlowSteps current={1} />
 
         <div className="mb-8">
-          <p className="text-sm font-medium text-indigo-400">
+          <p className="text-sm font-medium text-slate-700">
             INTERVIEW CONFIGURATION
           </p>
 
           <h2 className="mt-2 text-4xl font-bold">Configure AI Interview</h2>
 
-          <p className="mt-3 text-slate-400">
+          <p className="mt-3 text-slate-500">
             Configure the interview questions and the voice candidates will hear
             during the interview.
           </p>
@@ -206,13 +206,13 @@ function InterviewConfiguration() {
           </p>
         </div>
 
-        <div className="rounded-3xl border border-slate-800 bg-slate-900 p-8 shadow-2xl">
+        <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-2xl">
           <form onSubmit={handleSubmit} className="space-y-8">
             {/* Difficulty */}
             <div>
               <label
                 htmlFor="difficulty"
-                className="mb-2 block text-sm font-medium text-slate-300"
+                className="mb-2 block text-sm font-medium text-slate-600"
               >
                 Difficulty
               </label>
@@ -223,7 +223,7 @@ function InterviewConfiguration() {
                 value={form.difficulty}
                 onChange={handleChange}
                 disabled={loading}
-                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-indigo-500"
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none focus:border-slate-300"
               >
                 <option value="easy">Easy</option>
                 <option value="medium">Medium</option>
@@ -235,7 +235,7 @@ function InterviewConfiguration() {
             <div>
               <label
                 htmlFor="knowledge_expectation"
-                className="mb-2 block text-sm font-medium text-slate-300"
+                className="mb-2 block text-sm font-medium text-slate-600"
               >
                 Knowledge Expectation
               </label>
@@ -246,7 +246,7 @@ function InterviewConfiguration() {
                 value={form.knowledge_expectation}
                 onChange={handleChange}
                 disabled={loading}
-                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-indigo-500"
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none focus:border-slate-300"
               >
                 <option value="basic">Basic</option>
                 <option value="intermediate">Intermediate</option>
@@ -256,7 +256,7 @@ function InterviewConfiguration() {
 
             {/* Question categories */}
             <div>
-              <p className="mb-3 text-sm font-medium text-slate-300">
+              <p className="mb-3 text-sm font-medium text-slate-600">
                 Question Categories
               </p>
 
@@ -274,14 +274,14 @@ function InterviewConfiguration() {
                 ].map((category) => (
                   <label
                     key={category.value}
-                    className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-700 bg-slate-950 p-4 transition hover:border-indigo-500"
+                    className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 transition hover:border-slate-300"
                   >
                     <input
                       type="checkbox"
                       checked={form.categories.includes(category.value)}
                       onChange={() => handleCategoryChange(category.value)}
                       disabled={loading}
-                      className="h-4 w-4 accent-indigo-600"
+                      className="h-4 w-4 accent-slate-700"
                     />
 
                     <span className="text-sm">{category.label}</span>
@@ -294,7 +294,7 @@ function InterviewConfiguration() {
             <div>
               <label
                 htmlFor="question_count"
-                className="mb-2 block text-sm font-medium text-slate-300"
+                className="mb-2 block text-sm font-medium text-slate-600"
               >
                 Number of Questions
               </label>
@@ -308,7 +308,7 @@ function InterviewConfiguration() {
                 value={form.question_count}
                 onChange={handleChange}
                 disabled={loading}
-                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-indigo-500"
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none focus:border-slate-300"
               />
 
               <p className="mt-2 text-xs text-slate-500">
@@ -320,7 +320,7 @@ function InterviewConfiguration() {
             <div>
               <label
                 htmlFor="voice_name"
-                className="mb-2 block text-sm font-medium text-slate-300"
+                className="mb-2 block text-sm font-medium text-slate-600"
               >
                 Interviewer Voice
               </label>
@@ -331,7 +331,7 @@ function InterviewConfiguration() {
                 value={form.voice_name}
                 onChange={handleChange}
                 disabled={loading}
-                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-indigo-500"
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none focus:border-slate-300"
               >
                 <optgroup label="Indian English">
                   <option value="en-IN-Chirp3-HD-Kore">
@@ -368,15 +368,15 @@ function InterviewConfiguration() {
 
             {/* Error */}
             {error && (
-              <div className="rounded-xl border border-red-900/50 bg-red-950/30 px-4 py-3">
-                <p className="text-sm text-red-400">{error}</p>
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                <p className="text-sm text-red-600">{error}</p>
               </div>
             )}
 
             {/* Success */}
             {success && (
-              <div className="rounded-xl border border-emerald-900/50 bg-emerald-950/30 px-4 py-3">
-                <p className="text-sm text-emerald-400">{success}</p>
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                <p className="text-sm text-emerald-600">{success}</p>
 
                 {configuration?.id && (
                   <p className="mt-2 break-all text-xs text-emerald-500">
@@ -390,7 +390,7 @@ function InterviewConfiguration() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-xl bg-indigo-600 px-5 py-3 font-semibold transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full rounded-xl bg-slate-800 px-5 py-3 font-semibold transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? "Saving Configuration..." : "Save Configuration"}
             </button>

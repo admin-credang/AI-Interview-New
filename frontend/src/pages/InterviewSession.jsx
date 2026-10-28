@@ -5887,29 +5887,27 @@ recognitionRef.current?.stop();
 
   if (phase === "warmup") {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6 relative overflow-hidden font-sans">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-indigo-500/20 rounded-full blur-[120px] pointer-events-none" />
-
-        <div className="max-w-lg w-full bg-slate-900/80 border border-slate-800 backdrop-blur-2xl p-8 rounded-3xl text-center space-y-5 shadow-2xl relative z-10">
-          <div className="w-16 h-16 bg-indigo-500/10 border border-indigo-500/30 rounded-2xl flex items-center justify-center text-3xl mx-auto">
+      <div className="min-h-screen bg-white text-slate-800 flex items-center justify-center p-6 relative overflow-hidden font-sans">
+        <div className="max-w-lg w-full bg-white border border-slate-200 backdrop-blur-2xl p-8 rounded-3xl text-center space-y-5 shadow-2xl relative z-10">
+          <div className="w-16 h-16 bg-slate-100 border border-slate-300 rounded-2xl flex items-center justify-center text-3xl mx-auto">
             🤖
           </div>
 
-          <h1 className="text-2xl font-bold text-white">
+          <h1 className="text-2xl font-bold text-slate-900">
             Welcome to your interview
           </h1>
 
           <>
-              <p className="text-slate-100 font-semibold">
+              <p className="text-slate-800 font-semibold">
                 How has your day been so far?
               </p>
-              <p className="text-slate-400 text-sm">
+              <p className="text-slate-500 text-sm">
                 {warmupManualInput
                   ? "Voice input isn't available right now. Type a short reply below."
                   : "You can answer out loud or type a short reply below."}
               </p>
               {warmupVoiceError && (
-                <p className="text-amber-300 text-sm" role="status">
+                <p className="text-amber-700 text-sm" role="status">
                   {warmupVoiceError}
                 </p>
               )}
@@ -5924,7 +5922,7 @@ recognitionRef.current?.stop();
                   className={`w-full py-3 rounded-2xl font-bold text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${
                     warmupListening
                       ? "bg-rose-700 hover:bg-rose-600"
-                      : "bg-indigo-700 hover:bg-indigo-600"
+                      : "bg-slate-800 hover:bg-slate-700"
                   }`}
                 >
                   {warmupListening
@@ -5933,7 +5931,7 @@ recognitionRef.current?.stop();
                 </button>
               )}
               {warmupListening && (
-                <p className="text-slate-400 text-sm" role="status">
+                <p className="text-slate-500 text-sm" role="status">
                   Listening. Your recognized words will appear below.
                 </p>
               )}
@@ -5946,7 +5944,7 @@ recognitionRef.current?.stop();
                       : startWarmupRecording
                   }
                   disabled={warmupTranscribing || warmupSubmitting}
-                  className="w-full py-3 rounded-2xl font-bold text-white bg-slate-700 hover:bg-slate-600 transition disabled:cursor-not-allowed disabled:opacity-50"
+                  className="w-full py-3 rounded-2xl font-bold text-white bg-slate-200 hover:bg-slate-300 transition disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {warmupTranscribing
                     ? "Transcribing your reply..."
@@ -5956,7 +5954,7 @@ recognitionRef.current?.stop();
                 </button>
               )}
               {warmupResponse && (
-                <p className="text-slate-300 text-sm leading-relaxed">
+                <p className="text-slate-600 text-sm leading-relaxed">
                   {warmupResponse}
                 </p>
               )}
@@ -5975,33 +5973,33 @@ recognitionRef.current?.stop();
                   disabled={warmupSubmitting}
                   aria-label="Your response about how your day has been"
                   placeholder="Your reply"
-                  className="w-full resize-none rounded-2xl border border-slate-700 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-indigo-400 focus:outline-none"
+                  className="w-full resize-none rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 placeholder:text-slate-500 focus:border-slate-300 focus:outline-none"
                 />
                 <button
                   type="submit"
                   disabled={!warmupDraft.trim() || warmupSubmitting}
-                  className="w-full py-3 rounded-2xl font-bold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-90 transition disabled:cursor-not-allowed disabled:opacity-50"
+ className="w-full py-3 rounded-2xl font-bold text-white bg-slate-800 hover:opacity-90 transition disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {warmupSubmitting ? "Getting a response..." : "Continue"}
                 </button>
               </form>
               {warmupVoiceError && !warmupSubmitting && (
-                <button
+                <button data-plain
                   type="button"
                   onClick={continueWithoutWarmup}
-                  className="text-xs text-slate-400 underline underline-offset-4 hover:text-slate-200 transition"
+                  className="text-xs text-slate-500 underline underline-offset-4 hover:text-slate-900 transition"
                 >
                   Continue to interview
                 </button>
               )}
-              <button
+              <button data-plain
                 type="button"
                 onClick={() => {
                   void speakText(WARMUP_GREETING).catch((error) =>
                     console.error("Warm-up prompt speech failed:", error)
                   );
                 }}
-                className="text-xs text-slate-400 underline underline-offset-4 hover:text-slate-200 transition"
+                className="text-xs text-slate-500 underline underline-offset-4 hover:text-slate-900 transition"
               >
                 Replay question
               </button>
@@ -6013,19 +6011,17 @@ recognitionRef.current?.stop();
 
   if (phase === "intro") {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6 relative overflow-hidden font-sans">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-indigo-500/20 rounded-full blur-[120px] pointer-events-none" />
-
-        <div className="max-w-lg w-full bg-slate-900/80 border border-slate-800 backdrop-blur-2xl p-8 rounded-3xl text-center space-y-6 shadow-2xl relative z-10">
-          <div className="w-16 h-16 bg-indigo-500/10 border border-indigo-500/30 rounded-2xl flex items-center justify-center text-3xl mx-auto animate-pulse">
+      <div className="min-h-screen bg-white text-slate-800 flex items-center justify-center p-6 relative overflow-hidden font-sans">
+        <div className="max-w-lg w-full bg-white border border-slate-200 backdrop-blur-2xl p-8 rounded-3xl text-center space-y-6 shadow-2xl relative z-10">
+          <div className="w-16 h-16 bg-slate-100 border border-slate-300 rounded-2xl flex items-center justify-center text-3xl mx-auto animate-pulse">
             🤖
           </div>
 
-          <h1 className="text-2xl font-bold text-white">
+          <h1 className="text-2xl font-bold text-slate-900">
             A quick introduction
           </h1>
 
-          <p className="text-slate-300 text-sm leading-relaxed">
+          <p className="text-slate-600 text-sm leading-relaxed">
             Please listen. Your interviewer is introducing the company.
             Your first question comes right after.
           </p>
@@ -6034,7 +6030,7 @@ recognitionRef.current?.stop();
             {[0, 1, 2, 3, 4].map((i) => (
               <span
                 key={i}
-                className="w-1.5 rounded-full bg-indigo-400 animate-pulse"
+                className="w-1.5 rounded-full bg-slate-800 animate-pulse"
                 style={{
                   height: `${12 + ((i * 7) % 5) * 5}px`,
                   animationDelay: `${i * 120}ms`,
@@ -6043,13 +6039,13 @@ recognitionRef.current?.stop();
             ))}
           </div>
 
-          <button
+          <button data-plain
             type="button"
             onClick={() => {
               cancelSpeech();
               setIntroDone(true);
             }}
-            className="text-xs text-slate-400 underline underline-offset-4 hover:text-slate-200 transition"
+            className="text-xs text-slate-500 underline underline-offset-4 hover:text-slate-900 transition"
           >
             Skip introduction
           </button>
@@ -6060,17 +6056,15 @@ recognitionRef.current?.stop();
 
   if (phase === "loading") {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center relative overflow-hidden font-sans">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-indigo-500/20 rounded-full blur-[120px] pointer-events-none" />
+      <div className="min-h-screen bg-white text-slate-800 flex items-center justify-center relative overflow-hidden font-sans">
+        <div className="bg-white border border-slate-200 backdrop-blur-2xl p-10 rounded-3xl text-center max-w-sm shadow-2xl relative z-10">
+          <div className="w-16 h-16 border-4 border-slate-300 border-t-slate-700 rounded-full animate-spin mx-auto mb-6" />
 
-        <div className="bg-slate-900/60 border border-slate-800/80 backdrop-blur-2xl p-10 rounded-3xl text-center max-w-sm shadow-2xl relative z-10">
-          <div className="w-16 h-16 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin mx-auto mb-6" />
-
-          <h2 className="text-xl font-bold text-white mb-2">
+          <h2 className="text-xl font-bold text-slate-900 mb-2">
             Preparing Session
           </h2>
 
-          <p className="text-xs text-slate-400 font-mono">
+          <p className="text-xs text-slate-500 font-mono">
             Starting interview...
           </p>
 
@@ -6090,17 +6084,17 @@ recognitionRef.current?.stop();
 
   if (phase === "error") {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
-        <div className="max-w-lg w-full bg-slate-900/80 border border-rose-500/30 backdrop-blur-2xl rounded-3xl p-8 shadow-2xl space-y-4">
-          <div className="w-12 h-12 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-2xl flex items-center justify-center font-bold text-xl">
+      <div className="min-h-screen bg-white text-slate-800 flex items-center justify-center p-6">
+        <div className="max-w-lg w-full bg-white border border-rose-500/30 backdrop-blur-2xl rounded-3xl p-8 shadow-2xl space-y-4">
+          <div className="w-12 h-12 bg-rose-500/10 border border-rose-500/20 text-rose-600 rounded-2xl flex items-center justify-center font-bold text-xl">
             ⚠️
           </div>
 
-          <h2 className="text-xl font-bold text-white">
+          <h2 className="text-xl font-bold text-slate-900">
             Interview Error
           </h2>
 
-          <p className="text-slate-300 text-sm leading-relaxed">
+          <p className="text-slate-600 text-sm leading-relaxed">
             {error}
           </p>
 
@@ -6108,7 +6102,7 @@ recognitionRef.current?.stop();
             onClick={() =>
               window.location.reload()
             }
-            className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs transition-all cursor-pointer border border-slate-700"
+            className="w-full py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-all cursor-pointer border border-slate-200"
           >
             Retry Connection
           </button>
@@ -6125,17 +6119,17 @@ recognitionRef.current?.stop();
 
   if (phase === "terminated") {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
-        <div className="max-w-md w-full bg-slate-900/80 border border-rose-500/30 backdrop-blur-2xl p-8 rounded-3xl text-center space-y-4 shadow-2xl">
-          <div className="w-16 h-16 bg-rose-500/10 border border-rose-500/30 text-rose-400 rounded-2xl flex items-center justify-center text-3xl mx-auto">
+      <div className="min-h-screen bg-white text-slate-800 flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-white border border-rose-500/30 backdrop-blur-2xl p-8 rounded-3xl text-center space-y-4 shadow-2xl">
+          <div className="w-16 h-16 bg-rose-500/10 border border-rose-500/30 text-rose-600 rounded-2xl flex items-center justify-center text-3xl mx-auto">
             ⚠
           </div>
 
-          <h1 className="text-2xl font-bold text-white">
+          <h1 className="text-2xl font-bold text-slate-900">
             Interview Ended
           </h1>
 
-          <p className="text-slate-400 text-sm leading-relaxed">
+          <p className="text-slate-500 text-sm leading-relaxed">
             The interview was ended because the interview monitoring condition was violated.
           </p>
 
@@ -6155,30 +6149,30 @@ recognitionRef.current?.stop();
 
   if (phase === "completed") {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6 relative overflow-hidden font-sans">
-        <div className="max-w-md w-full bg-slate-900/80 border border-emerald-500/30 backdrop-blur-2xl p-8 rounded-3xl text-center space-y-4 shadow-2xl">
-          <div className="w-16 h-16 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-2xl flex items-center justify-center text-3xl mx-auto">
+      <div className="min-h-screen bg-white text-slate-800 flex items-center justify-center p-6 relative overflow-hidden font-sans">
+        <div className="max-w-md w-full bg-white border border-emerald-500/30 backdrop-blur-2xl p-8 rounded-3xl text-center space-y-4 shadow-2xl">
+          <div className="w-16 h-16 bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 rounded-2xl flex items-center justify-center text-3xl mx-auto">
             ✓
           </div>
 
-          <h1 className="text-2xl font-bold text-white">
+          <h1 className="text-2xl font-bold text-slate-900">
             Thank You for the Interview!
           </h1>
 
-          <p className="text-slate-300 text-base font-semibold">
+          <p className="text-slate-600 text-base font-semibold">
             Your interview is completed.
           </p>
 
-          <p className="text-slate-400 text-sm leading-relaxed">
+          <p className="text-slate-500 text-sm leading-relaxed">
             Your answers were submitted successfully and will be reviewed by the interviewer.
           </p>
 
-          <div className="text-left rounded-2xl border border-slate-800 bg-slate-950/60 p-4 text-sm text-slate-300 space-y-2">
+          <div className="text-left rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 space-y-2">
             <p>
-              <b className="text-emerald-300">Selected?</b> Our team will contact you.
+              <b className="text-emerald-700">Selected?</b> Our team will contact you.
             </p>
             <p>
-              <b className="text-slate-100">Not selected?</b> You will receive an email.
+              <b className="text-slate-800">Not selected?</b> You will receive an email.
             </p>
             <p className="text-xs text-slate-500">
               A confirmation email is on its way to you now.
@@ -6188,7 +6182,7 @@ recognitionRef.current?.stop();
           <button
             type="button"
             onClick={() => navigate("/dashboard")}
-            className="w-full py-3 rounded-2xl font-bold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-90 transition"
+ className="w-full py-3 rounded-2xl font-bold text-white bg-slate-800 hover:opacity-90 transition"
           >
             Back to dashboard
           </button>
@@ -6264,10 +6258,10 @@ recognitionRef.current?.stop();
 
   const statusColor = (value, good, bad) =>
     bad
-      ? "text-rose-400"
+      ? "text-rose-600"
       : good
-      ? "text-emerald-400"
-      : "text-slate-400";
+      ? "text-emerald-600"
+      : "text-slate-500";
 
   const monitorRows = [
     {
@@ -6306,16 +6300,16 @@ recognitionRef.current?.stop();
   ];
 
   return (
-    <div className="h-screen bg-[#1a2338] text-slate-100 font-sans overflow-hidden">
+    <div className="h-screen bg-slate-50 text-slate-800 font-sans overflow-hidden">
       {/* CAMERA REQUIRED (only when the interviewer turned monitoring on) */}
       {policy.loaded && policy.enabled && !cameraEnabled && (
-        <div className="fixed inset-0 z-50 bg-[#1a2338]/95 flex items-center justify-center p-6">
-          <div className="max-w-md w-full bg-[#1c2740] border border-slate-600 rounded-xl p-8 text-center space-y-4">
-            <h2 className="text-xl font-bold text-white">
+        <div className="fixed inset-0 z-50 bg-slate-50/95 flex items-center justify-center p-6">
+          <div className="max-w-md w-full bg-slate-50 border border-slate-300 rounded-xl p-8 text-center space-y-4">
+            <h2 className="text-xl font-bold text-slate-900">
               Camera required
             </h2>
 
-            <p className="text-sm text-slate-400 leading-relaxed">
+            <p className="text-sm text-slate-500 leading-relaxed">
               {cameraBlocked
                 ? "The interviewer requires camera monitoring for this interview. Please allow camera access in your browser, then try again."
                 : "Starting your camera. Please allow access if your browser asks."}
@@ -6325,7 +6319,7 @@ recognitionRef.current?.stop();
               <button
                 type="button"
                 onClick={startMonitoring}
-                className="w-full py-3 rounded-lg font-semibold text-white bg-slate-600 hover:bg-slate-500"
+                className="w-full py-3 rounded-lg font-semibold text-white bg-slate-300 hover:bg-slate-500"
               >
                 Allow camera and continue
               </button>
@@ -6338,14 +6332,14 @@ recognitionRef.current?.stop();
         {/* ================= LEFT ================= */}
         <section className="h-full flex flex-col gap-3 p-4 md:p-8 min-h-0 overflow-y-auto">
           {/* LOGO */}
-          <div className="h-[56px] shrink-0 rounded-lg border border-[#2a3550] bg-[#1c2740] flex items-center justify-center gap-2 text-xl font-black">
-            <span className="text-[#ea5b24]">VOLK</span>
+          <div className="h-[56px] shrink-0 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center gap-2 text-xl font-black">
+            <span className="text-slate-700">VOLK</span>
             <span>Ai</span>
-            <span className="text-sky-400">HR</span>
+            <span className="text-slate-700">HR</span>
           </div>
 
           {/* VIDEO */}
-          <div className="relative flex-1 min-h-[220px] rounded-lg border border-[#2a3550] bg-[#0f1626] overflow-hidden">
+          <div className="relative flex-1 min-h-[220px] rounded-lg border border-slate-200 bg-white overflow-hidden">
             {cameraEnabled ? (
               <video
                 ref={attachVideo}
@@ -6364,14 +6358,14 @@ recognitionRef.current?.stop();
             )}
 
             {cameraEnabled && (
-              <span className="absolute top-3 left-3 px-2 py-1 rounded bg-black/60 text-[10px] font-semibold">
+              <span className="absolute top-3 left-3 px-2 py-1 rounded bg-white/90 text-slate-800 text-[10px] font-semibold shadow">
                 ● LIVE
               </span>
             )}
 
             {/* warning (interview keeps running) */}
             {violationNotice && (
-              <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 max-w-[92%] px-6 py-4 rounded-xl bg-amber-400 border-2 border-amber-600 text-slate-900 text-2xl md:text-3xl font-extrabold shadow-2xl text-center animate-pulse">
+              <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 max-w-[92%] px-6 py-4 rounded-xl bg-amber-100 border-2 border-amber-500 text-amber-900 text-2xl md:text-3xl font-extrabold shadow-2xl text-center animate-pulse">
                 ⚠ {violationNotice}
               </div>
             )}
@@ -6379,7 +6373,7 @@ recognitionRef.current?.stop();
             {gazeDebugOn && (
               <pre
                 ref={gazeDebugRef}
-                className="absolute top-2 left-2 z-30 max-w-[95%] p-2 rounded bg-black/75 text-[11px] leading-tight text-lime-300 whitespace-pre-wrap"
+                className="absolute top-2 left-2 z-30 max-w-[95%] p-2 rounded bg-white/95 border border-slate-200 text-[11px] leading-tight text-emerald-700 whitespace-pre-wrap"
               />
             )}
 
@@ -6412,18 +6406,18 @@ recognitionRef.current?.stop();
 
           {/* INTERVIEWER + MONITORING */}
           <div className="shrink-0 grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-3">
-            <div className="rounded-lg border border-[#2a3550] bg-[#1c2740] p-4 flex flex-col items-center justify-center gap-2">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 flex flex-col items-center justify-center gap-2">
               <div
-                className={`w-14 h-14 rounded-full flex items-center justify-center text-2xl bg-[#2a3550] border-2 ${
+                className={`w-14 h-14 rounded-full flex items-center justify-center text-2xl bg-slate-200 border-2 ${
                   isSpeaking
-                    ? "border-[#ea5b24] animate-pulse"
-                    : "border-[#3a4660]"
+                    ? "border-slate-300 animate-pulse"
+                    : "border-slate-300"
                 }`}
               >
                 🤖
               </div>
               <div className="text-sm font-bold">AI Interviewer</div>
-              <div className="text-[11px] text-slate-400">
+              <div className="text-[11px] text-slate-500">
                 {assistantStatus}
               </div>
               <select
@@ -6432,7 +6426,7 @@ recognitionRef.current?.stop();
                   changeVoice(e.target.value)
                 }
                 aria-label="Interviewer voice"
-                className="mt-1 w-full rounded-md bg-[#0f1626] border border-[#3a4660] text-[11px] text-slate-200 px-2 py-1 outline-none focus:border-[#ea5b24]"
+                className="mt-1 w-full rounded-md bg-white border border-slate-300 text-[11px] text-slate-700 px-2 py-1 outline-none focus:border-slate-300"
               >
                 {Object.entries(VOICE_PROFILES).map(
                   ([id, profile]) => (
@@ -6444,8 +6438,8 @@ recognitionRef.current?.stop();
               </select>
             </div>
 
-            <div className="rounded-lg border border-[#2a3550] bg-[#1c2740] p-4">
-              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
                 Monitoring
               </div>
 
@@ -6455,7 +6449,7 @@ recognitionRef.current?.stop();
                     key={row.label}
                     className="flex items-center justify-between text-xs"
                   >
-                    <span className="text-slate-400">{row.label}</span>
+                    <span className="text-slate-500">{row.label}</span>
                     <span
                       className={`font-semibold ${statusColor(
                         row.value,
@@ -6479,12 +6473,12 @@ recognitionRef.current?.stop();
           </div>
 
           {/* CONTROLS */}
-          <div className="shrink-0 rounded-lg border border-[#2a3550] bg-[#1c2740] px-4 py-3 flex flex-wrap items-center justify-center gap-3">
+          <div className="shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 flex flex-wrap items-center justify-center gap-3">
             <button
               type="button"
               disabled={policy.enabled}
               onClick={toggleCamera}
-              className="px-4 py-2 rounded-md text-sm bg-slate-600/60 hover:bg-slate-600 disabled:opacity-60 disabled:cursor-not-allowed"
+              className="px-4 py-2 rounded-md text-sm bg-slate-200 hover:bg-slate-300 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               📹{" "}
               {cameraEnabled
@@ -6506,21 +6500,21 @@ recognitionRef.current?.stop();
         </section>
 
         {/* ================= RIGHT ================= */}
-        <section className="h-full min-h-0 flex flex-col border-l border-[#2a3550]">
+        <section className="h-full min-h-0 flex flex-col border-l border-slate-200">
           <div className="h-[64px] shrink-0 flex items-center justify-center">
-            <h1 className="text-xl font-bold text-white">
+            <h1 className="text-xl font-bold text-slate-900">
               AI Interview Assistant 🤖
             </h1>
           </div>
 
-          <div className="flex-1 min-h-0 mx-5 mb-5 rounded-lg border border-[#2a3550] bg-[#1c2740] flex flex-col p-4 gap-3">
+          <div className="flex-1 min-h-0 mx-5 mb-5 rounded-lg border border-slate-200 bg-slate-50 flex flex-col p-4 gap-3">
             {/* progress */}
-            <div className="shrink-0 flex items-center gap-3 text-xs text-slate-400">
+            <div className="shrink-0 flex items-center gap-3 text-xs text-slate-500">
               <span>
                 Question {Math.min(Number(questionNumber) || 1, TOTAL_QUESTIONS)} of{" "}
                 {TOTAL_QUESTIONS}
               </span>
-              <div className="flex-1 h-1.5 rounded bg-[#141c2e] overflow-hidden">
+              <div className="flex-1 h-1.5 rounded bg-slate-50 overflow-hidden">
                 <div
                   className="h-full bg-slate-400 transition-all duration-500"
                   style={{ width: `${progress}%` }}
@@ -6530,9 +6524,9 @@ recognitionRef.current?.stop();
             </div>
 
             {/* current question (text appears with the voice) */}
-            <div className="shrink-0 min-h-[96px] rounded-md bg-[#141c2e] px-5 py-4 text-center text-[15px] leading-relaxed">
+            <div className="shrink-0 min-h-[96px] rounded-md bg-slate-50 px-5 py-4 text-center text-[15px] leading-relaxed">
               {currentQuestion?.is_follow_up && (
-                <div className="text-[10px] font-bold uppercase tracking-wider text-amber-400 mb-1">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-amber-600 mb-1">
                   Follow-up question
                 </div>
               )}
@@ -6542,12 +6536,12 @@ recognitionRef.current?.stop();
 
             {/* status + repeat */}
             <div className="shrink-0 flex justify-end items-center gap-2">
-              <span className="px-4 py-2 rounded-md bg-[#141c2e] text-sm">
+              <span className="px-4 py-2 rounded-md bg-slate-50 text-sm">
                 {assistantStatus}
               </span>
             </div>
 
-            <h3 className="shrink-0 text-[#ea5b24] font-bold text-sm">
+            <h3 className="shrink-0 text-slate-700 font-bold text-sm">
               Previous Questions:
             </h3>
 
@@ -6556,13 +6550,13 @@ recognitionRef.current?.stop();
               {previousMessages.map((m, i) =>
                 m.role === "you" ? (
                   <div key={i} className="flex justify-end">
-                    <div className="max-w-[85%] rounded-lg border border-[#3a4660] bg-[#202c47] px-4 py-2.5 text-sm">
+                    <div className="max-w-[85%] rounded-lg border border-slate-300 bg-slate-100 px-4 py-2.5 text-sm">
                       <b>You:</b> {m.text}
                     </div>
                   </div>
                 ) : (
                   <div key={i} className="flex justify-start">
-                    <div className="max-w-[85%] rounded-lg border border-[#3a4660] bg-[#202c47] px-4 py-2.5 text-sm leading-relaxed">
+                    <div className="max-w-[85%] rounded-lg border border-slate-300 bg-slate-100 px-4 py-2.5 text-sm leading-relaxed">
                       <b>Interviewer:</b> {m.text}
                     </div>
                   </div>
@@ -6573,7 +6567,7 @@ recognitionRef.current?.stop();
             </div>
 
             {error && (
-              <div className="shrink-0 p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs">
+              <div className="shrink-0 p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-700 text-xs">
                 {error}
               </div>
             )}
@@ -6581,7 +6575,7 @@ recognitionRef.current?.stop();
             {/* follow-up offer OR typed answer */}
             {phase === "followup-confirmation" ? (
               <div className="shrink-0 space-y-3">
-                <p className="text-sm text-slate-300 text-center">
+                <p className="text-sm text-slate-600 text-center">
                   Would you like a follow-up question?{" "}
                   {isSpeaking
                     ? "(AI is asking...)"
@@ -6602,7 +6596,7 @@ recognitionRef.current?.stop();
                   <button
                     disabled={processing}
                     onClick={handleFollowUpNo}
-                    className="py-3 rounded-md bg-slate-700 hover:bg-slate-600 text-slate-100 font-semibold text-sm disabled:opacity-50"
+                    className="py-3 rounded-md bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold text-sm disabled:opacity-50"
                   >
                     NO — Next Question
                   </button>
@@ -6627,13 +6621,13 @@ recognitionRef.current?.stop();
                   }}
                   disabled={processing}
                   placeholder="Speak, or type your answer here..."
-                  className="flex-1 px-4 py-3 rounded-md bg-[#141c2e] border border-[#2a3550] focus:border-slate-400 outline-none text-sm placeholder-slate-500 disabled:opacity-50"
+                  className="flex-1 px-4 py-3 rounded-md bg-slate-50 border border-slate-200 focus:border-slate-400 outline-none text-sm placeholder-slate-500 disabled:opacity-50"
                 />
 
                 <button
                   disabled={processing || (!answer.trim() && !isListening)}
                   onClick={() => submitAnswerWithText(answer)}
-                  className="px-5 rounded-md bg-slate-600 hover:bg-slate-500 text-white font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="px-5 rounded-md bg-slate-300 hover:bg-slate-500 text-white font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {processing ? "..." : "Send"}
                 </button>

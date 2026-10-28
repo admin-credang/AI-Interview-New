@@ -3,19 +3,19 @@
 export const DECISIONS = {
   pending: {
     label: "Pending review",
-    cls: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+    cls: "bg-amber-500/15 text-amber-700 border-amber-500/30",
   },
   on_hold: {
     label: "On hold",
-    cls: "bg-sky-500/15 text-sky-300 border-sky-500/30",
+    cls: "bg-slate-100 text-slate-700 border-slate-300",
   },
   selected: {
     label: "Selected",
-    cls: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+    cls: "bg-emerald-500/15 text-emerald-700 border-emerald-500/30",
   },
   rejected: {
     label: "Rejected",
-    cls: "bg-rose-500/15 text-rose-300 border-rose-500/30",
+    cls: "bg-rose-500/15 text-rose-700 border-rose-500/30",
   },
 };
 
@@ -32,10 +32,10 @@ export function DecisionBadge({ value }) {
 }
 
 const SESSION_STATUS = {
-  completed: ["Completed", "bg-emerald-500/10 text-emerald-300 border-emerald-500/30"],
-  in_progress: ["In progress", "bg-amber-500/10 text-amber-300 border-amber-500/30"],
-  terminated: ["Ended early", "bg-rose-500/10 text-rose-300 border-rose-500/30"],
-  not_started: ["Not started", "bg-slate-500/10 text-slate-300 border-slate-500/30"],
+  completed: ["Completed", "bg-emerald-500/10 text-emerald-700 border-emerald-500/30"],
+  in_progress: ["In progress", "bg-amber-500/10 text-amber-700 border-amber-500/30"],
+  terminated: ["Ended early", "bg-rose-500/10 text-rose-700 border-rose-500/30"],
+  not_started: ["Not started", "bg-slate-500/10 text-slate-600 border-slate-500/30"],
 };
 
 export function StatusBadge({ status }) {
@@ -60,7 +60,7 @@ export function Toggle({ checked, onChange, disabled = false, label }) {
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={`relative w-12 h-6 rounded-full transition-all shrink-0 disabled:opacity-30 disabled:cursor-not-allowed ${
-        checked ? "bg-emerald-600" : "bg-slate-600"
+        checked ? "bg-emerald-600" : "bg-slate-300"
       }`}
     >
       <span
@@ -80,10 +80,10 @@ export const fmtDuration = (seconds) => {
 };
 
 export const scoreText = (n) =>
-  n === null || n === undefined ? "text-slate-400" : n >= 75 ? "text-emerald-400" : n >= 50 ? "text-sky-400" : "text-amber-400";
+  n === null || n === undefined ? "text-slate-500" : n >= 75 ? "text-emerald-600" : n >= 50 ? "text-slate-700" : "text-amber-600";
 
 export const scoreBar = (n) =>
-  n >= 75 ? "bg-emerald-500" : n >= 50 ? "bg-sky-500" : "bg-amber-500";
+  n >= 75 ? "bg-emerald-500" : n >= 50 ? "bg-slate-800" : "bg-amber-500";
 
 export function SkillBar({ label, value }) {
   const v = value === null || value === undefined ? null : Number(value);
@@ -94,7 +94,7 @@ export function SkillBar({ label, value }) {
         <span className="opacity-80">{label}</span>
         <span className="font-black">{v === null ? "—" : Math.round(v)}</span>
       </div>
-      <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+      <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
         <div
           className={`h-full rounded-full ${v === null ? "" : scoreBar(v)}`}
           style={{ width: `${Math.min(100, Math.max(0, v || 0))}%` }}
@@ -174,21 +174,21 @@ export function FlowSteps({ current }) {
                 done
                   ? "bg-emerald-500 border-emerald-500 text-white"
                   : active
-                  ? "bg-indigo-600 border-indigo-500 text-white"
-                  : "border-slate-700 text-slate-500"
+                  ? "bg-slate-800 border-slate-300 text-white"
+                  : "border-slate-200 text-slate-500"
               }`}
             >
               {done ? "✓" : i + 1}
             </span>
             <span
               className={`truncate font-semibold ${
-                active ? "text-white" : done ? "text-slate-300" : "text-slate-500"
+                active ? "text-slate-900" : done ? "text-slate-600" : "text-slate-500"
               }`}
             >
               {label}
             </span>
             {i < FLOW.length - 1 && (
-              <span className="h-px w-4 sm:w-10 bg-slate-700 shrink-0" />
+              <span className="h-px w-4 sm:w-10 bg-slate-200 shrink-0" />
             )}
           </li>
         );
@@ -235,18 +235,18 @@ export function Timeline({ state, result }) {
             <span
               className={`w-5 h-5 rounded-full border-2 shrink-0 ${
                 s.on
-                  ? s.tone || "bg-fuchsia-500 border-fuchsia-500"
+                  ? s.tone || "bg-slate-800 border-slate-300"
                   : s.current
-                  ? "border-fuchsia-400 animate-pulse"
-                  : "border-white/20"
+                  ? "border-slate-300 animate-pulse"
+                  : "border-slate-200"
               }`}
             />
             {i < steps.length - 1 && (
               <span
                 className={`h-0.5 flex-1 ${
                   steps[i + 1].on || steps[i + 1].current
-                    ? "bg-fuchsia-500/60"
-                    : "bg-white/10"
+                    ? "bg-slate-100"
+                    : "bg-slate-100"
                 }`}
               />
             )}
@@ -263,9 +263,9 @@ export function Timeline({ state, result }) {
 // ------------------------------------------------------------
 export const recommendation = (score) => {
   if (score === null || score === undefined) return null;
-  if (score >= 75) return { label: "Strong match", cls: "text-emerald-300 border-emerald-500/30 bg-emerald-500/10" };
-  if (score >= 55) return { label: "Worth a call", cls: "text-sky-300 border-sky-500/30 bg-sky-500/10" };
-  return { label: "Weak match", cls: "text-amber-300 border-amber-500/30 bg-amber-500/10" };
+  if (score >= 75) return { label: "Strong match", cls: "text-emerald-700 border-emerald-500/30 bg-emerald-500/10" };
+  if (score >= 55) return { label: "Worth a call", cls: "text-slate-700 border-slate-300 bg-slate-100" };
+  return { label: "Weak match", cls: "text-amber-700 border-amber-500/30 bg-amber-500/10" };
 };
 
 export const downloadCsv = (filename, rows) => {

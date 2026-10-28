@@ -82,25 +82,25 @@ export default function GmailConnectCard({ onChange }) {
   const connected = Boolean(info?.connected);
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-900/40 backdrop-blur-xl shadow-lg p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+    <div className="rounded-2xl border border-slate-200 bg-white backdrop-blur-xl shadow-lg p-5 flex flex-col sm:flex-row sm:items-center gap-4">
       <div className="flex-1 min-w-0">
-        <p className="font-bold text-sm text-white/90">Send candidate mails from my Gmail</p>
-        <p className="text-xs text-white/50 mt-1 leading-relaxed">
+        <p className="font-bold text-sm text-slate-800">Send candidate mails from my Gmail</p>
+        <p className="text-xs text-slate-500 mt-1 leading-relaxed">
           Invitation, selected and rejected mails are sent FROM the Google account you connect here.
         </p>
 
-        <p className={`text-[11px] font-bold mt-2 ${connected ? "text-emerald-400" : "text-amber-300"}`}>
+        <p className={`text-[11px] font-bold mt-2 ${connected ? "text-emerald-600" : "text-amber-700"}`}>
           {connected ? `Connected: ${info.email}` : "Not connected - mails go from the system address"}
         </p>
 
-        {info?.loadError && <p className="text-[11px] text-rose-300 mt-1">{info.loadError}</p>}
+        {info?.loadError && <p className="text-[11px] text-rose-700 mt-1">{info.loadError}</p>}
         {info && !info.configured && (
-          <p className="text-[11px] text-rose-300 mt-1">
+          <p className="text-[11px] text-rose-700 mt-1">
             Server Gmail connection settings are incomplete. Configure the OAuth client keys, redirect URI, and FRONTEND_URL.
           </p>
         )}
-        {error && <p className="text-xs text-rose-400 mt-2">{error}</p>}
-        {message && <p className="text-xs text-emerald-400 mt-2">{message}</p>}
+        {error && <p className="text-xs text-rose-600 mt-2">{error}</p>}
+        {message && <p className="text-xs text-emerald-600 mt-2">{message}</p>}
       </div>
 
       <div className="flex gap-2 shrink-0">
@@ -108,7 +108,7 @@ export default function GmailConnectCard({ onChange }) {
           type="button"
           onClick={connect}
           disabled={busy || !info?.configured}
-          className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 text-white text-xs font-bold shadow-md disabled:opacity-50"
+ className="px-5 py-2.5 rounded-xl bg-slate-800 text-white text-xs font-bold shadow-md disabled:opacity-50"
         >
           {connected ? "Reconnect Gmail" : "Connect Gmail"}
         </button>
@@ -118,7 +118,7 @@ export default function GmailConnectCard({ onChange }) {
             type="button"
             onClick={disconnect}
             disabled={busy}
-            className="px-4 py-2.5 rounded-xl border border-white/10 text-white/60 hover:text-rose-400 hover:border-rose-500/40 text-xs font-bold transition disabled:opacity-50"
+            className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-500 hover:text-rose-600 hover:border-rose-500/40 text-xs font-bold transition disabled:opacity-50"
           >
             Disconnect
           </button>

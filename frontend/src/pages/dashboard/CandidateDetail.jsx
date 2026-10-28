@@ -150,10 +150,10 @@ export default function CandidateDetail({ sessionId: propId, onClose, onSwitch, 
   if (error) {
     return (
       <div className="space-y-6">
-        <button onClick={() => (onClose ? onClose() : navigate(backTo))} className="text-sm font-bold text-fuchsia-400">
+        <button data-plain onClick={() => (onClose ? onClose() : navigate(backTo))} className="text-sm font-bold text-slate-700">
           ← Back to candidates
         </button>
-        <div className="p-6 rounded-2xl border border-rose-500/30 bg-rose-500/10 text-sm text-rose-300">
+        <div className="p-6 rounded-2xl border border-rose-500/30 bg-rose-500/10 text-sm text-rose-700">
           {error}
         </div>
       </div>
@@ -184,9 +184,9 @@ export default function CandidateDetail({ sessionId: propId, onClose, onSwitch, 
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between gap-4 print:hidden">
-        <button
+        <button data-plain
           onClick={() => (onClose ? onClose() : navigate(backTo))}
-          className="text-sm font-bold text-fuchsia-400 hover:underline"
+          className="text-sm font-bold text-slate-700 hover:underline"
         >
           {onClose ? "✕ Close" : "← Back to candidates"}
         </button>
@@ -195,14 +195,14 @@ export default function CandidateDetail({ sessionId: propId, onClose, onSwitch, 
           <button
             onClick={downloadPdf}
             disabled={busy === "pdf"}
-            className="px-4 py-2 rounded-xl bg-fuchsia-600 hover:bg-fuchsia-500 disabled:opacity-60 text-white text-xs font-bold transition"
+            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-60 text-white text-xs font-bold transition"
           >
             {busy === "pdf" ? "Preparing PDF..." : "Download PDF report"}
           </button>
 
           <button
             onClick={() => window.print()}
-            className="px-4 py-2 rounded-xl border border-white/15 hover:bg-white/10 text-xs font-bold transition"
+            className="px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-100 text-xs font-bold transition"
           >
             Print
           </button>
@@ -267,13 +267,13 @@ export default function CandidateDetail({ sessionId: propId, onClose, onSwitch, 
             {strongest && weakest && strongest[0] !== weakest[0] && (
               <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10">
-                  <p className="text-[11px] uppercase tracking-wider font-bold text-emerald-300 mb-1">Strongest area</p>
+                  <p className="text-[11px] uppercase tracking-wider font-bold text-emerald-700 mb-1">Strongest area</p>
                   <p className="text-sm font-semibold">
                     {SKILL_LABELS[strongest[0]]} · {Math.round(strongest[1])}
                   </p>
                 </div>
                 <div className="p-4 rounded-2xl border border-amber-500/30 bg-amber-500/10">
-                  <p className="text-[11px] uppercase tracking-wider font-bold text-amber-300 mb-1">Needs work</p>
+                  <p className="text-[11px] uppercase tracking-wider font-bold text-amber-700 mb-1">Needs work</p>
                   <p className="text-sm font-semibold">
                     {SKILL_LABELS[weakest[0]]} · {Math.round(weakest[1])}
                   </p>
@@ -290,9 +290,9 @@ export default function CandidateDetail({ sessionId: propId, onClose, onSwitch, 
               </p>
 
               {[
-                ["Strengths", "strengths", "text-emerald-400"],
-                ["Weak points", "weaknesses", "text-amber-400"],
-                ["How to improve", "improvements", "text-sky-400"],
+                ["Strengths", "strengths", "text-emerald-600"],
+                ["Weak points", "weaknesses", "text-amber-600"],
+                ["How to improve", "improvements", "text-slate-700"],
               ].map(([title, key, color]) =>
                 (data.candidate_feedback[key] || []).length > 0 ? (
                   <div key={key} className="mb-5">
@@ -310,7 +310,7 @@ export default function CandidateDetail({ sessionId: propId, onClose, onSwitch, 
 
               {(data.candidate_feedback.answer_notes || []).length > 0 && (
                 <div>
-                  <h4 className="text-xs font-black uppercase tracking-wider mb-2 text-fuchsia-400">
+                  <h4 className="text-xs font-black uppercase tracking-wider mb-2 text-slate-700">
                     Comments on the answers
                   </h4>
                   <ol className="list-decimal pl-5 space-y-2 text-sm leading-relaxed opacity-90">
@@ -346,10 +346,10 @@ export default function CandidateDetail({ sessionId: propId, onClose, onSwitch, 
                   const overall = q.scores?.overall ?? null;
 
                   return (
-                    <div key={q.question_id} className="rounded-2xl border border-white/10 overflow-hidden">
-                      <button
+                    <div key={q.question_id} className="rounded-2xl border border-slate-200 overflow-hidden">
+                      <button data-plain
                         onClick={() => setOpenQ(open ? null : q.question_id)}
-                        className="w-full flex items-center justify-between gap-4 px-5 py-4 text-left hover:bg-white/5 transition"
+                        className="w-full flex items-center justify-between gap-4 px-5 py-4 text-left hover:bg-slate-50 transition"
                       >
                         <div className="min-w-0">
                           <p className="text-[11px] uppercase tracking-wider opacity-50 font-bold mb-1">
@@ -364,7 +364,7 @@ export default function CandidateDetail({ sessionId: propId, onClose, onSwitch, 
                       </button>
 
                       {open && (
-                        <div className="px-5 pb-5 pt-1 space-y-4 border-t border-white/10">
+                        <div className="px-5 pb-5 pt-1 space-y-4 border-t border-slate-200">
                           <div>
                             <p className="text-[11px] uppercase tracking-wider opacity-50 font-bold mb-1">Answer</p>
                             <p className="text-sm leading-relaxed whitespace-pre-wrap">
@@ -375,10 +375,10 @@ export default function CandidateDetail({ sessionId: propId, onClose, onSwitch, 
                           {q.scores && (
                             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                               {Object.entries(SKILL_LABELS).map(([key, label]) => (
-                                <div key={key} className="rounded-xl bg-black/20 px-3 py-2">
+                                <div key={key} className="rounded-xl bg-slate-100 px-3 py-2">
                                   <p className="text-[10px] opacity-60">{label}</p>
                                   <p className="font-black">{q.scores[key] === null ? "—" : Math.round(q.scores[key])}</p>
-                                  <div className="h-1 rounded-full bg-white/10 mt-1">
+                                  <div className="h-1 rounded-full bg-slate-100 mt-1">
                                     <div
                                       className={`h-full rounded-full ${scoreBar(q.scores[key] || 0)}`}
                                       style={{ width: `${Math.min(100, q.scores[key] || 0)}%` }}
@@ -413,32 +413,32 @@ export default function CandidateDetail({ sessionId: propId, onClose, onSwitch, 
             ) : (
               <div className="space-y-5">
                 <div className="flex flex-wrap gap-2">
-                  <span className="px-3 py-1 rounded-full text-[11px] font-bold border border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+                  <span className="px-3 py-1 rounded-full text-[11px] font-bold border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
                     Camera required
                   </span>
                   {monitoring.face && (
-                    <span className="px-3 py-1 rounded-full text-[11px] font-bold border border-white/15 bg-white/5">
+                    <span className="px-3 py-1 rounded-full text-[11px] font-bold border border-slate-200 bg-slate-50">
                       Face detection
                     </span>
                   )}
                   {monitoring.eye && (
-                    <span className="px-3 py-1 rounded-full text-[11px] font-bold border border-white/15 bg-white/5">
+                    <span className="px-3 py-1 rounded-full text-[11px] font-bold border border-slate-200 bg-slate-50">
                       Eye / gaze detection
                     </span>
                   )}
                   {monitoring.phone && (
-                    <span className="px-3 py-1 rounded-full text-[11px] font-bold border border-white/15 bg-white/5">
+                    <span className="px-3 py-1 rounded-full text-[11px] font-bold border border-slate-200 bg-slate-50">
                       Phone detection
                     </span>
                   )}
                 </div>
 
                 {monitoring.terminated_reason ? (
-                  <div className="p-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 text-sm text-rose-200">
+                  <div className="p-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 text-sm text-rose-700">
                     Interview ended early: <b>{prettyReason(monitoring.terminated_reason)}</b>
                   </div>
                 ) : (
-                  <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 text-sm text-emerald-200">
+                  <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 text-sm text-emerald-700">
                     The interview was not ended by monitoring.
                   </div>
                 )}
@@ -448,7 +448,7 @@ export default function CandidateDetail({ sessionId: propId, onClose, onSwitch, 
                     {monitoring.events.map((e, i) => (
                       <li
                         key={`${e.at}-${i}`}
-                        className="flex items-center justify-between gap-4 text-sm px-4 py-2.5 rounded-xl bg-black/20"
+                        className="flex items-center justify-between gap-4 text-sm px-4 py-2.5 rounded-xl bg-slate-100"
                       >
                         <span>{prettyReason(e.type)}</span>
                         <span className="text-xs opacity-50">{dateTime(e.at)}</span>
@@ -482,7 +482,7 @@ export default function CandidateDetail({ sessionId: propId, onClose, onSwitch, 
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder="Internal note, or message for the candidate if selected..."
-              className={`w-full px-4 py-3 rounded-xl border ${t.input} outline-none focus:ring-2 focus:ring-fuchsia-500 text-sm mb-4`}
+              className={`w-full px-4 py-3 rounded-xl border ${t.input} outline-none focus:ring-2 focus:ring-slate-400 text-sm mb-4`}
             />
 
             <label className="flex items-start gap-3 text-sm mb-5 cursor-pointer">
@@ -490,7 +490,7 @@ export default function CandidateDetail({ sessionId: propId, onClose, onSwitch, 
                 type="checkbox"
                 checked={sendEmail}
                 onChange={(e) => setSendEmail(e.target.checked)}
-                className="mt-1 accent-fuchsia-500"
+                className="mt-1 accent-slate-700"
               />
               <span>Email the candidate about this decision</span>
             </label>
@@ -499,21 +499,21 @@ export default function CandidateDetail({ sessionId: propId, onClose, onSwitch, 
               <button
                 disabled={Boolean(busy)}
                 onClick={() => decide("selected")}
-                className="py-3.5 rounded-2xl font-bold text-white bg-gradient-to-r from-emerald-500 to-teal-600 hover:opacity-90 transition disabled:opacity-50"
+ className="py-3.5 rounded-2xl font-bold text-white bg-slate-800 hover:opacity-90 transition disabled:opacity-50"
               >
                 {busy === "selected" ? "Saving..." : "Select candidate"}
               </button>
               <button
                 disabled={Boolean(busy)}
                 onClick={() => decide("on_hold")}
-                className="py-3.5 rounded-2xl font-bold border border-white/15 hover:bg-white/10 transition disabled:opacity-50"
+                className="py-3.5 rounded-2xl font-bold border border-slate-200 hover:bg-slate-100 transition disabled:opacity-50"
               >
                 {busy === "on_hold" ? "Saving..." : "Put on hold"}
               </button>
               <button
                 disabled={Boolean(busy)}
                 onClick={() => decide("rejected")}
-                className="py-3.5 rounded-2xl font-bold text-rose-300 border border-rose-500/30 hover:bg-rose-500/10 transition disabled:opacity-50"
+                className="py-3.5 rounded-2xl font-bold text-rose-700 border border-rose-500/30 hover:bg-rose-500/10 transition disabled:opacity-50"
               >
                 {busy === "rejected" ? "Saving..." : "Reject candidate"}
               </button>
@@ -521,7 +521,7 @@ export default function CandidateDetail({ sessionId: propId, onClose, onSwitch, 
 
             {feedback && <p className="mt-4 text-xs font-semibold opacity-80">{feedback}</p>}
 
-            <div className="mt-6 pt-5 border-t border-white/10 space-y-2 text-xs opacity-70">
+            <div className="mt-6 pt-5 border-t border-slate-200 space-y-2 text-xs opacity-70">
               <p>Decision: <b>{review.decision.replace("_", " ")}</b> {review.decided_at ? `· ${dateTime(review.decided_at)}` : ""}</p>
               <p>
                 Thank-you email:{" "}
@@ -559,7 +559,7 @@ export default function CandidateDetail({ sessionId: propId, onClose, onSwitch, 
             {interview.categories?.length > 0 && (
               <div className="mt-5 flex flex-wrap gap-2">
                 {interview.categories.map((c) => (
-                  <span key={c} className="px-3 py-1 rounded-full text-[11px] font-bold capitalize border border-white/15 bg-white/5">
+                  <span key={c} className="px-3 py-1 rounded-full text-[11px] font-bold capitalize border border-slate-200 bg-slate-50">
                     {String(c).replace(/_/g, " ")}
                   </span>
                 ))}
@@ -567,7 +567,7 @@ export default function CandidateDetail({ sessionId: propId, onClose, onSwitch, 
             )}
 
             {(job.role || job.company || job.location) && (
-              <div className="mt-5 pt-5 border-t border-white/10 grid grid-cols-2 gap-4">
+              <div className="mt-5 pt-5 border-t border-slate-200 grid grid-cols-2 gap-4">
                 <Field label="Role">{job.role}</Field>
                 <Field label="Company">{job.company}</Field>
                 <Field label="Location">{job.location}</Field>
@@ -581,11 +581,11 @@ export default function CandidateDetail({ sessionId: propId, onClose, onSwitch, 
               <ul className="space-y-3">
                 {history.map((h) => (
                   <li key={h.session_id}>
-                    <button
+                    <button data-plain
                       onClick={() =>
                         onSwitch ? onSwitch(h.session_id) : navigate(`/dashboard/candidates/${h.session_id}`)
                       }
-                      className="w-full flex items-center justify-between gap-3 text-left px-4 py-3 rounded-xl bg-black/20 hover:bg-white/10 transition"
+                      className="w-full flex items-center justify-between gap-3 text-left px-4 py-3 rounded-xl bg-slate-100 hover:bg-slate-100 transition"
                     >
                       <span className="text-sm font-semibold truncate">{h.interview_title}</span>
                       <DecisionBadge value={h.decision} />

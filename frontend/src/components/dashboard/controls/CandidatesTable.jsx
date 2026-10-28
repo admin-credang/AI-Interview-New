@@ -6,30 +6,30 @@ import { DecisionBadge } from "../hiring";
 const PAGE_SIZE = 3;
 
 const MAIL_BADGE = {
-  draft: ["Pending", "bg-orange-500/15 text-orange-400 border-orange-500/30"],
-  sent: ["Mail Sent", "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"],
-  pending: ["Mail Pending", "bg-amber-500/15 text-amber-400 border-amber-500/30"],
-  failed: ["Mail Failed", "bg-rose-500/15 text-rose-400 border-rose-500/30"],
-  manual: ["Link Only", "bg-slate-500/15 text-slate-300 border-slate-500/30"],
+  draft: ["Pending", "bg-orange-500/15 text-orange-600 border-orange-500/30"],
+  sent: ["Mail Sent", "bg-emerald-500/15 text-emerald-600 border-emerald-500/30"],
+  pending: ["Mail Pending", "bg-amber-500/15 text-amber-600 border-amber-500/30"],
+  failed: ["Mail Failed", "bg-rose-500/15 text-rose-600 border-rose-500/30"],
+  manual: ["Link Only", "bg-slate-500/15 text-slate-600 border-slate-500/30"],
 };
 
 const PROGRESS_BADGE = {
-  sent: ["Sent", "border-slate-500/30 bg-slate-500/10 text-slate-300"],
-  opened: ["Opened", "border-cyan-500/30 bg-cyan-500/10 text-cyan-300"],
-  started: ["In interview", "border-amber-500/30 bg-amber-500/10 text-amber-300"],
-  completed: ["Completed", "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"],
-  ended: ["Ended early", "border-rose-500/30 bg-rose-500/10 text-rose-300"],
+  sent: ["Sent", "border-slate-500/30 bg-slate-500/10 text-slate-600"],
+  opened: ["Opened", "border-slate-300 bg-slate-100 text-slate-700"],
+  started: ["In interview", "border-amber-500/30 bg-amber-500/10 text-amber-700"],
+  completed: ["Completed", "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"],
+  ended: ["Ended early", "border-rose-500/30 bg-rose-500/10 text-rose-700"],
 };
 
 const FILTERS = [
-  { key: "all", label: "All", on: "bg-fuchsia-600", off: "text-white/60 hover:text-white" },
-  { key: "sent", label: "Sent", on: "bg-emerald-600", off: "text-emerald-400/70 hover:text-emerald-400" },
-  { key: "pending", label: "Pending", on: "bg-amber-600", off: "text-amber-400/70 hover:text-amber-400" },
-  { key: "failed", label: "Failed", on: "bg-rose-600", off: "text-rose-400/70 hover:text-rose-400" },
+  { key: "all", label: "All", on: "bg-violet-600", off: "text-slate-500 hover:text-slate-900" },
+  { key: "sent", label: "Sent", on: "bg-emerald-600", off: "text-emerald-600/70 hover:text-emerald-600" },
+  { key: "pending", label: "Pending", on: "bg-amber-600", off: "text-amber-600/70 hover:text-amber-600" },
+  { key: "failed", label: "Failed", on: "bg-rose-600", off: "text-rose-600/70 hover:text-rose-600" },
 ];
 
 const iconBtn =
-  "w-8 h-8 inline-flex items-center justify-center rounded-lg border border-white/10 text-sm hover:bg-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed";
+  "w-8 h-8 inline-flex items-center justify-center rounded-lg border border-slate-200 text-sm hover:bg-slate-100 transition disabled:opacity-40 disabled:cursor-not-allowed";
 
 /**
  * Candidates of ONE interview, as a table:
@@ -114,20 +114,20 @@ export default function CandidatesTable({
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-2xl bg-fuchsia-500/10 text-fuchsia-400 border border-fuchsia-500/20">
+          <div className="p-2.5 rounded-2xl bg-slate-100 text-slate-700 border border-slate-300">
             <IconUsers />
           </div>
           <div>
-            <h3 className="font-bold text-lg text-white">Candidates</h3>
-            <p className="text-xs text-white/50">
+            <h3 className="font-bold text-lg text-slate-900">Candidates</h3>
+            <p className="text-xs text-slate-500">
               {filtered.length} {filtered.length === 1 ? "candidate" : "candidates"} found
             </p>
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-1.5 bg-slate-900/60 p-1.5 rounded-xl border border-white/5">
+        <div className="flex flex-wrap gap-1.5 bg-white p-1.5 rounded-xl border border-slate-200">
           {FILTERS.map((f) => (
-            <button
+            <button data-plain
               key={f.key}
               type="button"
               onClick={() => {
@@ -145,21 +145,21 @@ export default function CandidatesTable({
       </div>
 
       {notice?.msg && (
-        <p className="text-xs text-emerald-400 p-3 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
+        <p className="text-xs text-emerald-600 p-3 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
           {notice.msg}
         </p>
       )}
       {notice?.err && (
-        <p className="text-xs text-rose-400 p-3 bg-rose-500/10 rounded-xl border border-rose-500/20">
+        <p className="text-xs text-rose-600 p-3 bg-rose-500/10 rounded-xl border border-rose-500/20">
           {notice.err}
         </p>
       )}
 
-      <div className="rounded-2xl border border-white/10 overflow-hidden bg-slate-900/40">
+      <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white">
         <div className="overflow-x-auto">
           <table className="w-full text-xs min-w-[1100px]">
             <thead>
-              <tr className="text-left uppercase tracking-wider text-white/50 border-b border-white/10 bg-white/[0.02]">
+              <tr className="text-left uppercase tracking-wider text-slate-500 border-b border-slate-200 bg-slate-50">
                 <th className="px-4 py-3 font-bold w-10">#</th>
                 <th className="px-4 py-3 font-bold">Candidate Name</th>
                 <th className="px-4 py-3 font-bold">Contact Info</th>
@@ -173,10 +173,10 @@ export default function CandidatesTable({
               </tr>
             </thead>
 
-            <tbody className="divide-y divide-white/5">
+            <tbody className="divide-y divide-slate-200">
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-4 py-12 text-center text-white/50">
+                  <td colSpan={10} className="px-4 py-12 text-center text-slate-500">
                     No candidates found matching your criteria.
                   </td>
                 </tr>
@@ -190,37 +190,37 @@ export default function CandidatesTable({
                 const rv = reviewByEmail[(inv.email || "").toLowerCase()];
 
                 return (
-                  <tr key={inv.email} className="hover:bg-white/[0.02] transition align-top">
-                    <td className="px-4 py-3.5 text-white/50">{start + i + 1}</td>
+                  <tr key={inv.email} className="hover:bg-slate-50 transition align-top">
+                    <td className="px-4 py-3.5 text-slate-500">{start + i + 1}</td>
 
-                    <td className="px-4 py-3.5 font-semibold text-white/90 break-words max-w-[160px]">
+                    <td className="px-4 py-3.5 font-semibold text-slate-800 break-words max-w-[160px]">
                       {inv.name || "—"}
                     </td>
 
                     <td className="px-4 py-3.5 max-w-[240px]">
                       <a
                         href={`mailto:${inv.email}`}
-                        className="text-cyan-300 hover:underline break-all"
+                        className="text-slate-700 hover:underline break-all"
                       >
                         {inv.email}
                       </a>
-                      {inv.phone && <p className="text-white/50 mt-0.5">{inv.phone}</p>}
+                      {inv.phone && <p className="text-slate-500 mt-0.5">{inv.phone}</p>}
                     </td>
 
-                    <td className="px-4 py-3.5 text-white/80">{inv.role || "—"}</td>
+                    <td className="px-4 py-3.5 text-slate-700">{inv.role || "—"}</td>
 
                     <td className="px-4 py-3.5">
                       {inv.code ? (
-                        <button
+                        <button data-plain
                           type="button"
                           onClick={() => copy(inv.code, `${inv.email}:id`)}
-                          className="font-mono font-bold text-fuchsia-400 hover:text-fuchsia-300"
+                          className="font-mono font-bold text-slate-700 hover:text-slate-900"
                           title="Click to copy"
                         >
                           {copied === `${inv.email}:id` ? "Copied ✓" : inv.code}
                         </button>
                       ) : (
-                        <span className="text-white/40">old invite</span>
+                        <span className="text-slate-400">old invite</span>
                       )}
                     </td>
 
@@ -231,7 +231,7 @@ export default function CandidatesTable({
                         {mailLabel}
                       </span>
                       {inv.mail_status === "failed" && inv.mail_error && (
-                        <p className="text-[11px] text-rose-400 mt-1.5 max-w-[200px] break-words">
+                        <p className="text-[11px] text-rose-600 mt-1.5 max-w-[200px] break-words">
                           {inv.mail_error}
                         </p>
                       )}
@@ -247,18 +247,18 @@ export default function CandidatesTable({
 
                     <td className="px-4 py-3.5">
                       {!rv ? (
-                        <span className="text-white/30">—</span>
+                        <span className="text-slate-400">—</span>
                       ) : !rv.proctoring?.required ? (
-                        <span className="text-white/50">Not required</span>
+                        <span className="text-slate-500">Not required</span>
                       ) : rv.proctoring.flagged ? (
-                        <span className="text-rose-300 font-bold">Flagged</span>
+                        <span className="text-rose-700 font-bold">Flagged</span>
                       ) : (
-                        <span className="text-emerald-300 font-bold">Clean</span>
+                        <span className="text-emerald-700 font-bold">Clean</span>
                       )}
                     </td>
 
                     <td className="px-4 py-3.5">
-                      {rv ? <DecisionBadge value={rv.decision} /> : <span className="text-white/30">—</span>}
+                      {rv ? <DecisionBadge value={rv.decision} /> : <span className="text-slate-400">—</span>}
                     </td>
 
                     <td className="px-4 py-3.5">
@@ -267,7 +267,7 @@ export default function CandidatesTable({
                           <button
                             type="button"
                             onClick={() => review.openCandidate(rv.session_id)}
-                            className="px-3 h-8 rounded-lg border border-fuchsia-500/40 text-fuchsia-300 hover:bg-fuchsia-500/10 text-xs font-bold transition whitespace-nowrap"
+                            className="px-3 h-8 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold transition whitespace-nowrap"
                           >
                             Review →
                           </button>
@@ -277,7 +277,7 @@ export default function CandidatesTable({
                             type="button"
                             disabled={sending}
                             onClick={() => onResend(inv)}
-                            className="px-3 h-8 rounded-lg border border-blue-500/40 text-blue-400 hover:bg-blue-500/10 text-xs font-bold transition disabled:opacity-50 whitespace-nowrap"
+                            className="px-3 h-8 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold transition disabled:opacity-50 whitespace-nowrap"
                           >
                             {sending
                               ? "Sending..."
@@ -290,7 +290,7 @@ export default function CandidatesTable({
                         )}
 
                         {inv.link && (
-                          <button
+                          <button data-plain
                             type="button"
                             onClick={() => copy(inv.link, `${inv.email}:link`)}
                             className={iconBtn}
@@ -319,7 +319,7 @@ export default function CandidatesTable({
                             />
                           </label>
 
-                        <button
+                        <button data-plain
                           type="button"
                           disabled={working}
                           onClick={() => onDelete(inv)}
@@ -340,23 +340,23 @@ export default function CandidatesTable({
       </div>
 
       {pages > 1 && (
-        <div className="flex items-center justify-between pt-2 text-xs text-white/70">
+        <div className="flex items-center justify-between pt-2 text-xs text-slate-600">
           <button
             type="button"
             onClick={() => setPage(Math.max(1, current - 1))}
             disabled={current === 1}
             aria-label="Previous page"
-            className="px-3 py-2 bg-white/5 rounded-xl disabled:opacity-30 hover:bg-white/10 transition"
+            className="px-3 py-2 bg-slate-50 rounded-xl disabled:opacity-30 hover:bg-slate-100 transition"
           >
             ‹ Prev
           </button>
           <span className="flex gap-2 font-medium">
             {Array.from({ length: pages }, (_, n) => n + 1).map((n) => (
-              <button
+              <button data-plain
                 key={n}
                 type="button"
                 onClick={() => setPage(n)}
-                className={n === current ? "font-black text-fuchsia-400" : "opacity-60 hover:opacity-100"}
+                className={n === current ? "font-black text-slate-700" : "opacity-60 hover:opacity-100"}
               >
                 {n}
               </button>
@@ -367,7 +367,7 @@ export default function CandidatesTable({
             onClick={() => setPage(Math.min(pages, current + 1))}
             disabled={current === pages}
             aria-label="Next page"
-            className="px-3 py-2 bg-white/5 rounded-xl disabled:opacity-30 hover:bg-white/10 transition"
+            className="px-3 py-2 bg-slate-50 rounded-xl disabled:opacity-30 hover:bg-slate-100 transition"
           >
             Next ›
           </button>

@@ -8,7 +8,7 @@ import { IconShield } from "./icons";
 // Works inside AND outside the dashboard theme provider.
 const DEFAULT_T = {
   input:
-    "bg-white/5 border-white/10 text-white placeholder:text-slate-500",
+    "bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-500",
 };
 
 /**
@@ -28,7 +28,7 @@ export default function InterviewSettingsForm({
   // resume questions are switched in Interview Controls > Features)
   jobOnly = false,
 }) {
-  const inputCls = `w-full px-4 py-3 rounded-xl border ${t.input} outline-none focus:ring-2 focus:ring-fuchsia-500 text-sm`;
+  const inputCls = `w-full px-4 py-3 rounded-xl border ${t.input} outline-none focus:ring-2 focus:ring-slate-400 text-sm`;
 
   // ONE switch: face, eye / gaze and phone detection (and the gaze report)
   // all follow it - they are not separate options.
@@ -120,7 +120,7 @@ export default function InterviewSettingsForm({
       {/* MONITORING */}
       <div className="space-y-4">
         <div className="flex items-center gap-3">
-          <span className="p-2.5 rounded-xl bg-fuchsia-500/15 text-fuchsia-300">
+          <span className="p-2.5 rounded-xl bg-slate-100 text-slate-700">
             <IconShield />
           </span>
           <div>
@@ -131,7 +131,7 @@ export default function InterviewSettingsForm({
           </div>
         </div>
 
-        <div className="rounded-2xl border border-white/10 divide-y divide-white/10">
+        <div className="rounded-2xl border border-slate-200 divide-y divide-slate-200">
           <div className="flex items-center justify-between gap-4 px-5 py-4">
             <div>
               <p className="font-semibold text-sm">Require monitoring</p>
@@ -167,7 +167,7 @@ export default function InterviewSettingsForm({
           </p>
         </div>
 
-        <div className="rounded-2xl border border-white/10 divide-y divide-white/10">
+        <div className="rounded-2xl border border-slate-200 divide-y divide-slate-200">
           <div className="flex items-center justify-between gap-4 px-5 py-4">
             <div>
               <p className="font-semibold text-sm">Ask follow-up questions</p>
@@ -199,10 +199,10 @@ export default function InterviewSettingsForm({
               onChange={(e) =>
                 setFollowUps((p) => ({ ...p, count: Number(e.target.value) }))
               }
-              className={`px-3 py-2 rounded-xl border ${t.input} text-sm outline-none focus:ring-2 focus:ring-fuchsia-500 disabled:cursor-not-allowed`}
+              className={`px-3 py-2 rounded-xl border ${t.input} text-sm outline-none focus:ring-2 focus:ring-slate-400 disabled:cursor-not-allowed`}
             >
               {[1, 2, 3, 4, 5].map((n) => (
-                <option key={n} value={n} className="bg-slate-900 text-white">
+                <option key={n} value={n} className="bg-white text-slate-900">
                   {n}
                 </option>
               ))}
@@ -220,7 +220,7 @@ export default function InterviewSettingsForm({
           </p>
         </div>
 
-        <div className="rounded-2xl border border-white/10">
+        <div className="rounded-2xl border border-slate-200">
           <div className="flex items-center justify-between gap-4 px-5 py-4">
             <div>
               <p className="font-semibold text-sm">Ask resume questions</p>
@@ -284,12 +284,12 @@ export default function InterviewSettingsForm({
       />
 
       {error && (
-        <div className="p-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 text-sm text-rose-300">
+        <div className="p-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 text-sm text-rose-700">
           {error}
         </div>
       )}
       {message && (
-        <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 text-sm text-emerald-300">
+        <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 text-sm text-emerald-700">
           {message}
         </div>
       )}
@@ -297,7 +297,7 @@ export default function InterviewSettingsForm({
       <button
         onClick={save}
         disabled={saving}
-        className="px-8 py-3.5 bg-gradient-to-r from-fuchsia-600 to-purple-600 text-white rounded-2xl font-bold shadow-lg shadow-fuchsia-500/30 active:scale-95 transition disabled:opacity-50"
+ className="px-8 py-3.5 bg-slate-800 text-white rounded-2xl font-bold shadow-lg active:scale-95 transition disabled:opacity-50"
       >
         {saving ? "Saving..." : saveLabel}
       </button>

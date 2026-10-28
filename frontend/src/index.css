@@ -23,6 +23,71 @@ body {
     sans-serif;
 }
 
+/* ==========================================================
+   THEME: one single white theme (no dark / bright switch)
+   ========================================================== */
+:root {
+  color-scheme: light;
+  --app-bg: #ffffff;
+  --app-text: #0f172a;
+
+  /* every button is violet ... */
+  --btn-bg: #7c3aed;
+  --btn-bg-hover: #4c1d95;
+  --btn-text: #ffffff;
+  /* ... and turns dark violet when it is clicked */
+  --btn-click-bg: #3b0764;
+}
+
+html,
+body,
+#root {
+  background: var(--app-bg);
+  color: var(--app-text);
+}
+
+/* ----------------------------------------------------------
+   BUTTONS  (all <button> are blue)
+   Opt out for list rows / tabs / icon buttons with data-plain
+   ---------------------------------------------------------- */
+button:not([data-plain]):not([role="switch"]) {
+  background: var(--btn-bg);
+  color: var(--btn-text);
+  border-color: var(--btn-bg);
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+}
+
+button:not([data-plain]):not([role="switch"]):hover:not(:disabled) {
+  background: var(--btn-bg-hover);
+  border-color: var(--btn-bg-hover);
+}
+
+/* dark violet while the button is pressed + for a moment after the click */
+button:not([data-plain]):not([role="switch"]):active:not(:disabled),
+button[data-clicked]:not([data-plain]):not([role="switch"]) {
+  background: var(--btn-click-bg);
+  border-color: transparent;
+  color: #ffffff;
+}
+
+button:not([data-plain]):not([role="switch"]):disabled {
+  cursor: not-allowed;
+}
+
+/* same look for links that are styled like buttons (add class="btn-blue") */
+.btn-blue {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--btn-bg);
+  color: var(--btn-text);
+  cursor: pointer;
+}
+.btn-blue:hover { background: var(--btn-bg-hover); }
+.btn-blue:active,
+.btn-blue[data-clicked] { background: var(--btn-click-bg); }
+
 /* Print / Save as PDF for the candidate report */
 @media print {
   body {

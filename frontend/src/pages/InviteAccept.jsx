@@ -85,16 +85,16 @@ export default function InviteAccept() {
 
   if (checking && !error) {
     return (
-      <div className="min-h-screen bg-[#06040C] text-white flex flex-col items-center justify-center gap-4 px-6">
-        <div className="w-10 h-10 rounded-full border-2 border-white/10 border-t-fuchsia-400 animate-spin" />
+      <div className="min-h-screen bg-white text-slate-900 flex flex-col items-center justify-center gap-4 px-6">
+        <div className="w-10 h-10 rounded-full border-2 border-slate-200 border-t-slate-700 animate-spin" />
         <p className="text-sm opacity-70">Opening your interview...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#06040C] text-white flex items-center justify-center px-6">
-      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-white/[0.04] p-8 text-center shadow-2xl">
+    <div className="min-h-screen bg-white text-slate-900 flex items-center justify-center px-6">
+      <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-slate-50 p-8 text-center shadow-2xl">
         <p className="text-[11px] uppercase tracking-wider opacity-50 font-bold mb-2">
           Interview ID
         </p>
@@ -119,13 +119,13 @@ export default function InviteAccept() {
                   setChecking(true);
                   setSwitching(true);
                 }}
-                className="w-full py-3 rounded-2xl bg-gradient-to-r from-fuchsia-600 to-purple-600 font-bold text-sm"
+ className="w-full py-3 rounded-2xl bg-slate-800 font-bold text-sm"
               >
                 Sign out and continue as candidate
               </button>
               <button
                 onClick={() => navigate("/dashboard", { replace: true })}
-                className="w-full py-3 rounded-2xl border border-white/15 hover:bg-white/10 font-bold text-sm"
+                className="w-full py-3 rounded-2xl border border-slate-200 hover:bg-slate-100 font-bold text-sm"
               >
                 Back to my dashboard
               </button>
@@ -134,7 +134,7 @@ export default function InviteAccept() {
         ) : (
           <>
             <h1 className="text-xl font-black mb-2">We could not open this interview</h1>
-            <p className="text-sm text-rose-300 leading-relaxed mb-8">{error}</p>
+            <p className="text-sm text-rose-700 leading-relaxed mb-8">{error}</p>
             <p className="text-xs opacity-60">
               Use the button in your latest invitation email, or ask the
               interviewer to resend it.

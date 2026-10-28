@@ -27,12 +27,12 @@ export default function Help() {
         <p className="opacity-70 mt-2 text-sm">Answers to common questions about the platform.</p>
       </header>
 
-      <section className={`rounded-[2rem] border ${t.card} divide-y divide-white/10 overflow-hidden`}>
+      <section className={`rounded-[2rem] border ${t.card} divide-y divide-slate-200 overflow-hidden`}>
         {faq.map(([q, a], idx) => (
           <div key={q}>
-            <button
+            <button data-plain
               onClick={() => setOpen(open === idx ? -1 : idx)}
-              className="w-full flex justify-between items-center gap-4 px-8 py-5 text-left font-semibold hover:bg-white/5"
+              className="w-full flex justify-between items-center gap-4 px-8 py-5 text-left font-semibold hover:bg-slate-50"
               aria-expanded={open === idx}
             >
               {q}

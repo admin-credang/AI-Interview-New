@@ -91,37 +91,15 @@ export const formatDate = (value) => {
 // THEMES (shared by every dashboard page)
 // ============================================================
 
-export const THEMES = {
-  dark: {
-    bg: "bg-[#06040C]",
-    text: "text-white",
-    nav: "bg-[#06040C]/90 border-white/10 shadow-2xl",
-    card: "bg-white/[0.03] border-white/10 hover:border-fuchsia-500/40 shadow-xl",
-    input: "bg-white/5 border-white/10 text-white placeholder:text-slate-500",
-    welcome:
-      "bg-gradient-to-r from-fuchsia-950/50 via-purple-950/40 to-slate-950 border-fuchsia-500/20 shadow-2xl",
-  },
-  light: {
-    bg: "bg-slate-50",
-    text: "text-slate-900",
-    nav: "bg-white/90 border-slate-200 shadow-md",
-    card: "bg-white border-slate-200 hover:border-purple-300 shadow-md hover:shadow-xl",
-    input: "bg-slate-100 border-slate-200 text-slate-900 placeholder:text-slate-400",
-    welcome:
-      "bg-gradient-to-r from-purple-100/70 via-fuchsia-50 to-indigo-100/50 border-purple-200 shadow-sm",
-  },
-  vivid: {
-    bg: "bg-gradient-to-br from-gray-950 via-indigo-950 to-purple-950",
-    text: "text-white",
-    nav: "bg-gray-900/90 border-cyan-500/30 shadow-2xl",
-    card: "bg-gray-900/60 border-cyan-500/30 hover:border-cyan-400 shadow-2xl backdrop-blur-xl",
-    input: "bg-gray-900 border-cyan-500/40 text-white placeholder:text-gray-500",
-    welcome:
-      "bg-gradient-to-r from-indigo-950 via-purple-950 to-cyan-950 border-cyan-500/30 shadow-2xl",
-  },
+// One single white theme for the whole app (no dark / vivid switch).
+export const THEME = {
+  bg: "bg-white",
+  text: "text-slate-900",
+  nav: "bg-white border-slate-200 shadow-sm",
+  card: "bg-white border-slate-200 hover:border-slate-300 shadow-md hover:shadow-lg",
+  input: "bg-white border-slate-300 text-slate-900 placeholder:text-slate-400",
+ welcome: "bg-slate-50 border-slate-300 shadow-sm",
 };
-
-const THEME_KEY = "dashboard_theme";
 
 // ============================================================
 // PROVIDER
@@ -142,24 +120,6 @@ export function DashboardProvider({ children }) {
   const [reportsLoading, setReportsLoading] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
-
-  const [theme, setThemeState] = useState(() => {
-    try {
-      const saved = localStorage.getItem(THEME_KEY);
-      return THEMES[saved] ? saved : "dark";
-    } catch {
-      return "dark";
-    }
-  });
-
-  const setTheme = useCallback((value) => {
-    setThemeState(value);
-    try {
-      localStorage.setItem(THEME_KEY, value);
-    } catch {
-      /* ignore */
-    }
-  }, []);
 
   // ----------------------------------------------------------
   // LOAD DASHBOARD (once for all pages)
@@ -395,9 +355,7 @@ export function DashboardProvider({ children }) {
     searchQuery,
     setSearchQuery,
 
-    theme,
-    setTheme,
-    t: THEMES[theme],
+    t: THEME,
   }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
@@ -416,8 +374,6 @@ export function DashboardProvider({ children }) {
       reportsLoading,
       getScore,
       searchQuery,
-      theme,
-      setTheme,
     ]
   );
 

@@ -340,10 +340,10 @@ function InterviewLobby() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#050B14] text-white flex items-center justify-center">
+      <div className="min-h-screen bg-white text-slate-900 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl border-2 border-cyan-500/20 border-t-cyan-400 animate-spin shadow-[0_0_20px_rgba(6,182,212,0.4)]" />
-          <p className="text-sm font-medium text-cyan-300/80 tracking-wide">Loading Pro Assessment Lobby...</p>
+ <div className="w-12 h-12 rounded-2xl border-2 border-slate-300 border-t-slate-700 animate-spin shadow-md" />
+          <p className="text-sm font-medium text-slate-700 tracking-wide">Loading Pro Assessment Lobby...</p>
         </div>
       </div>
     );
@@ -352,47 +352,43 @@ function InterviewLobby() {
   const questionCount = configuration?.extra_config?.question_count || "10";
 
   return (
-    <div className="min-h-screen bg-[#050B14] text-slate-100 font-sans relative selection:bg-cyan-500 selection:text-white pb-24">
+    <div className="min-h-screen bg-white text-slate-800 font-sans relative selection:bg-slate-800 selection:text-white pb-24">
       
       {/* AMBIENT GLOWS */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[450px] bg-gradient-to-br from-cyan-600/15 via-indigo-600/10 to-transparent blur-[150px] pointer-events-none" />
-      <div className="absolute top-[35%] -left-40 w-96 h-96 bg-purple-600/10 rounded-full blur-[140px] pointer-events-none" />
-      <div className="absolute top-[65%] -right-40 w-96 h-96 bg-blue-600/10 rounded-full blur-[140px] pointer-events-none" />
-
       {/* TOP NAVBAR */}
-      <header className="sticky top-0 z-40 backdrop-blur-xl bg-[#050B14]/80 border-b border-white/10 shadow-lg">
+      <header className="sticky top-0 z-40 backdrop-blur-xl bg-white/80 border-b border-slate-200 shadow-lg">
         <div className="max-w-6xl mx-auto px-6 h-18 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center shadow-[0_0_20px_rgba(6,182,212,0.5)] border border-cyan-300/30 font-black text-white text-sm">
+ <div className="w-10 h-10 rounded-2xl bg-slate-800 flex items-center justify-center shadow-md border border-slate-300 font-black text-white text-sm">
               AI
             </div>
             <div>
-              <h1 className="text-sm font-bold text-white flex items-center gap-2">
+              <h1 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 Assessment Hub Pro
-                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+                <span className="w-2 h-2 rounded-full bg-slate-800 animate-ping" />
               </h1>
-              <p className="text-[11px] text-slate-400">Secure AI Proctoring Environment</p>
+              <p className="text-[11px] text-slate-500">Secure AI Proctoring Environment</p>
             </div>
           </div>
 
           <div className="flex items-center gap-4">
             <button
               onClick={() => setShowDiagnosticsModal(true)}
-              className="px-3.5 py-2 rounded-2xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-xs font-bold text-cyan-300 transition flex items-center gap-1.5"
+              className="px-3.5 py-2 rounded-2xl bg-slate-100 hover:bg-slate-100 border border-slate-300 text-xs font-bold text-slate-700 transition flex items-center gap-1.5"
             >
               📊 Diagnostics
             </button>
             {user && (
-              <div className="hidden sm:flex items-center gap-2.5 px-3.5 py-1.5 rounded-2xl bg-white/[0.04] border border-white/10 shadow-inner">
-                <div className="w-6 h-6 rounded-xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-300 font-bold text-xs">
+              <div className="hidden sm:flex items-center gap-2.5 px-3.5 py-1.5 rounded-2xl bg-slate-50 border border-slate-200 shadow-inner">
+                <div className="w-6 h-6 rounded-xl bg-slate-100 border border-slate-300 flex items-center justify-center text-slate-700 font-bold text-xs">
                   {user?.name?.[0] || "U"}
                 </div>
-                <span className="text-xs font-semibold text-slate-200">{user?.name || "Candidate"}</span>
+                <span className="text-xs font-semibold text-slate-700">{user?.name || "Candidate"}</span>
               </div>
             )}
             <button
               onClick={() => navigate("/dashboard")}
-              className="px-4 py-2 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-slate-300 transition-all hover:text-white"
+              className="px-4 py-2 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-600 transition-all hover:text-slate-900"
             >
               Dashboard
             </button>
@@ -404,15 +400,15 @@ function InterviewLobby() {
       <main className="max-w-5xl mx-auto px-6 pt-10 relative z-10 space-y-8">
 
         {/* HERO TITLE BANNER */}
-        <div className="text-center sm:text-left flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-white/10 pb-8">
+        <div className="text-center sm:text-left flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-8">
           <div>
-            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-xs font-semibold mb-3 shadow-[0_0_15px_rgba(6,182,212,0.15)]">
+ <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-slate-100 border border-slate-300 text-slate-700 text-xs font-semibold mb-3 shadow-md">
               ✨ Pro Evaluation Lobby
             </div>
-            <h2 className="text-3xl sm:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white via-cyan-100 to-slate-400">
+ <h2 className="text-slate-700 text-3xl sm:text-4xl font-extrabold ">
               {interview?.title || "AI Evaluation Session"}
             </h2>
-            <p className="text-slate-400 text-sm mt-2 max-w-xl">
+            <p className="text-slate-500 text-sm mt-2 max-w-xl">
               {monitoringRequired
                 ? "Check your required camera and microphone, then finish the ready checks to launch."
                 : "Camera monitoring is disabled for this interview. Check your microphone or use text answers, then finish the ready checks."}
@@ -420,17 +416,17 @@ function InterviewLobby() {
           </div>
 
           <div className="flex gap-2.5 self-start sm:self-center">
-            <span className="px-3.5 py-2 rounded-2xl bg-white/[0.04] border border-white/10 text-xs font-mono font-bold text-cyan-400">
+            <span className="px-3.5 py-2 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-mono font-bold text-slate-700">
               {fpsRate ? `${fpsRate} FPS` : "FPS unavailable"}
             </span>
-            <span className="px-3.5 py-2 rounded-2xl bg-white/[0.04] border border-white/10 text-xs font-mono font-bold text-indigo-400">
+            <span className="px-3.5 py-2 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-mono font-bold text-slate-700">
               {bandwidthMbps ? `${bandwidthMbps} Mbps` : "Bandwidth not measured"}
             </span>
           </div>
         </div>
 
         {error && (
-          <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-bold animate-shake">
+          <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-700 text-xs font-bold animate-shake">
             ⚠️ {error}
           </div>
         )}
@@ -440,16 +436,16 @@ function InterviewLobby() {
           
           {/* LEFT: LIVE WEBCAM & AI PROCTORING STATUS (7 Cols) */}
           <div className="lg:col-span-7 space-y-6">
-            <div className="p-6 rounded-3xl bg-slate-900/60 border border-white/10 backdrop-blur-2xl shadow-2xl relative overflow-hidden group">
-              <div className="absolute inset-0 bg-gradient-to-b from-indigo-500/[0.03] to-transparent pointer-events-none" />
+            <div className="p-6 rounded-3xl bg-white border border-slate-200 backdrop-blur-2xl shadow-2xl relative overflow-hidden group">
+ <div className="absolute inset-0 bg-slate-50 pointer-events-none" />
               
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
                   Camera preview
                 </h3>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] px-2.5 py-0.5 rounded-full font-bold border bg-slate-500/10 text-slate-300 border-slate-500/30">
+                  <span className="text-[10px] px-2.5 py-0.5 rounded-full font-bold border bg-slate-500/10 text-slate-600 border-slate-500/30">
                     {monitoringRequired
                       ? "Face monitoring begins in interview"
                       : "Monitoring disabled"}
@@ -458,7 +454,7 @@ function InterviewLobby() {
               </div>
 
               {/* Video Preview Box */}
-              <div className="relative aspect-video rounded-2xl overflow-hidden border border-white/10 bg-black shadow-inner flex items-center justify-center">
+              <div className="relative aspect-video rounded-2xl overflow-hidden border border-slate-200 bg-black shadow-inner flex items-center justify-center">
                 <video
                   ref={videoRef}
                   autoPlay
@@ -467,22 +463,22 @@ function InterviewLobby() {
                   className={`w-full h-full object-cover transform -scale-x-100 ${isVideoMuted ? "hidden" : "block"}`}
                 />
                 {!isVideoMuted && (
-                  <div className="absolute inset-0 border border-cyan-500/25 pointer-events-none flex flex-col justify-between p-3">
+                  <div className="absolute inset-0 border border-slate-300 pointer-events-none flex flex-col justify-between p-3">
                     <div className="flex justify-between items-center">
-                      <span className="px-2 py-0.5 rounded bg-black/60 backdrop-blur-md text-[10px] text-cyan-300 font-mono border border-cyan-500/30">
+                      <span className="px-2 py-0.5 rounded bg-white/90 backdrop-blur-md text-[10px] text-slate-700 font-mono border border-slate-300">
                         HD 720p 30fps
                       </span>
                       <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
                     </div>
-                    <div className="absolute top-1/2 inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent animate-pulse" />
+ <div className="absolute top-1/2 inset-x-0 h-0.5 bg-slate-50 animate-pulse" />
                   </div>
                 )}
                 {isVideoMuted && (
-                  <div className="absolute inset-0 bg-slate-950/90 flex flex-col items-center justify-center p-4">
-                    <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-xl mb-2">
+                  <div className="absolute inset-0 bg-white flex flex-col items-center justify-center p-4">
+                    <div className="w-12 h-12 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-center text-xl mb-2">
                       📷🚫
                     </div>
-                    <p className="text-xs font-medium text-slate-400">Camera is turned off</p>
+                    <p className="text-xs font-medium text-slate-500">Camera is turned off</p>
                   </div>
                 )}
               </div>
@@ -491,7 +487,7 @@ function InterviewLobby() {
               <div className="mt-5 space-y-3">
                 {monitoringRequired && videoDevices.length > 0 && (
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-400 mb-1">Camera Input</label>
+                    <label className="block text-[11px] font-semibold text-slate-500 mb-1">Camera Input</label>
                     <select
                       value={selectedVideoDevice}
                       onChange={(e) => {
@@ -503,7 +499,7 @@ function InterviewLobby() {
                             : true,
                         });
                       }}
-                      className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-slate-300"
                     >
                       {videoDevices.map((d, i) => (
                         <option key={d.deviceId || i} value={d.deviceId}>{d.label || `Camera ${i + 1}`}</option>
@@ -514,7 +510,7 @@ function InterviewLobby() {
 
                 {audioDevices.length > 0 && (
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-400 mb-1">Microphone Input</label>
+                    <label className="block text-[11px] font-semibold text-slate-500 mb-1">Microphone Input</label>
                     <select
                       value={selectedAudioDevice}
                       onChange={(e) => {
@@ -528,7 +524,7 @@ function InterviewLobby() {
                           audio: { deviceId: { exact: e.target.value } },
                         });
                       }}
-                      className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-slate-300"
                     >
                       {audioDevices.map((d, i) => (
                         <option key={d.deviceId || i} value={d.deviceId}>{d.label || `Mic ${i + 1}`}</option>
@@ -540,14 +536,14 @@ function InterviewLobby() {
                 {/* Mic Volume & Ambient Noise warning */}
                 <div className="pt-2">
                   <div className="flex justify-between items-center mb-1 text-[11px]">
-                    <span className="text-slate-400 font-semibold flex items-center gap-1.5">
+                    <span className="text-slate-500 font-semibold flex items-center gap-1.5">
                       Mic Level & Noise Monitor
-                      {noiseDetected && <span className="text-amber-400 text-[10px] font-bold">⚠️ Background Noise High</span>}
+                      {noiseDetected && <span className="text-amber-600 text-[10px] font-bold">⚠️ Background Noise High</span>}
                     </span>
-                    <span className="font-bold text-cyan-400">{isAudioMuted ? "Muted" : `${audioLevel}%`}</span>
+                    <span className="font-bold text-slate-700">{isAudioMuted ? "Muted" : `${audioLevel}%`}</span>
                   </div>
-                  <div className="h-2 w-full bg-black/50 rounded-full overflow-hidden border border-white/10">
-                    <div className={`h-full transition-all duration-75 ${noiseDetected ? "bg-amber-400" : "bg-cyan-400"}`} style={{ width: `${isAudioMuted ? 0 : audioLevel}%` }} />
+                  <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden border border-slate-200">
+                    <div className={`h-full transition-all duration-75 ${noiseDetected ? "bg-amber-400" : "bg-slate-800"}`} style={{ width: `${isAudioMuted ? 0 : audioLevel}%` }} />
                   </div>
                 </div>
 
@@ -557,7 +553,7 @@ function InterviewLobby() {
                     <button
                       onClick={toggleVideo}
                       className={`py-2.5 rounded-xl text-xs font-bold transition border ${
-                        isVideoMuted ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30" : "bg-rose-500/10 text-rose-300 border-rose-500/30"
+                        isVideoMuted ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/30" : "bg-rose-500/10 text-rose-700 border-rose-500/30"
                       }`}
                     >
                       {isVideoMuted ? "Turn Cam ON" : "Turn Cam OFF"}
@@ -566,7 +562,7 @@ function InterviewLobby() {
                   <button
                     onClick={toggleAudio}
                     className={`py-2.5 rounded-xl text-xs font-bold transition border ${
-                      isAudioMuted ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30" : "bg-rose-500/10 text-rose-300 border-rose-500/30"
+                      isAudioMuted ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/30" : "bg-rose-500/10 text-rose-700 border-rose-500/30"
                     }`}
                   >
                     {isAudioMuted ? "Unmute Mic" : "Mute Mic"}
@@ -574,7 +570,7 @@ function InterviewLobby() {
                   <button
                     onClick={playTestSound}
                     disabled={audioTesting}
-                    className="py-2.5 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-300 text-xs font-bold transition"
+                    className="py-2.5 rounded-xl bg-slate-100 hover:bg-slate-100 border border-slate-300 text-slate-700 text-xs font-bold transition"
                   >
                     {audioTesting ? "Playing..." : "Test Speaker"}
                   </button>
@@ -585,19 +581,19 @@ function InterviewLobby() {
 
           {/* RIGHT: READY CHECK INTERACTIVE CARD (5 Cols) */}
           <div className="lg:col-span-5 space-y-6">
-            <div className="p-6 rounded-3xl bg-slate-900/60 border border-white/10 backdrop-blur-2xl shadow-2xl relative overflow-hidden flex flex-col justify-between h-full">
-              <div className="absolute inset-0 bg-gradient-to-tr from-purple-500/[0.04] to-transparent pointer-events-none" />
+            <div className="p-6 rounded-3xl bg-white border border-slate-200 backdrop-blur-2xl shadow-2xl relative overflow-hidden flex flex-col justify-between h-full">
+ <div className="absolute inset-0 bg-slate-50 pointer-events-none" />
               
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h3 className="text-base font-black text-white">Ready Checklist</h3>
-                    <p className="text-xs text-slate-400 mt-0.5">Complete all 4 requirements to unlock</p>
+                    <h3 className="text-base font-black text-slate-900">Ready Checklist</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">Complete all 4 requirements to unlock</p>
                   </div>
                   <span className={`px-3 py-1 rounded-xl text-xs font-black transition-all ${
                     allChecksPassed 
-                      ? "bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.3)]" 
-                      : "bg-purple-500/20 border border-purple-500/40 text-purple-300"
+ ? "bg-emerald-500/20 border border-emerald-500/40 text-emerald-700 shadow-md" 
+                      : "bg-slate-100 border border-slate-300 text-slate-700"
                   }`}>
                     {completedCount}/4 Passed
                   </span>
@@ -621,15 +617,15 @@ function InterviewLobby() {
                       onClick={() => handleCheck(item.key)}
                       className={`flex items-center gap-3.5 p-3.5 rounded-2xl border transition-all cursor-pointer ${
                         checks[item.key]
-                          ? "bg-cyan-500/10 border-cyan-500/40 text-white shadow-[0_0_15px_rgba(6,182,212,0.1)]"
-                          : "bg-white/[0.02] border-white/5 hover:bg-white/[0.05] text-slate-300"
+ ? "bg-slate-100 border-slate-300 text-slate-900 shadow-md"
+                          : "bg-slate-50 border-slate-200 hover:bg-slate-50 text-slate-600"
                       }`}
                     >
                       <input
                         type="checkbox"
                         checked={checks[item.key]}
                         onChange={() => {}}
-                        className="w-4 h-4 rounded bg-black/40 border-slate-700 text-cyan-500 accent-cyan-500 cursor-pointer"
+                        className="w-4 h-4 rounded bg-white border-slate-300 text-slate-700 accent-slate-700 cursor-pointer"
                       />
                       <span className="text-xs font-semibold leading-snug">{item.label}</span>
                     </label>
@@ -638,14 +634,14 @@ function InterviewLobby() {
               </div>
 
               {/* Status Summary badges */}
-              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-white/10">
-                <div className="p-3 rounded-2xl bg-white/[0.02] border border-white/5">
-                  <span className="block text-[10px] text-slate-400 font-semibold">Bandwidth</span>
-                  <span className="text-xs font-bold text-cyan-300 truncate block mt-0.5">{bandwidthMbps ? `${bandwidthMbps} Mbps` : "Checking..."}</span>
+              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200">
+                <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200">
+                  <span className="block text-[10px] text-slate-500 font-semibold">Bandwidth</span>
+                  <span className="text-xs font-bold text-slate-700 truncate block mt-0.5">{bandwidthMbps ? `${bandwidthMbps} Mbps` : "Checking..."}</span>
                 </div>
-                <div className="p-3 rounded-2xl bg-white/[0.02] border border-white/5">
-                  <span className="block text-[10px] text-slate-400 font-semibold">AI Proctoring</span>
-                  <span className="text-xs font-bold text-purple-300 truncate block mt-0.5">
+                <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200">
+                  <span className="block text-[10px] text-slate-500 font-semibold">AI Proctoring</span>
+                  <span className="text-xs font-bold text-slate-700 truncate block mt-0.5">
                     {monitoringRequired ? "Monitoring enabled" : "Monitoring disabled"}
                   </span>
                 </div>
@@ -659,34 +655,34 @@ function InterviewLobby() {
         <div className="grid gap-6 md:grid-cols-2">
           
           {/* JOB & INTERVIEW SPECS */}
-          <div className="p-6 rounded-3xl bg-slate-900/60 border border-white/10 backdrop-blur-xl space-y-4">
-            <h4 className="text-sm font-bold text-white flex items-center gap-2">
+          <div className="p-6 rounded-3xl bg-white border border-slate-200 backdrop-blur-xl space-y-4">
+            <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               📋 Assessment Parameters & Rules
             </h4>
-            <p className="text-xs text-slate-300 leading-relaxed">
+            <p className="text-xs text-slate-600 leading-relaxed">
               {interview?.description || "Answer AI generated professional interview questions accurately within the allocated time."}
             </p>
             <div className="grid grid-cols-3 gap-3 pt-2">
-              <div className="p-3 rounded-2xl bg-white/[0.03] border border-white/5">
-                <span className="text-[10px] text-slate-400">Total Questions</span>
-                <p className="text-xs font-bold text-cyan-300 mt-0.5">{questionCount} Qs</p>
+              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200">
+                <span className="text-[10px] text-slate-500">Total Questions</span>
+                <p className="text-xs font-bold text-slate-700 mt-0.5">{questionCount} Qs</p>
               </div>
-              <div className="p-3 rounded-2xl bg-white/[0.03] border border-white/5">
-                <span className="text-[10px] text-slate-400">Difficulty</span>
-                <p className="text-xs font-bold text-amber-300 capitalize mt-0.5">{configuration?.difficulty || "Advanced"}</p>
+              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200">
+                <span className="text-[10px] text-slate-500">Difficulty</span>
+                <p className="text-xs font-bold text-amber-700 capitalize mt-0.5">{configuration?.difficulty || "Advanced"}</p>
               </div>
-              <div className="p-3 rounded-2xl bg-white/[0.03] border border-white/5">
-                <span className="text-[10px] text-slate-400">AI Engine</span>
-                <p className="text-xs font-bold text-purple-300 mt-0.5">Groq / RAG</p>
+              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200">
+                <span className="text-[10px] text-slate-500">AI Engine</span>
+                <p className="text-xs font-bold text-slate-700 mt-0.5">Groq / RAG</p>
               </div>
             </div>
           </div>
 
           {/* LAUNCH BUTTON BOX */}
-          <div className="p-6 rounded-3xl bg-gradient-to-br from-indigo-950/40 via-slate-900/60 to-slate-950 border border-cyan-500/30 backdrop-blur-xl flex flex-col justify-between shadow-[0_0_30px_rgba(6,182,212,0.1)]">
+ <div className="p-6 rounded-3xl bg-slate-50 border border-slate-300 backdrop-blur-xl flex flex-col justify-between shadow-md">
             <div>
-              <h4 className="text-sm font-bold text-white mb-1">Launch Interview Session</h4>
-              <p className="text-xs text-slate-400">
+              <h4 className="text-sm font-bold text-slate-900 mb-1">Launch Interview Session</h4>
+              <p className="text-xs text-slate-500">
                 {allChecksPassed ? "Ready to begin your session securely." : "Complete the 4 ready checks to unlock start button."}
               </p>
             </div>
@@ -697,13 +693,13 @@ function InterviewLobby() {
                 disabled={starting || !allChecksPassed}
                 className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-wider transition-all duration-300 shadow-xl flex items-center justify-center gap-2 ${
                   allChecksPassed
-                    ? "bg-gradient-to-r from-cyan-500 via-indigo-600 to-purple-600 hover:opacity-95 text-white border border-cyan-400/40 shadow-cyan-500/20 cursor-pointer hover:scale-[1.01]"
-                    : "bg-white/5 text-slate-500 border border-white/5 opacity-40 cursor-not-allowed"
+ ? "bg-slate-800 hover:opacity-95 text-white border border-slate-300 cursor-pointer hover:scale-[1.01]"
+                    : "bg-slate-50 text-slate-500 border border-slate-200 opacity-40 cursor-not-allowed"
                 }`}
               >
                 {starting ? (
                   <>
-                    <div className="w-4 h-4 rounded-2xl border-2 border-white/20 border-t-white animate-spin" />
+                    <div className="w-4 h-4 rounded-2xl border-2 border-slate-200 border-t-white animate-spin" />
                     <span>Launching Session...</span>
                   </>
                 ) : (
@@ -719,37 +715,37 @@ function InterviewLobby() {
 
       {/* SYSTEM DIAGNOSTICS MODAL */}
       {showDiagnosticsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
-          <div className="w-full max-w-md p-6 rounded-3xl border border-cyan-500/40 bg-slate-900 shadow-2xl space-y-5">
-            <div className="flex justify-between items-center border-b border-white/10 pb-4">
-              <h3 className="text-sm font-black text-white flex items-center gap-2">🛠️ System Diagnostics Report</h3>
-              <button onClick={() => setShowDiagnosticsModal(false)} className="text-slate-400 hover:text-white text-sm font-bold">✕</button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-md p-6 rounded-3xl border border-slate-300 bg-white shadow-2xl space-y-5">
+            <div className="flex justify-between items-center border-b border-slate-200 pb-4">
+              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">🛠️ System Diagnostics Report</h3>
+              <button data-plain onClick={() => setShowDiagnosticsModal(false)} className="text-slate-500 hover:text-slate-900 text-sm font-bold">✕</button>
             </div>
             <div className="space-y-3 text-xs">
-              <div className="flex justify-between p-3 rounded-xl bg-white/[0.03] border border-white/5">
-                <span className="text-slate-400">Browser User Agent</span>
-                <span className="font-mono text-slate-200 truncate max-w-[200px]">{navigator.userAgent}</span>
+              <div className="flex justify-between p-3 rounded-xl bg-slate-50 border border-slate-200">
+                <span className="text-slate-500">Browser User Agent</span>
+                <span className="font-mono text-slate-700 truncate max-w-[200px]">{navigator.userAgent}</span>
               </div>
-              <div className="flex justify-between p-3 rounded-xl bg-white/[0.03] border border-white/5">
-                <span className="text-slate-400">Network Latency</span>
-                <span className="font-bold text-cyan-400">{networkLatency ? `${networkLatency} ms` : "Measuring..."}</span>
+              <div className="flex justify-between p-3 rounded-xl bg-slate-50 border border-slate-200">
+                <span className="text-slate-500">Network Latency</span>
+                <span className="font-bold text-slate-700">{networkLatency ? `${networkLatency} ms` : "Measuring..."}</span>
               </div>
-              <div className="flex justify-between p-3 rounded-xl bg-white/[0.03] border border-white/5">
-                <span className="text-slate-400">Estimated Bandwidth</span>
-                <span className="font-bold text-indigo-400">{bandwidthMbps ? `${bandwidthMbps} Mbps` : "Calculating..."}</span>
+              <div className="flex justify-between p-3 rounded-xl bg-slate-50 border border-slate-200">
+                <span className="text-slate-500">Estimated Bandwidth</span>
+                <span className="font-bold text-slate-700">{bandwidthMbps ? `${bandwidthMbps} Mbps` : "Calculating..."}</span>
               </div>
-              <div className="flex justify-between p-3 rounded-xl bg-white/[0.03] border border-white/5">
-                <span className="text-slate-400">Webcam Status</span>
-                <span className="font-bold text-emerald-400 capitalize">{camStatus}</span>
+              <div className="flex justify-between p-3 rounded-xl bg-slate-50 border border-slate-200">
+                <span className="text-slate-500">Webcam Status</span>
+                <span className="font-bold text-emerald-600 capitalize">{camStatus}</span>
               </div>
-              <div className="flex justify-between p-3 rounded-xl bg-white/[0.03] border border-white/5">
-                <span className="text-slate-400">Microphone Status</span>
-                <span className="font-bold text-emerald-400 capitalize">{micStatus}</span>
+              <div className="flex justify-between p-3 rounded-xl bg-slate-50 border border-slate-200">
+                <span className="text-slate-500">Microphone Status</span>
+                <span className="font-bold text-emerald-600 capitalize">{micStatus}</span>
               </div>
             </div>
             <button
               onClick={() => setShowDiagnosticsModal(false)}
-              className="w-full py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs transition"
+              className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-950 font-black text-xs transition"
             >
               Close Report
             </button>
@@ -759,14 +755,14 @@ function InterviewLobby() {
 
       {/* SUCCESS MODAL POPUP WHEN ALL 4 CHECKS COMPLETED */}
       {showPopupModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
-          <div className="w-full max-w-sm p-8 rounded-3xl border border-cyan-500/40 bg-slate-900 shadow-2xl shadow-cyan-500/20 text-center space-y-5">
-            <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-tr from-cyan-500 to-emerald-400 flex items-center justify-center text-3xl shadow-lg shadow-emerald-500/30">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fadeIn">
+ <div className="w-full max-w-sm p-8 rounded-3xl border border-slate-300 bg-white shadow-2xl text-center space-y-5">
+ <div className="w-16 h-16 mx-auto rounded-2xl bg-slate-800 flex items-center justify-center text-3xl shadow-lg ">
               🚀
             </div>
             <div>
-              <h3 className="text-lg font-black text-white">All Checks Verified!</h3>
-              <p className="text-slate-300 text-xs mt-1.5 leading-relaxed">
+              <h3 className="text-lg font-black text-slate-900">All Checks Verified!</h3>
+              <p className="text-slate-600 text-xs mt-1.5 leading-relaxed">
                 {monitoringRequired
                   ? "Your required device checks are complete. Ready to begin."
                   : "Your setup checks are complete. Camera monitoring is disabled. Ready to begin."}
@@ -775,7 +771,7 @@ function InterviewLobby() {
             <div className="flex gap-2.5 pt-2">
               <button
                 onClick={() => setShowPopupModal(false)}
-                className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-slate-300 transition"
+                className="flex-1 py-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs font-bold text-slate-600 transition"
               >
                 Review Setup
               </button>
@@ -784,7 +780,7 @@ function InterviewLobby() {
                   setShowPopupModal(false);
                   startInterviewSession();
                 }}
-                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:opacity-90 text-xs font-black text-white shadow-lg shadow-cyan-500/30 transition cursor-pointer"
+ className="flex-1 py-3 rounded-xl bg-slate-800 hover:opacity-90 text-xs font-black text-white shadow-lg transition cursor-pointer"
               >
                 Launch Now →
               </button>

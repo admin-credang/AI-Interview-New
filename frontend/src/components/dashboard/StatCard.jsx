@@ -1,31 +1,13 @@
-// --- Highly Unique Distinct Stat Cards with Custom Gradients & Icons ---
+// --- Stat cards ---
 export default function StatCard({ title, value, icon: Icon, change, variant }) {
-  const variants = {
-    purple: {
-      card: "bg-gradient-to-br from-purple-900/30 via-fuchsia-950/20 to-indigo-950/40 border-fuchsia-500/30 shadow-[0_15px_35px_rgba(217,70,239,0.1)] hover:border-fuchsia-500/60",
-      iconBox: "bg-gradient-to-br from-fuchsia-500 to-purple-600 text-white shadow-lg shadow-fuchsia-500/40",
-      textColor: "text-fuchsia-300",
-      valueColor: ""
-    },
-    emerald: {
-      card: "bg-gradient-to-br from-emerald-900/30 via-teal-950/20 to-slate-950/40 border-emerald-500/30 shadow-[0_15px_35px_rgba(16,185,129,0.1)] hover:border-emerald-500/60",
-      iconBox: "bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/40",
-      textColor: "text-emerald-300",
-      valueColor: ""
-    },
-    amber: {
-      card: "bg-gradient-to-br from-amber-900/30 via-orange-950/20 to-yellow-950/40 border-amber-500/30 shadow-[0_15px_35px_rgba(245,158,11,0.1)] hover:border-amber-500/60",
-      iconBox: "bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-lg shadow-amber-500/40",
-      textColor: "text-amber-300",
-      valueColor: ""
-    },
-    cyan: {
-      card: "bg-gradient-to-br from-cyan-900/30 via-blue-950/20 to-indigo-950/40 border-cyan-500/30 shadow-[0_15px_35px_rgba(6,182,212,0.1)] hover:border-cyan-500/60",
-      iconBox: "bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/40",
-      textColor: "text-cyan-300",
-      valueColor: ""
-    }
+  // Flat, calm cards: white card, one blue icon box (no bright colours)
+  const base = {
+    card: "bg-white border-slate-200 shadow-sm hover:border-slate-300",
+    iconBox: "bg-slate-800 text-white",
+    textColor: "text-slate-500",
+    valueColor: "text-slate-900",
   };
+  const variants = { purple: base, emerald: base, amber: base, cyan: base };
 
   const currentVariant = variants[variant] || variants.purple;
 

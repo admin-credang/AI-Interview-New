@@ -12,15 +12,13 @@ function Home() {
         body {
           margin: 0;
           font-family: 'Plus Jakarta Sans', sans-serif;
-          background: #030712;
-          color: #f8fafc;
+          background: #ffffff;
+          color: #0f172a;
         }
 
         .home-page {
           min-height: 100vh;
-          background: radial-gradient(circle at 15% 15%, rgba(13, 148, 136, 0.25) 0%, transparent 45%),
-                      radial-gradient(circle at 85% 85%, rgba(244, 63, 94, 0.2) 0%, transparent 45%),
-                      #030712;
+          background: #ffffff;
           display: flex;
           flex-direction: column;
           align-items: center;
@@ -40,13 +38,13 @@ function Home() {
           gap: 8px;
           padding: 8px 18px;
           border-radius: 999px;
-          background: rgba(13, 148, 136, 0.12);
-          border: 1px solid rgba(20, 184, 166, 0.3);
-          color: #2dd4bf;
+          background: #f1f5f9;
+          border: 1px solid #e2e8f0;
+          color: #334155;
           font-size: 13px;
           font-weight: 700;
           margin-bottom: 24px;
-          box-shadow: 0 0 20px rgba(13, 148, 136, 0.2);
+          box-shadow: none;
         }
 
         .hero-title {
@@ -54,19 +52,17 @@ function Home() {
           font-weight: 800;
           line-height: 1.15;
           margin-bottom: 20px;
-          color: #ffffff;
+          color: #0f172a;
           letter-spacing: -0.02em;
         }
 
         .hero-title span {
-          background: linear-gradient(135deg, #2dd4bf 0%, #06b6d4 50%, #f43f5e 100%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
+          color: #0f172a;
         }
 
         .hero-subtitle {
           font-size: clamp(16px, 2vw, 18px);
-          color: #94a3b8;
+          color: #475569;
           max-width: 700px;
           margin: 0 auto 40px;
           line-height: 1.6;
@@ -81,7 +77,7 @@ function Home() {
         }
 
         .primary-btn {
-          background: linear-gradient(135deg, #0d9488 0%, #06b6d4 100%);
+          background: #7c3aed;
           color: white;
           border: none;
           padding: 16px 36px;
@@ -90,18 +86,18 @@ function Home() {
           border-radius: 16px;
           cursor: pointer;
           transition: all 0.25s ease;
-          box-shadow: 0 10px 25px -5px rgba(13, 148, 136, 0.5);
+          box-shadow: 0 10px 25px -5px rgba(124, 58, 237, 0.45);
         }
 
         .primary-btn:hover {
           transform: translateY(-2px);
-          box-shadow: 0 15px 30px -5px rgba(13, 148, 136, 0.7);
+          box-shadow: 0 15px 30px -5px rgba(124, 58, 237, 0.6);
         }
 
         .secondary-btn {
-          background: rgba(15, 23, 42, 0.6);
-          color: #f1f5f9;
-          border: 1px solid rgba(255, 255, 255, 0.1);
+          background: #7c3aed;
+          color: #ffffff;
+          border: none;
           padding: 16px 36px;
           font-size: 16px;
           font-weight: 700;
@@ -111,8 +107,7 @@ function Home() {
         }
 
         .secondary-btn:hover {
-          background: rgba(30, 41, 59, 0.8);
-          border-color: rgba(255, 255, 255, 0.2);
+          background: #4c1d95;
         }
 
         .features-grid {
@@ -125,9 +120,9 @@ function Home() {
         }
 
         .feature-card {
-          background: rgba(15, 23, 42, 0.5);
-          backdrop-filter: blur(16px);
-          border: 1px solid rgba(20, 184, 166, 0.15);
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
+          box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
           border-radius: 24px;
           padding: 32px;
           text-align: left;
@@ -136,15 +131,15 @@ function Home() {
 
         .feature-card:hover {
           transform: translateY(-4px);
-          border-color: rgba(45, 212, 191, 0.4);
+          border-color: #94a3b8;
         }
 
         .feature-icon {
           width: 50px;
           height: 50px;
           border-radius: 14px;
-          background: rgba(13, 148, 136, 0.15);
-          border: 1px solid rgba(45, 212, 191, 0.3);
+          background: #f1f5f9;
+          border: 1px solid #e2e8f0;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -155,13 +150,13 @@ function Home() {
         .feature-title {
           font-size: 20px;
           font-weight: 700;
-          color: #ffffff;
+          color: #0f172a;
           margin-bottom: 10px;
         }
 
         .feature-desc {
           font-size: 14px;
-          color: #94a3b8;
+          color: #475569;
           line-height: 1.6;
         }
       `}</style>

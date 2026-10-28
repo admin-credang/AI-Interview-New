@@ -38,8 +38,8 @@ const MonitoringSetup = lazy(() => import("./pages/MonitoringSetup"));
 
 function PageLoader() {
   return (
-    <div className="min-h-screen bg-[#06040C] flex items-center justify-center">
-      <div className="w-10 h-10 rounded-full border-2 border-white/10 border-t-fuchsia-400 animate-spin" />
+    <div className="min-h-screen bg-white flex items-center justify-center">
+      <div className="w-10 h-10 rounded-full border-2 border-slate-200 border-t-slate-700 animate-spin" />
     </div>
   );
 }
@@ -115,13 +115,13 @@ function ReportRedirect() {
 
 function InterviewEnded() {
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-6">
-      <div className="w-full max-w-md rounded-2xl bg-slate-900 p-8 text-center shadow-xl">
+    <div className="min-h-screen bg-white text-slate-900 flex items-center justify-center px-6">
+      <div className="w-full max-w-md rounded-2xl bg-white p-8 text-center shadow-xl">
         <h1 className="text-2xl font-bold mb-4">
           Interview Ended
         </h1>
 
-        <p className="text-slate-400">
+        <p className="text-slate-500">
           The interview was ended because you left the interview page. Please contact the interviewer if this was a mistake.
         </p>
       </div>

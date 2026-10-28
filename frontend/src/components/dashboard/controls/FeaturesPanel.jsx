@@ -16,9 +16,9 @@ function ModuleList({ catalog, groups, state, busyKey, onToggle, extras }) {
     const parentActive = !m.parent || state[m.parent]?.active !== false;
 
     return (
-      <div key={m.key} className="pl-3 border-l border-white/10 my-2">
+      <div key={m.key} className="pl-3 border-l border-slate-200 my-2">
         <div className="flex items-center justify-between py-1.5" title={m.description}>
-          <span className="text-xs text-white/80">{m.label}</span>
+          <span className="text-xs text-slate-700">{m.label}</span>
           <Toggle
             label={m.label}
             checked={st.on && parentActive}
@@ -40,7 +40,7 @@ function ModuleList({ catalog, groups, state, busyKey, onToggle, extras }) {
 
         return (
           <div key={g.key} className="space-y-3">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-fuchsia-400">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-700">
               {g.label}
             </p>
 
@@ -52,14 +52,14 @@ function ModuleList({ catalog, groups, state, busyKey, onToggle, extras }) {
                 return (
                   <div
                     key={m.key}
-                    className="p-5 bg-slate-900/40 rounded-2xl border border-white/5 flex flex-col justify-between hover:border-white/10 transition shadow-lg"
+                    className="p-5 bg-white rounded-2xl border border-slate-200 flex flex-col justify-between hover:border-slate-200 transition shadow-lg"
                   >
                     <div>
-                      <p className="font-bold text-sm text-white/90">{m.label}</p>
-                      <p className="text-xs text-white/50 mt-1 leading-relaxed">{m.description}</p>
+                      <p className="font-bold text-sm text-slate-800">{m.label}</p>
+                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">{m.description}</p>
 
-                      <div className="flex items-center justify-between mt-4 bg-white/[0.02] p-3.5 rounded-xl border border-white/5">
-                        <span className="text-xs font-medium text-white/70">
+                      <div className="flex items-center justify-between mt-4 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                        <span className="text-xs font-medium text-slate-600">
                           {st.on ? "Enabled" : "Disabled"}
                         </span>
                         <Toggle
@@ -75,7 +75,7 @@ function ModuleList({ catalog, groups, state, busyKey, onToggle, extras }) {
                       {st.active && extras[m.key] ? <div className="mt-2">{extras[m.key]}</div> : null}
 
                       {st.on && kids.length > 0 && (
-                        <div className="mt-3 pt-3 border-t border-white/5">{kids.map(renderChild)}</div>
+                        <div className="mt-3 pt-3 border-t border-slate-200">{kids.map(renderChild)}</div>
                       )}
                     </div>
                   </div>
@@ -97,7 +97,7 @@ function InterviewerBox({ item, t, onSaved }) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const inputCls = `mt-1.5 w-full px-3.5 py-2.5 rounded-xl border ${t.input} outline-none focus:ring-2 focus:ring-fuchsia-500 text-xs bg-slate-900/50 text-white`;
+  const inputCls = `mt-1.5 w-full px-3.5 py-2.5 rounded-xl border ${t.input} outline-none focus:ring-2 focus:ring-slate-400 text-xs bg-white text-slate-900`;
 
   const save = async () => {
     setMessage("");
@@ -135,14 +135,14 @@ function InterviewerBox({ item, t, onSaved }) {
   };
 
   return (
-    <div className="mt-4 pt-4 border-t border-white/10">
-      <p className="font-bold text-sm text-white/90">Interviewer</p>
-      <p className="text-xs text-white/50 mt-1">
+    <div className="mt-4 pt-4 border-t border-slate-200">
+      <p className="font-bold text-sm text-slate-800">Interviewer</p>
+      <p className="text-xs text-slate-500 mt-1">
         Candidates see this name in the invitation email, replies go to this email, and reports are sent here.
       </p>
 
       <label className="block mt-3">
-        <span className="text-[11px] font-bold text-white/70">Name</span>
+        <span className="text-[11px] font-bold text-slate-600">Name</span>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -153,7 +153,7 @@ function InterviewerBox({ item, t, onSaved }) {
       </label>
 
       <label className="block mt-3">
-        <span className="text-[11px] font-bold text-white/70">Email</span>
+        <span className="text-[11px] font-bold text-slate-600">Email</span>
         <input
           type="email"
           value={email}
@@ -164,20 +164,20 @@ function InterviewerBox({ item, t, onSaved }) {
         />
       </label>
 
-      <p className={`text-[11px] font-bold mt-4 ${connected ? "text-emerald-400" : "text-amber-300"}`}>
+      <p className={`text-[11px] font-bold mt-4 ${connected ? "text-emerald-600" : "text-amber-700"}`}>
         {connected
           ? "Gmail connected - candidate mails are sent from your login Gmail"
           : "Gmail not connected - use the Connect Gmail button at the top of this page"}
       </p>
 
-      {error && <p className="text-xs text-rose-400 mt-2">{error}</p>}
-      {message && <p className="text-xs text-emerald-400 mt-2">{message}</p>}
+      {error && <p className="text-xs text-rose-600 mt-2">{error}</p>}
+      {message && <p className="text-xs text-emerald-600 mt-2">{message}</p>}
 
       <button
         type="button"
         onClick={() => save()}
         disabled={busy}
-        className="mt-4 w-full py-2.5 rounded-xl border border-blue-500/40 text-blue-400 hover:bg-blue-500/10 text-xs font-bold transition disabled:opacity-50"
+        className="mt-4 w-full py-2.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold transition disabled:opacity-50"
       >
         {busy ? "Saving..." : "Save interviewer"}
       </button>
@@ -202,7 +202,7 @@ function CompulsoryBox({ item, t }) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const inputCls = `w-full px-3.5 py-2.5 rounded-xl border ${t.input} outline-none focus:ring-2 focus:ring-fuchsia-500 text-xs bg-slate-900/50 text-white resize-none`;
+  const inputCls = `w-full px-3.5 py-2.5 rounded-xl border ${t.input} outline-none focus:ring-2 focus:ring-slate-400 text-xs bg-white text-slate-900 resize-none`;
 
   const change = (index, value) => {
     setMessage("");
@@ -256,7 +256,7 @@ function CompulsoryBox({ item, t }) {
     <div className="space-y-3">
       {list.map((q, i) => (
         <div key={i} className="flex items-start gap-2">
-          <span className="mt-2.5 text-[11px] font-bold text-white/50 w-4 shrink-0">{i + 1}.</span>
+          <span className="mt-2.5 text-[11px] font-bold text-slate-500 w-4 shrink-0">{i + 1}.</span>
           <textarea
             value={q}
             rows={2}
@@ -265,10 +265,10 @@ function CompulsoryBox({ item, t }) {
             placeholder={`Compulsory question ${i + 1}`}
             className={inputCls}
           />
-          <button
+          <button data-plain
             type="button"
             onClick={() => remove(i)}
-            className="mt-1.5 px-2 py-1.5 rounded-lg border border-white/10 text-white/60 hover:text-rose-400 hover:border-rose-500/40 text-xs transition"
+            className="mt-1.5 px-2 py-1.5 rounded-lg border border-slate-200 text-slate-500 hover:text-rose-600 hover:border-rose-500/40 text-xs transition"
             title="Remove this question"
             aria-label={`Remove question ${i + 1}`}
           >
@@ -281,20 +281,20 @@ function CompulsoryBox({ item, t }) {
         <button
           type="button"
           onClick={add}
-          className="w-full py-2 rounded-xl border border-dashed border-white/20 text-white/70 hover:bg-white/5 text-xs font-bold transition"
+          className="w-full py-2 rounded-xl border border-dashed border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-bold transition"
         >
           + Add question ({list.length}/{MAX_COMPULSORY})
         </button>
       )}
 
-      {error && <p className="text-xs text-rose-400">{error}</p>}
-      {message && <p className="text-xs text-emerald-400">{message}</p>}
+      {error && <p className="text-xs text-rose-600">{error}</p>}
+      {message && <p className="text-xs text-emerald-600">{message}</p>}
 
       <button
         type="button"
         onClick={save}
         disabled={busy}
-        className="w-full py-2.5 rounded-xl border border-blue-500/40 text-blue-400 hover:bg-blue-500/10 text-xs font-bold transition disabled:opacity-50"
+        className="w-full py-2.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold transition disabled:opacity-50"
       >
         {busy ? "Saving..." : "Save compulsory questions"}
       </button>
@@ -387,13 +387,13 @@ export default function FeaturesPanel({
 
   const extras = {
     follow_ups: (
-      <div className="flex items-center justify-between bg-white/5 p-3 rounded-xl border border-white/5">
-        <span className="text-xs text-white/70">How many follow-ups</span>
+      <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200">
+        <span className="text-xs text-slate-600">How many follow-ups</span>
         <select
           value={followCount}
           disabled={busy === "follow_count"}
           onChange={(e) => saveFollowCount(Number(e.target.value))}
-          className={`px-3 py-1.5 rounded-lg border ${t.input} text-xs outline-none focus:ring-2 focus:ring-fuchsia-500 bg-slate-900 text-white`}
+          className={`px-3 py-1.5 rounded-lg border ${t.input} text-xs outline-none focus:ring-2 focus:ring-slate-400 bg-white text-slate-900`}
         >
           {[1, 2, 3, 4, 5].map((n) => (
             <option key={n} value={n}>
@@ -410,7 +410,7 @@ export default function FeaturesPanel({
   return (
     <div>
       {catalog.length === 0 && (
-        <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-xs text-amber-300 mb-4">
+        <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-xs text-amber-700 mb-4">
           Modules did not load from the server. Check backend connection and refresh.
         </div>
       )}
@@ -424,26 +424,26 @@ export default function FeaturesPanel({
         extras={extras}
       />
 
-      <div className="flex items-center justify-between gap-3 mt-6 pt-4 border-t border-white/10">
+      <div className="flex items-center justify-between gap-3 mt-6 pt-4 border-t border-slate-200">
         <button
           type="button"
           onClick={() => setPage(0)}
           disabled={page === 0}
-          className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold text-white/80 disabled:opacity-30 transition"
+          className="px-4 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-xs font-bold text-slate-700 disabled:opacity-30 transition"
         >
           ‹ Previous
         </button>
 
         <div className="flex items-center gap-2">
           {PAGE_LABELS.map((label, n) => (
-            <button
+            <button data-plain
               key={label}
               type="button"
               onClick={() => setPage(n)}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
                 page === n
-                  ? "bg-gradient-to-r from-fuchsia-600 to-indigo-600 text-white"
-                  : "text-white/60 hover:text-white hover:bg-white/5"
+ ? "bg-violet-600 text-white"
+                  : "text-slate-500 hover:text-slate-900 hover:bg-slate-50"
               }`}
             >
               {n + 1}. {label}
@@ -455,14 +455,14 @@ export default function FeaturesPanel({
           type="button"
           onClick={() => setPage(1)}
           disabled={page === 1}
-          className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold text-white/80 disabled:opacity-30 transition"
+          className="px-4 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-xs font-bold text-slate-700 disabled:opacity-30 transition"
         >
           Next ›
         </button>
       </div>
 
       {error && (
-        <p className="text-xs text-rose-400 mt-3 p-3 bg-rose-500/10 rounded-xl border border-rose-500/20">
+        <p className="text-xs text-rose-600 mt-3 p-3 bg-rose-500/10 rounded-xl border border-rose-500/20">
           {error}
         </p>
       )}

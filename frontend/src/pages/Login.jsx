@@ -109,18 +109,18 @@ function Login() {
   }, [googleClientId]);
 
   const inputClass =
-    "w-full rounded-xl border border-stone-300 bg-stone-50 px-4 py-3 text-sm text-stone-900 placeholder:text-stone-400 outline-none";
+    "w-full rounded-xl border border-stone-300 bg-stone-50 px-4 py-3 text-sm text-stone-900 placeholder:text-slate-500 outline-none";
 
   return (
     <div className="login-page flex min-h-screen items-center justify-center px-4 py-8">
       <span className="blob blob--pink" />
       <span className="blob blob--violet" />
 
-      <div className="login-card relative z-10 grid w-full max-w-6xl overflow-hidden rounded-[2rem] bg-[#f6f4f0] p-3 lg:grid-cols-[0.85fr_1.15fr]">
+      <div className="login-card relative z-10 grid w-full max-w-6xl overflow-hidden rounded-[2rem] bg-white p-3 lg:grid-cols-[0.85fr_1.15fr]">
         {/* ---------- Left: form ---------- */}
         <div className="login-form flex flex-col justify-center px-6 py-10 sm:px-12">
           <div className="mb-8 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-stone-900 text-sm font-bold text-white">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-sm font-bold text-slate-900">
               AI
             </div>
             <span className="text-sm font-semibold text-stone-700">
@@ -141,7 +141,7 @@ function Login() {
             {hasPendingInvite && (
               <div
                 role="status"
-                className="mb-5 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-800"
+                className="mb-5 rounded-xl border border-slate-300 bg-slate-100 px-4 py-3 text-sm text-slate-700"
               >
                 You opened an interview invitation. Log in (or register)
                 with the <strong>same email address that received the
@@ -196,11 +196,11 @@ function Login() {
                     required
                     className={`${inputClass} pr-12`}
                   />
-                  <button
+                  <button data-plain
                     type="button"
                     onClick={() => setShowPassword((s) => !s)}
                     aria-label={showPassword ? "Hide password" : "Show password"}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-stone-400 transition hover:text-stone-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-500 transition hover:text-stone-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                   >
                     {showPassword ? (
                       <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -225,7 +225,7 @@ function Login() {
                   type="checkbox"
                   checked={remember}
                   onChange={(e) => setRemember(e.target.checked)}
-                  className="h-4 w-4 rounded border-stone-300 accent-orange-500"
+                  className="h-4 w-4 rounded border-stone-300 accent-slate-700"
                 />
                 Remember me
               </label>
@@ -237,13 +237,13 @@ function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="btn-primary mt-7 flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-4 py-3.5 text-sm font-semibold text-white focus:outline-none focus-visible:ring-4 focus-visible:ring-orange-300 disabled:cursor-not-allowed disabled:opacity-60"
+              className="btn-primary mt-7 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-800 px-4 py-3.5 text-sm font-semibold text-white focus:outline-none focus-visible:ring-4 focus-visible:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading && <span className="spinner" />}
               {loading ? "Signing in..." : "Log in"}
             </button>
 
-            <div className="my-6 flex items-center gap-4 text-xs text-stone-400">
+            <div className="my-6 flex items-center gap-4 text-xs text-slate-500">
               <span className="h-px flex-1 bg-stone-300" />
               or
               <span className="h-px flex-1 bg-stone-300" />
@@ -252,7 +252,7 @@ function Login() {
             {googleClientId ? (
               <div ref={googleBox} className="flex w-full justify-center" />
             ) : (
-              <p className="text-center text-xs text-stone-400">
+              <p className="text-center text-xs text-slate-500">
                 Google sign-in is not set up. Use your e-mail and password.
               </p>
             )}
@@ -261,7 +261,7 @@ function Login() {
               Don't have an account?{" "}
               <Link
                 to="/register"
-                className="font-semibold text-stone-900 underline-offset-4 hover:text-orange-600 hover:underline"
+                className="font-semibold text-stone-900 underline-offset-4 hover:text-slate-900 hover:underline"
               >
                 Create account
               </Link>
@@ -284,14 +284,14 @@ function Login() {
             className="visual-main relative h-full w-full object-contain"
           />
 
-          <div className="glass-chip glass-chip--top flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium text-white">
+          <div className="glass-chip glass-chip--top flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium text-slate-900">
             <span className="live-dot" />
             Agent online
           </div>
 
-          <div className="glass-chip glass-chip--bottom rounded-2xl p-4 text-white">
+          <div className="glass-chip glass-chip--bottom rounded-2xl p-4 text-slate-900">
             <p className="text-sm font-semibold">Your next interview starts here</p>
-            <p className="mt-1 text-xs text-white/70">
+            <p className="mt-1 text-xs text-slate-600">
               Real questions, live follow-ups, and a score after every answer.
             </p>
           </div>

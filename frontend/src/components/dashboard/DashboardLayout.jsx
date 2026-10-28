@@ -7,16 +7,13 @@ import {
   IconAlert,
   IconBarChart,
   IconBell,
-  IconBriefcase,
   IconChevronDown,
   IconDashboard,
   IconHelp,
   IconLogOut,
-  IconMoon,
   IconSearch,
   IconSettings,
   IconShield,
-  IconSun,
   IconUserCircle,
   IconUsers,
   IconZap,
@@ -46,8 +43,8 @@ const SideLink = ({ to, label, icon: Icon, end, onClick }) => (
     className={({ isActive }) =>
       `flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
         isActive
-          ? "bg-fuchsia-500/15 text-fuchsia-400 shadow-inner border border-fuchsia-500/20"
-          : "text-slate-400 hover:bg-white/5 hover:text-current border border-transparent"
+          ? "bg-slate-100 text-slate-700 shadow-inner border border-slate-300"
+          : "text-slate-500 hover:bg-slate-50 hover:text-current border border-transparent"
       }`
     }
   >
@@ -66,8 +63,6 @@ export default function DashboardLayout() {
     error,
     reload,
     t,
-    theme,
-    setTheme,
     searchQuery,
     setSearchQuery,
     notifications,
@@ -118,7 +113,7 @@ export default function DashboardLayout() {
   if (loading) {
     return (
       <div className={`min-h-screen ${t.bg} ${t.text} flex flex-col items-center justify-center`}>
-        <div className="text-fuchsia-500 animate-bounce mb-6">
+        <div className="text-slate-700 animate-bounce mb-6">
           <IconZap />
         </div>
         <p className="text-lg font-bold tracking-widest animate-pulse">
@@ -135,11 +130,11 @@ export default function DashboardLayout() {
           <div className="text-red-500 mx-auto mb-4 flex justify-center">
             <IconAlert />
           </div>
-          <p className="font-semibold text-red-400 mb-6">{error}</p>
+          <p className="font-semibold text-red-600 mb-6">{error}</p>
           <div className="flex gap-3 justify-center">
             <button
               onClick={reload}
-              className="px-6 py-3 bg-gradient-to-r from-fuchsia-600 to-purple-600 text-white rounded-xl font-bold hover:opacity-90 shadow-lg"
+ className="px-6 py-3 bg-slate-800 text-white rounded-xl font-bold hover:opacity-90 shadow-lg"
             >
               Retry Connection
             </button>
@@ -148,7 +143,7 @@ export default function DashboardLayout() {
                 logout();
                 navigate("/login");
               }}
-              className="px-6 py-3 bg-white/10 rounded-xl font-bold hover:bg-white/20"
+              className="px-6 py-3 bg-slate-100 rounded-xl font-bold hover:bg-slate-100"
             >
               Login again
             </button>
@@ -169,11 +164,11 @@ export default function DashboardLayout() {
       <nav className={`sticky top-0 z-50 border-b backdrop-blur-2xl transition-colors duration-300 ${t.nav}`}>
         <div className="max-w-[96rem] mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
           <NavLink to="/dashboard" className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-fuchsia-600 via-purple-600 to-cyan-400 flex items-center justify-center shadow-lg shadow-fuchsia-500/30 text-white">
+ <div className="w-11 h-11 rounded-2xl bg-slate-800 flex items-center justify-center shadow-lg text-white">
               <IconZap />
             </div>
             <div className="flex flex-col">
-              <span className="font-black text-xl tracking-tight bg-gradient-to-r from-fuchsia-400 to-cyan-400 bg-clip-text text-transparent">
+ <span className="text-slate-700 font-black text-xl tracking-tight">
                 AI
               </span>
               <span className="text-[10px] tracking-widest uppercase opacity-60 font-bold">
@@ -192,50 +187,27 @@ export default function DashboardLayout() {
                 placeholder="Search assessments, categories, or keywords..."
                 value={searchQuery}
                 onChange={(e) => handleSearch(e.target.value)}
-                className={`w-full pl-12 pr-4 py-3.5 rounded-2xl border ${t.input} focus:ring-2 focus:ring-fuchsia-500 outline-none transition shadow-inner`}
+                className={`w-full pl-12 pr-4 py-3.5 rounded-2xl border ${t.input} focus:ring-2 focus:ring-slate-400 outline-none transition shadow-inner`}
               />
             </div>
           </div>
 
           <div className="flex items-center gap-3 sm:gap-4">
-            {/* Theme switch */}
-            <div className="flex items-center gap-1.5 p-1 rounded-full bg-black/20 border border-white/10 shadow-inner">
-              {[
-                { icon: IconMoon, id: "dark", label: "Dark theme" },
-                { icon: IconSun, id: "light", label: "Light theme" },
-                { icon: IconBriefcase, id: "vivid", label: "Vivid theme" },
-              ].map((item) => (
-                <button
-                  key={item.id}
-                  aria-label={item.label}
-                  title={item.label}
-                  onClick={() => setTheme(item.id)}
-                  className={`p-2.5 rounded-full transition-all flex items-center justify-center ${
-                    theme === item.id
-                      ? "bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white shadow-md scale-105"
-                      : "hover:bg-white/10 opacity-70 hover:opacity-100"
-                  }`}
-                >
-                  <item.icon />
-                </button>
-              ))}
-            </div>
-
             {/* Notifications (real, generated from your assessments) */}
             <div className="relative" ref={notifRef}>
-              <button
+              <button data-plain
                 aria-label="Notifications"
                 onClick={() => setShowNotifications((v) => !v)}
-                className="p-3.5 rounded-2xl hover:bg-white/10 relative transition-colors border border-white/5"
+                className="p-3.5 rounded-2xl hover:bg-slate-100 relative transition-colors border border-slate-200"
               >
                 <IconBell />
                 {notifications.length > 0 && (
-                  <span className="absolute top-2.5 right-2.5 w-2.5 h-2.5 bg-fuchsia-500 rounded-full border-2 border-[#06040C]" />
+                  <span className="absolute top-2.5 right-2.5 w-2.5 h-2.5 bg-slate-800 rounded-full border-2 border-white" />
                 )}
               </button>
 
               {showNotifications && (
-                <div className={`absolute right-0 mt-3 w-80 p-5 rounded-[2rem] border ${t.card} ${theme === "light" ? "" : "bg-[#0d0a18]"} shadow-2xl z-50`}>
+                <div className={`absolute right-0 mt-3 w-80 p-5 rounded-[2rem] border ${t.card} shadow-2xl z-50`}>
                   <h4 className="font-bold text-base mb-3">Notifications</h4>
 
                   {notifications.length === 0 ? (
@@ -243,10 +215,10 @@ export default function DashboardLayout() {
                   ) : (
                     <div className="space-y-2.5 text-xs max-h-72 overflow-y-auto">
                       {notifications.map((n) => (
-                        <button
+                        <button data-plain
                           key={n.id}
                           onClick={() => navigate(n.to)}
-                          className="block w-full text-left p-3 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition"
+                          className="block w-full text-left p-3 rounded-xl bg-slate-50 border border-slate-200 hover:bg-slate-100 transition"
                         >
                           {n.text}
                         </button>
@@ -259,11 +231,11 @@ export default function DashboardLayout() {
 
             {/* Profile menu */}
             <div className="relative" ref={profileRef}>
-              <button
+              <button data-plain
                 onClick={() => setShowProfileMenu((v) => !v)}
-                className="flex items-center gap-3 pl-3 pr-4 py-2 rounded-2xl hover:bg-white/10 transition-colors border border-white/5"
+                className="flex items-center gap-3 pl-3 pr-4 py-2 rounded-2xl hover:bg-slate-100 transition-colors border border-slate-200"
               >
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-fuchsia-500 to-cyan-500 flex items-center justify-center text-white font-black text-sm shadow-md">
+ <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-white font-black text-sm shadow-md">
                   {userName.charAt(0).toUpperCase()}
                 </div>
                 <div className="hidden text-left sm:block">
@@ -274,14 +246,14 @@ export default function DashboardLayout() {
               </button>
 
               {showProfileMenu && (
-                <div className={`absolute right-0 mt-3 w-56 p-2 rounded-[2rem] border ${t.card} ${theme === "light" ? "" : "bg-[#0d0a18]"} shadow-2xl z-50`}>
+                <div className={`absolute right-0 mt-3 w-56 p-2 rounded-[2rem] border ${t.card} shadow-2xl z-50`}>
                   <SideLink to="/dashboard/profile" label="My Profile" icon={IconUserCircle} />
                   <SideLink to="/dashboard/configuration" label="Platform Settings" icon={IconSettings} />
                   <SideLink to="/dashboard/help" label="Help Center" icon={IconHelp} />
-                  <div className="h-px bg-white/10 my-2" />
+                  <div className="h-px bg-slate-100 my-2" />
                   <button
                     onClick={handleLogout}
-                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-red-400 hover:bg-red-500/15 transition-all"
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-red-600 hover:bg-red-500/15 transition-all"
                   >
                     <IconLogOut />
                     Secure Logout
@@ -302,8 +274,8 @@ export default function DashboardLayout() {
               className={({ isActive }) =>
                 `whitespace-nowrap px-4 py-2 rounded-full text-xs font-bold border transition ${
                   isActive
-                    ? "bg-fuchsia-500/15 text-fuchsia-400 border-fuchsia-500/30"
-                    : "border-white/10 opacity-70"
+                    ? "bg-slate-100 text-slate-700 border-slate-300"
+                    : "border-slate-200 opacity-70"
                 }`
               }
             >
@@ -323,8 +295,7 @@ export default function DashboardLayout() {
           </nav>
 
           <div className={`mt-12 p-6 rounded-[2rem] border ${t.welcome} text-center relative overflow-hidden`}>
-            <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-fuchsia-500/10 rounded-full blur-xl pointer-events-none" />
-            <div className="text-fuchsia-400 mb-3 flex justify-center">
+            <div className="text-slate-700 mb-3 flex justify-center">
               <IconZap />
             </div>
             <p className="text-sm font-bold mb-1">Need Assistance?</p>
@@ -335,7 +306,7 @@ export default function DashboardLayout() {
             </p>
             <button
               onClick={() => navigate("/dashboard/help")}
-              className="w-full py-3 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-bold transition shadow-md border border-white/10"
+              className="w-full py-3 bg-slate-100 hover:bg-slate-100 rounded-xl text-xs font-bold transition shadow-md border border-slate-200"
             >
               Help Center
             </button>
@@ -350,14 +321,14 @@ export default function DashboardLayout() {
           <Suspense
             fallback={
               <div className="py-24 flex justify-center">
-                <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-fuchsia-400 animate-spin" />
+                <div className="w-8 h-8 rounded-full border-2 border-slate-200 border-t-slate-700 animate-spin" />
               </div>
             }
           >
             <Outlet />
           </Suspense>
 
-          <footer className="mt-20 pt-8 border-t border-white/10 text-center text-xs opacity-50 font-medium">
+          <footer className="mt-20 pt-8 border-t border-slate-200 text-center text-xs opacity-50 font-medium">
             <p>&copy; 2026 AI Interview & Assessment Platform. All rights reserved.</p>
           </footer>
         </main>

@@ -17,11 +17,11 @@ const TABS = [
 ];
 
 const MAIL_BADGE = {
-  draft: ["Pending", "bg-orange-500/15 text-orange-400 border border-orange-500/30"],
-  sent: ["Mail Sent", "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"],
-  pending: ["Mail Pending", "bg-amber-500/15 text-amber-400 border border-amber-500/30"],
-  failed: ["Mail Failed", "bg-rose-500/15 text-rose-400 border border-rose-500/30"],
-  manual: ["Link Only", "bg-slate-500/15 text-slate-400 border border-slate-500/30"],
+  draft: ["Pending", "bg-orange-500/15 text-orange-600 border border-orange-500/30"],
+  sent: ["Mail Sent", "bg-emerald-500/15 text-emerald-600 border border-emerald-500/30"],
+  pending: ["Mail Pending", "bg-amber-500/15 text-amber-600 border border-amber-500/30"],
+  failed: ["Mail Failed", "bg-rose-500/15 text-rose-600 border border-rose-500/30"],
+  manual: ["Link Only", "bg-slate-500/15 text-slate-500 border border-slate-500/30"],
 };
 
 const PROGRESS = {
@@ -58,10 +58,10 @@ const readBase64 = (file) =>
 function ToggleRow({ title, hint, checked, onChange, disabled, label, children }) {
   return (
     <div className="py-4 first:pt-0">
-      <p className="font-bold text-sm text-white/90">{title}</p>
-      {hint && <p className="text-xs text-white/50 mt-1">{hint}</p>}
-      <div className="flex items-center justify-between mt-3 bg-slate-900/40 p-4 rounded-xl border border-white/5">
-        <span className="text-xs font-medium text-white/70">{checked ? "Enabled" : "Disabled"}</span>
+      <p className="font-bold text-sm text-slate-800">{title}</p>
+      {hint && <p className="text-xs text-slate-500 mt-1">{hint}</p>}
+      <div className="flex items-center justify-between mt-3 bg-white p-4 rounded-xl border border-slate-200">
+        <span className="text-xs font-medium text-slate-600">{checked ? "Enabled" : "Disabled"}</span>
         <Toggle label={label} checked={checked} disabled={disabled} onChange={onChange} />
       </div>
       {children}
@@ -78,9 +78,9 @@ function ModuleList({ catalog, groups, state, busyKey, onToggle, extras }) {
     const parentActive = !m.parent || state[m.parent]?.active !== false;
 
     return (
-      <div key={m.key} className="pl-3 border-l border-white/10 my-2">
+      <div key={m.key} className="pl-3 border-l border-slate-200 my-2">
         <div className="flex items-center justify-between py-1.5" title={m.description}>
-          <span className="text-xs text-white/80">{m.label}</span>
+          <span className="text-xs text-slate-700">{m.label}</span>
           <Toggle
             label={m.label}
             checked={st.on && parentActive}
@@ -102,7 +102,7 @@ function ModuleList({ catalog, groups, state, busyKey, onToggle, extras }) {
 
         return (
           <div key={g.key} className="space-y-3">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-fuchsia-400">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-700">
               {g.label}
             </p>
 
@@ -112,13 +112,13 @@ function ModuleList({ catalog, groups, state, busyKey, onToggle, extras }) {
                 const kids = childrenOf(m.key);
 
                 return (
-                  <div key={m.key} className="p-5 bg-slate-900/40 rounded-2xl border border-white/5 flex flex-col justify-between hover:border-white/10 transition shadow-lg">
+                  <div key={m.key} className="p-5 bg-white rounded-2xl border border-slate-200 flex flex-col justify-between hover:border-slate-200 transition shadow-lg">
                     <div>
-                      <p className="font-bold text-sm text-white/90">{m.label}</p>
-                      <p className="text-xs text-white/50 mt-1 leading-relaxed">{m.description}</p>
+                      <p className="font-bold text-sm text-slate-800">{m.label}</p>
+                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">{m.description}</p>
 
-                      <div className="flex items-center justify-between mt-4 bg-white/[0.02] p-3.5 rounded-xl border border-white/5">
-                        <span className="text-xs font-medium text-white/70">{st.on ? "Enabled" : "Disabled"}</span>
+                      <div className="flex items-center justify-between mt-4 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                        <span className="text-xs font-medium text-slate-600">{st.on ? "Enabled" : "Disabled"}</span>
                         <Toggle
                           label={m.label}
                           checked={st.on}
@@ -132,7 +132,7 @@ function ModuleList({ catalog, groups, state, busyKey, onToggle, extras }) {
                       {st.active && extras[m.key] ? <div className="mt-2">{extras[m.key]}</div> : null}
 
                       {st.on && kids.length > 0 && (
-                        <div className="mt-3 pt-3 border-t border-white/5">{kids.map(renderChild)}</div>
+                        <div className="mt-3 pt-3 border-t border-slate-200">{kids.map(renderChild)}</div>
                       )}
                     </div>
                   </div>
@@ -208,13 +208,13 @@ function SettingsColumn({
 
   const extras = {
     follow_ups: (
-      <div className="flex items-center justify-between bg-white/5 p-3 rounded-xl border border-white/5">
-        <span className="text-xs text-white/70">How many follow-ups</span>
+      <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200">
+        <span className="text-xs text-slate-600">How many follow-ups</span>
         <select
           value={followCount}
           disabled={busy === "follow_count"}
           onChange={(e) => saveFollowCount(Number(e.target.value))}
-          className={`px-3 py-1.5 rounded-lg border ${t.input} text-xs outline-none focus:ring-2 focus:ring-fuchsia-500 bg-slate-900 text-white`}
+          className={`px-3 py-1.5 rounded-lg border ${t.input} text-xs outline-none focus:ring-2 focus:ring-slate-400 bg-white text-slate-900`}
         >
           {[1, 2, 3, 4, 5].map((n) => (
             <option key={n} value={n}>
@@ -247,16 +247,16 @@ function SettingsColumn({
     <>
       <div className={tab === "settings" ? "" : "hidden"}>
         <div className="flex items-center gap-3 mb-4">
-          <div className="p-2.5 rounded-2xl bg-fuchsia-500/10 text-fuchsia-400 border border-fuchsia-500/20">
+          <div className="p-2.5 rounded-2xl bg-slate-100 text-slate-700 border border-slate-300">
             <IconSettings />
           </div>
           <div>
-            <h3 className="font-bold text-lg text-white">Settings</h3>
-            <p className="text-xs text-white/50">Open or close this interview for new candidates.</p>
+            <h3 className="font-bold text-lg text-slate-900">Settings</h3>
+            <p className="text-xs text-slate-500">Open or close this interview for new candidates.</p>
           </div>
         </div>
 
-        <div className="mt-4 bg-slate-900/40 p-6 rounded-2xl border border-white/5 max-w-xl">
+        <div className="mt-4 bg-white p-6 rounded-2xl border border-slate-200 max-w-xl">
           <ToggleRow
             title="Interview Toggle"
             hint="Off = new candidates cannot start"
@@ -270,18 +270,18 @@ function SettingsColumn({
 
       <div className={tab === "features" ? "" : "hidden"}>
         <div className="flex items-center gap-3 mb-4">
-          <div className="p-2.5 rounded-2xl bg-fuchsia-500/10 text-fuchsia-400 border border-fuchsia-500/20">
+          <div className="p-2.5 rounded-2xl bg-slate-100 text-slate-700 border border-slate-300">
             <IconSettings />
           </div>
           <div>
-            <h3 className="font-bold text-lg text-white">Features</h3>
-            <p className="text-xs text-white/50">Switch interview modules on or off. Changes save immediately.</p>
+            <h3 className="font-bold text-lg text-slate-900">Features</h3>
+            <p className="text-xs text-slate-500">Switch interview modules on or off. Changes save immediately.</p>
           </div>
         </div>
 
         <div>
           {catalog.length === 0 && (
-            <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-xs text-amber-300 mb-4">
+            <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-xs text-amber-700 mb-4">
               Modules did not load from the server. Check backend connection and refresh.
             </div>
           )}
@@ -297,7 +297,7 @@ function SettingsColumn({
         </div>
       </div>
 
-      {error && <p className="text-xs text-rose-400 mt-3 p-3 bg-rose-500/10 rounded-xl border border-rose-500/20">{error}</p>}
+      {error && <p className="text-xs text-rose-600 mt-3 p-3 bg-rose-500/10 rounded-xl border border-rose-500/20">{error}</p>}
     </>
   );
 }
@@ -336,41 +336,41 @@ function EmailStatusBox() {
   };
 
   if (!status) {
-    return <p className="text-xs text-white/50 animate-pulse">Checking mail setup...</p>;
+    return <p className="text-xs text-slate-500 animate-pulse">Checking mail setup...</p>;
   }
 
   return (
-    <div className="rounded-xl border border-white/5 bg-white/[0.03] p-4 space-y-3">
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-white/50">Mail delivery</p>
-          <p className="text-xs text-white/80 break-words mt-0.5">{status.label}</p>
-          {status.from && <p className="text-[11px] text-white/50 break-all mt-0.5">From: {status.from}</p>}
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Mail delivery</p>
+          <p className="text-xs text-slate-700 break-words mt-0.5">{status.label}</p>
+          {status.from && <p className="text-[11px] text-slate-500 break-all mt-0.5">From: {status.from}</p>}
         </div>
         <span
           className={`shrink-0 px-2.5 py-1 rounded-lg text-[10px] font-extrabold border ${
             status.ready
-              ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
-              : "bg-rose-500/15 text-rose-400 border-rose-500/30"
+              ? "bg-emerald-500/15 text-emerald-600 border-emerald-500/30"
+              : "bg-rose-500/15 text-rose-600 border-rose-500/30"
           }`}
         >
           {status.ready ? "Ready" : "Not ready"}
         </span>
       </div>
 
-      {status.problem && <p className="text-[11px] text-amber-400 leading-relaxed">{status.problem}</p>}
+      {status.problem && <p className="text-[11px] text-amber-600 leading-relaxed">{status.problem}</p>}
 
       <button
         type="button"
         onClick={sendTest}
         disabled={busy}
-        className="w-full py-2.5 rounded-xl border border-blue-500/40 text-blue-400 hover:bg-blue-500/10 text-xs font-bold transition disabled:opacity-50"
+        className="w-full py-2.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold transition disabled:opacity-50"
       >
         {busy ? "Sending test mail..." : "Send a test mail to me"}
       </button>
 
       {result && (
-        <p className={`text-[11px] break-words ${result.sent ? "text-emerald-400" : "text-rose-400"}`}>
+        <p className={`text-[11px] break-words ${result.sent ? "text-emerald-600" : "text-rose-600"}`}>
           {result.sent ? "Test mail sent - check your inbox (and spam)." : result.info}
         </p>
       )}
@@ -385,7 +385,7 @@ function InterviewerBox({ item, t, onSaved }) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const inputCls = `mt-1.5 w-full px-3.5 py-2.5 rounded-xl border ${t.input} outline-none focus:ring-2 focus:ring-fuchsia-500 text-xs bg-slate-900/50 text-white`;
+  const inputCls = `mt-1.5 w-full px-3.5 py-2.5 rounded-xl border ${t.input} outline-none focus:ring-2 focus:ring-slate-400 text-xs bg-white text-slate-900`;
 
   const save = async () => {
     setMessage("");
@@ -409,14 +409,14 @@ function InterviewerBox({ item, t, onSaved }) {
   };
 
   return (
-    <div className="mt-4 pt-4 border-t border-white/10">
-      <p className="font-bold text-sm text-white/90">Interviewer</p>
-      <p className="text-xs text-white/50 mt-1">
+    <div className="mt-4 pt-4 border-t border-slate-200">
+      <p className="font-bold text-sm text-slate-800">Interviewer</p>
+      <p className="text-xs text-slate-500 mt-1">
         Candidates see this name in the invitation email, replies go to this email, and reports are sent here.
       </p>
 
       <label className="block mt-3">
-        <span className="text-[11px] font-bold text-white/70">Name</span>
+        <span className="text-[11px] font-bold text-slate-600">Name</span>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -427,7 +427,7 @@ function InterviewerBox({ item, t, onSaved }) {
       </label>
 
       <label className="block mt-3">
-        <span className="text-[11px] font-bold text-white/70">Email</span>
+        <span className="text-[11px] font-bold text-slate-600">Email</span>
         <input
           type="email"
           value={email}
@@ -438,14 +438,14 @@ function InterviewerBox({ item, t, onSaved }) {
         />
       </label>
 
-      {error && <p className="text-xs text-rose-400 mt-2">{error}</p>}
-      {message && <p className="text-xs text-emerald-400 mt-2">{message}</p>}
+      {error && <p className="text-xs text-rose-600 mt-2">{error}</p>}
+      {message && <p className="text-xs text-emerald-600 mt-2">{message}</p>}
 
       <button
         type="button"
         onClick={save}
         disabled={busy}
-        className="mt-4 w-full py-2.5 rounded-xl border border-blue-500/40 text-blue-400 hover:bg-blue-500/10 text-xs font-bold transition disabled:opacity-50"
+        className="mt-4 w-full py-2.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold transition disabled:opacity-50"
       >
         {busy ? "Saving..." : "Save interviewer"}
       </button>
@@ -495,42 +495,42 @@ function CandidatesColumn({ invitations, t, onResend, resending, emailOn, resume
     <div className="flex flex-col space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-2xl bg-fuchsia-500/10 text-fuchsia-400 border border-fuchsia-500/20">
+          <div className="p-2.5 rounded-2xl bg-slate-100 text-slate-700 border border-slate-300">
             <IconUsers />
           </div>
           <div>
-            <h3 className="font-bold text-lg text-white">Candidates</h3>
-            <p className="text-xs text-white/50">{filteredInvitations.length} {filteredInvitations.length === 1 ? "candidate" : "candidates"} found</p>
+            <h3 className="font-bold text-lg text-slate-900">Candidates</h3>
+            <p className="text-xs text-slate-500">{filteredInvitations.length} {filteredInvitations.length === 1 ? "candidate" : "candidates"} found</p>
           </div>
         </div>
 
         {/* Status Filter Tabs */}
-        <div className="flex flex-wrap gap-1.5 bg-slate-900/60 p-1.5 rounded-xl border border-white/5">
-          <button
+        <div className="flex flex-wrap gap-1.5 bg-white p-1.5 rounded-xl border border-slate-200">
+          <button data-plain
             type="button"
             onClick={() => { setFilterType("all"); setPage(1); }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${filterType === "all" ? "bg-fuchsia-600 text-white shadow-sm" : "text-white/60 hover:text-white"}`}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${filterType === "all" ? "bg-violet-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-900"}`}
           >
             All
           </button>
-          <button
+          <button data-plain
             type="button"
             onClick={() => { setFilterType("sent"); setPage(1); }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${filterType === "sent" ? "bg-emerald-600 text-white shadow-sm" : "text-emerald-400/70 hover:text-emerald-400"}`}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${filterType === "sent" ? "bg-emerald-600 text-white shadow-sm" : "text-emerald-600/70 hover:text-emerald-600"}`}
           >
             Sent
           </button>
-          <button
+          <button data-plain
             type="button"
             onClick={() => { setFilterType("pending"); setPage(1); }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${filterType === "pending" ? "bg-amber-600 text-white shadow-sm" : "text-amber-400/70 hover:text-amber-400"}`}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${filterType === "pending" ? "bg-amber-600 text-white shadow-sm" : "text-amber-600/70 hover:text-amber-600"}`}
           >
             Pending
           </button>
-          <button
+          <button data-plain
             type="button"
             onClick={() => { setFilterType("failed"); setPage(1); }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${filterType === "failed" ? "bg-rose-600 text-white shadow-sm" : "text-rose-400/70 hover:text-rose-400"}`}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${filterType === "failed" ? "bg-rose-600 text-white shadow-sm" : "text-rose-600/70 hover:text-rose-600"}`}
           >
             Failed
           </button>
@@ -544,13 +544,13 @@ function CandidatesColumn({ invitations, t, onResend, resending, emailOn, resume
           value={searchQuery}
           onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
           placeholder="Search by candidate name or email address..."
-          className={`w-full px-4 py-3 rounded-xl border ${t.input} outline-none focus:ring-2 focus:ring-fuchsia-500 text-xs bg-slate-900/50 text-white`}
+          className={`w-full px-4 py-3 rounded-xl border ${t.input} outline-none focus:ring-2 focus:ring-slate-400 text-xs bg-white text-slate-900`}
         />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {rows.length === 0 && (
-          <div className="col-span-full py-12 text-xs text-white/50 text-center bg-slate-900/20 rounded-2xl border border-white/5">
+          <div className="col-span-full py-12 text-xs text-slate-500 text-center bg-white rounded-2xl border border-slate-200">
             No candidates found matching your criteria.
           </div>
         )}
@@ -559,10 +559,10 @@ function CandidatesColumn({ invitations, t, onResend, resending, emailOn, resume
           const [label, cls] = MAIL_BADGE[inv.mail_status] || MAIL_BADGE.sent;
 
           return (
-            <div key={inv.email} className="p-5 bg-slate-900/40 rounded-2xl border border-white/5 flex flex-col justify-between hover:border-white/10 transition shadow-lg">
+            <div key={inv.email} className="p-5 bg-white rounded-2xl border border-slate-200 flex flex-col justify-between hover:border-slate-200 transition shadow-lg">
               <div>
                 <div className="flex items-start justify-between gap-2">
-                  <p className="font-bold text-sm text-white/90 break-words">
+                  <p className="font-bold text-sm text-slate-800 break-words">
                     {start + i + 1}. {inv.name || inv.email}
                   </p>
                   <span className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold shrink-0 ${cls}`}>
@@ -570,29 +570,29 @@ function CandidatesColumn({ invitations, t, onResend, resending, emailOn, resume
                   </span>
                 </div>
 
-                {inv.name && <p className="text-xs text-white/60 break-all mt-1">{inv.email}</p>}
-                {inv.phone && <p className="text-xs text-white/60 mt-0.5">{inv.phone}</p>}
+                {inv.name && <p className="text-xs text-slate-500 break-all mt-1">{inv.email}</p>}
+                {inv.phone && <p className="text-xs text-slate-500 mt-0.5">{inv.phone}</p>}
                 {inv.code && (
-                  <p className="text-[11px] text-white/40 font-mono mt-1">{inv.code}</p>
+                  <p className="text-[11px] text-slate-400 font-mono mt-1">{inv.code}</p>
                 )}
 
                 {PROGRESS[inv.status] && (
                   <div className="mt-3">
-                    <span className="text-[11px] text-fuchsia-400 font-medium bg-fuchsia-500/10 px-2.5 py-1 rounded-lg border border-fuchsia-500/20">
+                    <span className="text-[11px] text-slate-700 font-medium bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-300">
                       {PROGRESS[inv.status]}
                     </span>
                   </div>
                 )}
               </div>
 
-              <div className="mt-4 pt-3 border-t border-white/5 space-y-2">
+              <div className="mt-4 pt-3 border-t border-slate-200 space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
                   {emailOn && (
                     <button
                       type="button"
                       disabled={resending === inv.email || inv.mail_status === "pending"}
                       onClick={() => onResend(inv)}
-                      className="flex-1 py-2 px-3 rounded-xl border border-blue-500/40 text-blue-400 hover:bg-blue-500/10 text-xs font-bold transition disabled:opacity-50"
+                      className="flex-1 py-2 px-3 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold transition disabled:opacity-50"
                     >
                       {resending === inv.email || inv.mail_status === "pending"
                         ? "Sending..."
@@ -608,7 +608,7 @@ function CandidatesColumn({ invitations, t, onResend, resending, emailOn, resume
                     <button
                       type="button"
                       onClick={() => copyLink(inv)}
-                      className="flex-1 py-2 px-3 rounded-xl border border-fuchsia-500/40 text-fuchsia-400 hover:bg-fuchsia-500/10 text-xs font-bold transition"
+                      className="flex-1 py-2 px-3 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold transition"
                     >
                       {copied === inv.email ? "Copied ✓" : "Copy Link"}
                     </button>
@@ -617,11 +617,11 @@ function CandidatesColumn({ invitations, t, onResend, resending, emailOn, resume
 
                 {resume && (
                   <div className="flex items-center justify-between pt-1">
-                    <button
+                    <button data-plain
                       type="button"
                       disabled={resume.resumeBusy === inv.email}
                       onClick={() => resume.removeResume(inv.email)}
-                      className="text-[11px] text-rose-400 hover:underline font-bold disabled:opacity-50"
+                      className="text-[11px] text-rose-600 hover:underline font-bold disabled:opacity-50"
                     >
                       {resume.resumeBusy === inv.email ? "Removing..." : "🗑️ Remove Resume/Data"}
                     </button>
@@ -629,7 +629,7 @@ function CandidatesColumn({ invitations, t, onResend, resending, emailOn, resume
                 )}
 
                 {emailOn && inv.mail_status === "failed" && inv.mail_error && (
-                  <p className="text-[11px] text-rose-400 mt-1 break-words bg-rose-500/10 p-2.5 rounded-xl border border-rose-500/20">
+                  <p className="text-[11px] text-rose-600 mt-1 break-words bg-rose-500/10 p-2.5 rounded-xl border border-rose-500/20">
                     {inv.mail_error}
                   </p>
                 )}
@@ -640,23 +640,23 @@ function CandidatesColumn({ invitations, t, onResend, resending, emailOn, resume
       </div>
 
       {pages > 1 && (
-        <div className="flex items-center justify-between pt-4 mt-2 border-t border-white/10 text-xs text-white/70">
+        <div className="flex items-center justify-between pt-4 mt-2 border-t border-slate-200 text-xs text-slate-600">
           <button
             type="button"
             onClick={() => setPage(Math.max(1, current - 1))}
             disabled={current === 1}
             aria-label="Previous page"
-            className="px-3 py-2 bg-white/5 rounded-xl disabled:opacity-30 hover:bg-white/10 transition"
+            className="px-3 py-2 bg-slate-50 rounded-xl disabled:opacity-30 hover:bg-slate-100 transition"
           >
             ‹ Prev
           </button>
           <span className="flex gap-2 font-medium">
             {Array.from({ length: pages }, (_, n) => n + 1).map((n) => (
-              <button
+              <button data-plain
                 key={n}
                 type="button"
                 onClick={() => setPage(n)}
-                className={n === current ? "font-black text-fuchsia-400" : "opacity-60 hover:opacity-100"}
+                className={n === current ? "font-black text-slate-700" : "opacity-60 hover:opacity-100"}
               >
                 {n}
               </button>
@@ -667,7 +667,7 @@ function CandidatesColumn({ invitations, t, onResend, resending, emailOn, resume
             onClick={() => setPage(Math.min(pages, current + 1))}
             disabled={current === pages}
             aria-label="Next page"
-            className="px-3 py-2 bg-white/5 rounded-xl disabled:opacity-30 hover:bg-white/10 transition"
+            className="px-3 py-2 bg-slate-50 rounded-xl disabled:opacity-30 hover:bg-slate-100 transition"
           >
             Next ›
           </button>
@@ -686,7 +686,7 @@ function AddCandidateColumn({ interviewId, t, onAdded, emailOn, cvOn }) {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
-  const inputCls = `mt-1.5 w-full px-4 py-3.5 rounded-2xl border ${t.input} outline-none focus:ring-2 focus:ring-fuchsia-500 text-sm bg-slate-900/60 text-white transition-all shadow-inner`;
+  const inputCls = `mt-1.5 w-full px-4 py-3.5 rounded-2xl border ${t.input} outline-none focus:ring-2 focus:ring-slate-400 text-sm bg-white text-slate-900 transition-all shadow-inner`;
 
   const submit = async () => {
     setError("");
@@ -754,29 +754,29 @@ function AddCandidateColumn({ interviewId, t, onAdded, emailOn, cvOn }) {
   };
 
   return (
-    <div className="max-w-2xl bg-slate-950/40 p-6 md:p-8 rounded-3xl border border-white/10 shadow-2xl backdrop-blur-xl">
-      <div className="flex items-center gap-3.5 mb-6 pb-4 border-b border-white/10">
-        <div className="p-3 rounded-2xl bg-fuchsia-500/15 text-fuchsia-400 border border-fuchsia-500/30 shadow-md">
+    <div className="max-w-2xl bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-2xl backdrop-blur-xl">
+      <div className="flex items-center gap-3.5 mb-6 pb-4 border-b border-slate-200">
+        <div className="p-3 rounded-2xl bg-slate-100 text-slate-700 border border-slate-300 shadow-md">
           <IconPersonPlus />
         </div>
         <div>
-          <h3 className="font-extrabold text-xl text-white tracking-wide">Register New Candidate</h3>
-          <p className="text-xs text-white/50 mt-0.5">Fill in the candidate profile and upload resume if needed.</p>
+          <h3 className="font-extrabold text-xl text-slate-900 tracking-wide">Register New Candidate</h3>
+          <p className="text-xs text-slate-500 mt-0.5">Fill in the candidate profile and upload resume if needed.</p>
         </div>
       </div>
 
       <div className="space-y-5">
         {cvOn && (
           <div>
-            <label className="block text-xs font-bold text-white/70 mb-2">Candidate Resume (Optional)</label>
-            <label className="flex flex-col items-center justify-center cursor-pointer rounded-2xl border-2 border-dashed border-white/20 py-8 px-6 text-center hover:bg-fuchsia-500/5 hover:border-fuchsia-500/40 transition bg-slate-900/50 shadow-inner group">
-              <span className="p-3 rounded-2xl bg-fuchsia-500/10 text-fuchsia-400 mb-2 group-hover:scale-110 transition-transform">
+            <label className="block text-xs font-bold text-slate-600 mb-2">Candidate Resume (Optional)</label>
+            <label className="flex flex-col items-center justify-center cursor-pointer rounded-2xl border-2 border-dashed border-slate-200 py-8 px-6 text-center hover:bg-slate-100 hover:border-slate-300 transition bg-white shadow-inner group">
+              <span className="p-3 rounded-2xl bg-slate-100 text-slate-700 mb-2 group-hover:scale-110 transition-transform">
                 <IconUpload />
               </span>
-              <span className="block font-bold text-sm text-white/90 break-all">
+              <span className="block font-bold text-sm text-slate-800 break-all">
                 {cv ? cv.name : "Click to upload CV or drag and drop"}
               </span>
-              <span className="block text-xs text-white/40 mt-1">PDF or DOCX (Max size: 5MB)</span>
+              <span className="block text-xs text-slate-400 mt-1">PDF or DOCX (Max size: 5MB)</span>
               <input
                 type="file"
                 className="hidden"
@@ -792,7 +792,7 @@ function AddCandidateColumn({ interviewId, t, onAdded, emailOn, cvOn }) {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <label className="block md:col-span-2">
-            <span className="text-xs font-bold text-white/70">Full Name <span className="text-fuchsia-400">*</span></span>
+            <span className="text-xs font-bold text-slate-600">Full Name <span className="text-slate-700">*</span></span>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -803,7 +803,7 @@ function AddCandidateColumn({ interviewId, t, onAdded, emailOn, cvOn }) {
           </label>
 
           <label className="block">
-            <span className="text-xs font-bold text-white/70">Email Address <span className="text-fuchsia-400">*</span></span>
+            <span className="text-xs font-bold text-slate-600">Email Address <span className="text-slate-700">*</span></span>
             <input
               type="email"
               value={email}
@@ -815,7 +815,7 @@ function AddCandidateColumn({ interviewId, t, onAdded, emailOn, cvOn }) {
           </label>
 
           <label className="block">
-            <span className="text-xs font-bold text-white/70">Phone Number <span className="text-fuchsia-400">*</span></span>
+            <span className="text-xs font-bold text-slate-600">Phone Number <span className="text-slate-700">*</span></span>
             <input
               type="tel"
               value={phone}
@@ -828,13 +828,13 @@ function AddCandidateColumn({ interviewId, t, onAdded, emailOn, cvOn }) {
         </div>
 
         {error && (
-          <div className="p-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 text-xs text-rose-300 flex items-center gap-2 animate-shake">
+          <div className="p-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 text-xs text-rose-700 flex items-center gap-2 animate-shake">
             <span>⚠️</span> {error}
           </div>
         )}
         
         {message && (
-          <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 text-xs text-emerald-300 flex items-center gap-2">
+          <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 text-xs text-emerald-700 flex items-center gap-2">
             <span>✅</span> {message}
           </div>
         )}
@@ -843,7 +843,7 @@ function AddCandidateColumn({ interviewId, t, onAdded, emailOn, cvOn }) {
           type="button"
           onClick={submit}
           disabled={busy}
-          className="w-full mt-4 py-4 rounded-2xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white font-black text-sm tracking-wide transition-all disabled:opacity-50 shadow-xl shadow-fuchsia-600/25 active:scale-[0.99]"
+ className="w-full mt-4 py-4 rounded-2xl bg-slate-800 text-white font-black text-sm tracking-wide transition-all disabled:opacity-50 shadow-xl active:scale-[0.99]"
         >
           {busy ? "Registering Candidate..." : "+ Add & Invite Candidate"}
         </button>
@@ -997,13 +997,13 @@ export default function ClientSettings() {
 
   return (
     <div className="w-full px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900/60 p-6 md:p-8 rounded-3xl border border-white/10 backdrop-blur-xl shadow-2xl">
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 md:p-8 rounded-3xl border border-slate-200 backdrop-blur-xl shadow-2xl">
         <div>
-          <span className="px-3 py-1 rounded-full bg-blue-500/15 text-blue-400 text-xs font-bold border border-blue-500/30">
+          <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-bold border border-slate-300">
             Admin Panel
           </span>
-          <h1 className="text-3xl font-black tracking-tight text-white mt-2">Client Settings</h1>
-          <p className="text-white/60 text-sm mt-1">Manage interview settings, configurations and candidates smoothly.</p>
+          <h1 className="text-3xl font-black tracking-tight text-slate-900 mt-2">Client Settings</h1>
+          <p className="text-slate-500 text-sm mt-1">Manage interview settings, configurations and candidates smoothly.</p>
         </div>
 
         {items && items.length > 1 && (
@@ -1011,7 +1011,7 @@ export default function ClientSettings() {
             value={item?.id || ""}
             onChange={(e) => setPickedId(e.target.value)}
             aria-label="Interview"
-            className={`px-4 py-3 rounded-xl border ${t.input} outline-none focus:ring-2 focus:ring-fuchsia-500 text-xs bg-slate-900 text-white font-medium`}
+            className={`px-4 py-3 rounded-xl border ${t.input} outline-none focus:ring-2 focus:ring-slate-400 text-xs bg-white text-slate-900 font-medium`}
           >
             {items.map((i) => (
               <option key={i.id} value={i.id}>
@@ -1023,23 +1023,23 @@ export default function ClientSettings() {
       </header>
 
       {error ? (
-        <div className="p-6 rounded-2xl border border-rose-500/30 bg-rose-500/10 text-sm text-rose-300">
+        <div className="p-6 rounded-2xl border border-rose-500/30 bg-rose-500/10 text-sm text-rose-700">
           {error}
         </div>
       ) : items === null ? (
-        <p className="text-sm text-white/50 animate-pulse px-2">Loading...</p>
+        <p className="text-sm text-slate-500 animate-pulse px-2">Loading...</p>
       ) : !item ? (
-        <div className={`p-8 rounded-2xl border ${t.card} text-sm text-white/80 bg-slate-900/40`}>
+        <div className={`p-8 rounded-2xl border ${t.card} text-sm text-slate-700 bg-white`}>
           No interviews yet. Create an assessment first.
         </div>
       ) : (
         <>
           {!item.has_configuration ? (
-            <div className="p-5 rounded-2xl border border-amber-500/30 bg-amber-500/10 text-sm text-amber-300 flex items-center justify-between gap-4">
+            <div className="p-5 rounded-2xl border border-amber-500/30 bg-amber-500/10 text-sm text-amber-700 flex items-center justify-between gap-4">
               <span>This interview has no configuration yet.</span>
-              <button
+              <button data-plain
                 onClick={() => navigate(`/interviews/${item.id}/configuration`)}
-                className="font-bold underline whitespace-nowrap hover:text-amber-200"
+                className="font-bold underline whitespace-nowrap hover:text-amber-700"
               >
                 Configure now
               </button>
@@ -1051,13 +1051,13 @@ export default function ClientSettings() {
                 <div
                   role="tablist"
                   aria-label="Client settings sections"
-                  className="inline-flex max-w-full justify-start gap-1.5 p-1.5 rounded-2xl bg-slate-900/60 border border-white/10 backdrop-blur-md shadow-lg"
+                  className="inline-flex max-w-full justify-start gap-1.5 p-1.5 rounded-2xl bg-white border border-slate-200 backdrop-blur-md shadow-lg"
                 >
                   {TABS.map((tb) => {
                     const active = tab === tb.key;
                     const count = tb.key === "candidates" ? invitations.length : null;
                     return (
-                      <button
+                      <button data-plain
                         key={tb.key}
                         type="button"
                         role="tab"
@@ -1065,13 +1065,13 @@ export default function ClientSettings() {
                         onClick={() => setTab(tb.key)}
                         className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
                           active
-                            ? "bg-gradient-to-r from-fuchsia-600 to-indigo-600 text-white shadow-md shadow-fuchsia-500/20"
-                            : "text-white/70 hover:text-white hover:bg-white/5"
+ ? "bg-violet-600 text-white shadow-md "
+                            : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
                         }`}
                       >
                         {tb.label}
                         {count !== null && (
-                          <span className="ml-2 px-2 py-0.5 rounded-md text-[10px] font-bold bg-white/20 text-white">
+                          <span className="ml-2 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-900">
                             {count}
                           </span>
                         )}
@@ -1082,7 +1082,7 @@ export default function ClientSettings() {
               </div>
 
               {/* Tab Panel Content */}
-              <section role="tabpanel" className={`rounded-3xl border ${t.card} p-6 md:p-8 bg-slate-900/40 backdrop-blur-xl shadow-2xl`}>
+              <section role="tabpanel" className={`rounded-3xl border ${t.card} p-6 md:p-8 bg-white backdrop-blur-xl shadow-2xl`}>
                 <SettingsColumn
                   key={item.id}
                   tab={tab}

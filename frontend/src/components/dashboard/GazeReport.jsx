@@ -17,7 +17,7 @@ const levelOf = (label) =>
 function Stat({ label, value, note, color }) {
   return (
     <div
-      className="rounded-xl border border-black/10 bg-black/5 p-4 min-w-0"
+      className="rounded-xl border border-black/10 bg-slate-100 p-4 min-w-0"
       style={{ borderTop: `4px solid ${color}` }}
     >
       <p className="text-[11px] opacity-60 font-semibold mb-1">{label}</p>
@@ -36,7 +36,7 @@ export default function GazeReport({ gaze, eyeRequired }) {
 
   const header = (
     <div
-      className="rounded-xl px-5 py-3 mb-5 font-black text-white text-sm md:text-base"
+      className="rounded-xl px-5 py-3 mb-5 font-black text-slate-900 text-sm md:text-base"
       style={{ background: "#db2777" }}
     >
       Eye Movement Detection (AI-Assisted Answer Check)
@@ -79,7 +79,7 @@ export default function GazeReport({ gaze, eyeRequired }) {
               label="Off-screen glances"
               value={s.glances}
               note="Total, all questions"
-              color="#2563eb"
+              color="#7c3aed"
             />
             <Stat
               label="Reading pattern"
@@ -105,7 +105,7 @@ export default function GazeReport({ gaze, eyeRequired }) {
             <table className="w-full text-sm min-w-[640px]">
               <thead>
                 <tr
-                  className="text-left text-white text-xs"
+                  className="text-left text-slate-900 text-xs"
                   style={{ background: "#db2777" }}
                 >
                   <th className="px-4 py-3 font-bold">#</th>

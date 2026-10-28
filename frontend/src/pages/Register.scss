@@ -2,10 +2,10 @@
 
 @use "sass:color";
 
-$blue: #1d5bd8;
-$blue-glow: rgba(29, 91, 216, 0.45);
-$violet: #6d28d9;
-$pink: #ff3df2;
+$blue: #6d28d9;
+$blue-glow: rgba(109, 40, 217, 0.45);
+$violet: #cbd5e1;
+$pink: #e2e8f0;
 
 $ease: cubic-bezier(0.22, 1, 0.36, 1);
 
@@ -52,7 +52,7 @@ $ease: cubic-bezier(0.22, 1, 0.36, 1);
 .register-page {
   position: relative;
   overflow: hidden;
-  background: #0b0a17;
+  background: #ffffff;
 
   .blob {
     position: absolute;
@@ -66,7 +66,7 @@ $ease: cubic-bezier(0.22, 1, 0.36, 1);
       height: 460px;
       top: -140px;
       left: -100px;
-      background: rgba($violet, 0.4);
+      background: rgba($violet, 0.18);
     }
 
     &--blue {
@@ -74,7 +74,7 @@ $ease: cubic-bezier(0.22, 1, 0.36, 1);
       height: 460px;
       bottom: -160px;
       right: -100px;
-      background: rgba($blue, 0.35);
+      background: rgba(148, 163, 184, 0.14);
       animation-delay: -6s;
     }
   }
@@ -82,7 +82,8 @@ $ease: cubic-bezier(0.22, 1, 0.36, 1);
 
 .register-card {
   animation: cardIn 0.8s $ease both;
-  box-shadow: 0 40px 120px -30px rgba(0, 0, 0, 0.8);
+  box-shadow: 0 30px 80px -30px rgba(15, 23, 42, 0.25);
+  border: 1px solid #e2e8f0;
 }
 
 // ---------- Left purple panel ----------
@@ -92,9 +93,9 @@ $ease: cubic-bezier(0.22, 1, 0.36, 1);
   isolation: isolate;
   background: linear-gradient(
     160deg,
-    #5b21b6 0%,
-    #4338ca 45%,
-    #be185d 120%
+    #334155 0%,
+    #475569 45%,
+    #64748b 120%
   );
 
   .visual-bg {
@@ -137,7 +138,7 @@ $ease: cubic-bezier(0.22, 1, 0.36, 1);
     z-index: 1;
     background: linear-gradient(
       to top,
-      rgba(30, 10, 70, 0.75),
+      rgba(40, 15, 100, 0.75),
       transparent 45%
     );
     pointer-events: none;
@@ -188,9 +189,9 @@ $ease: cubic-bezier(0.22, 1, 0.36, 1);
       background 0.2s;
 
     &:focus {
-      border-color: $blue;
+      border-color: #64748b;
       background: #fff;
-      box-shadow: 0 0 0 4px rgba($blue, 0.14);
+      box-shadow: 0 0 0 4px rgba(100, 116, 139, 0.15);
     }
   }
 

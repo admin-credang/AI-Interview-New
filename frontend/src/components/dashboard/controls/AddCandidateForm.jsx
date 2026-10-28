@@ -35,7 +35,7 @@ export default function AddCandidateForm({ interviewId, role, t, onAdded, emailO
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
-  const inputCls = `mt-1.5 w-full px-4 py-3.5 rounded-2xl border ${t.input} outline-none focus:ring-2 focus:ring-fuchsia-500 text-sm bg-slate-900/60 text-white transition-all shadow-inner`;
+  const inputCls = `mt-1.5 w-full px-4 py-3.5 rounded-2xl border ${t.input} outline-none focus:ring-2 focus:ring-slate-400 text-sm bg-white text-slate-900 transition-all shadow-inner`;
 
   const submit = async () => {
     setError("");
@@ -100,14 +100,14 @@ export default function AddCandidateForm({ interviewId, role, t, onAdded, emailO
   };
 
   return (
-    <div className="max-w-2xl bg-slate-950/40 p-6 md:p-8 rounded-3xl border border-white/10 shadow-2xl backdrop-blur-xl">
-      <div className="flex items-center gap-3.5 mb-6 pb-4 border-b border-white/10">
-        <div className="p-3 rounded-2xl bg-fuchsia-500/15 text-fuchsia-400 border border-fuchsia-500/30 shadow-md">
+    <div className="max-w-2xl bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-2xl backdrop-blur-xl">
+      <div className="flex items-center gap-3.5 mb-6 pb-4 border-b border-slate-200">
+        <div className="p-3 rounded-2xl bg-slate-100 text-slate-700 border border-slate-300 shadow-md">
           <IconPersonPlus />
         </div>
         <div>
-          <h3 className="font-extrabold text-xl text-white tracking-wide">Register New Candidate</h3>
-          <p className="text-xs text-white/50 mt-0.5">
+          <h3 className="font-extrabold text-xl text-slate-900 tracking-wide">Register New Candidate</h3>
+          <p className="text-xs text-slate-500 mt-0.5">
             Fill in the candidate profile and upload the CV (required).
           </p>
         </div>
@@ -115,17 +115,17 @@ export default function AddCandidateForm({ interviewId, role, t, onAdded, emailO
 
       <div className="space-y-5">
         <div>
-          <label className="block text-xs font-bold text-white/70 mb-2">
-              Candidate CV <span className="text-fuchsia-400">*</span>
+          <label className="block text-xs font-bold text-slate-600 mb-2">
+              Candidate CV <span className="text-slate-700">*</span>
             </label>
-            <label className="flex flex-col items-center justify-center cursor-pointer rounded-2xl border-2 border-dashed border-white/20 py-8 px-6 text-center hover:bg-fuchsia-500/5 hover:border-fuchsia-500/40 transition bg-slate-900/50 shadow-inner group">
-              <span className="p-3 rounded-2xl bg-fuchsia-500/10 text-fuchsia-400 mb-2 group-hover:scale-110 transition-transform">
+            <label className="flex flex-col items-center justify-center cursor-pointer rounded-2xl border-2 border-dashed border-slate-200 py-8 px-6 text-center hover:bg-slate-100 hover:border-slate-300 transition bg-white shadow-inner group">
+              <span className="p-3 rounded-2xl bg-slate-100 text-slate-700 mb-2 group-hover:scale-110 transition-transform">
                 <IconUpload />
               </span>
-              <span className="block font-bold text-sm text-white/90 break-all">
+              <span className="block font-bold text-sm text-slate-800 break-all">
                 {cv ? cv.name : "Click to upload CV or drag and drop"}
               </span>
-              <span className="block text-xs text-white/40 mt-1">PDF or DOCX (Max size: 5MB)</span>
+              <span className="block text-xs text-slate-400 mt-1">PDF or DOCX (Max size: 5MB)</span>
               <input
                 type="file"
                 className="hidden"
@@ -140,8 +140,8 @@ export default function AddCandidateForm({ interviewId, role, t, onAdded, emailO
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <label className="block md:col-span-2">
-            <span className="text-xs font-bold text-white/70">
-              Full Name <span className="text-fuchsia-400">*</span>
+            <span className="text-xs font-bold text-slate-600">
+              Full Name <span className="text-slate-700">*</span>
             </span>
             <input
               value={name}
@@ -153,8 +153,8 @@ export default function AddCandidateForm({ interviewId, role, t, onAdded, emailO
           </label>
 
           <label className="block">
-            <span className="text-xs font-bold text-white/70">
-              Email Address <span className="text-fuchsia-400">*</span>
+            <span className="text-xs font-bold text-slate-600">
+              Email Address <span className="text-slate-700">*</span>
             </span>
             <input
               type="email"
@@ -167,8 +167,8 @@ export default function AddCandidateForm({ interviewId, role, t, onAdded, emailO
           </label>
 
           <label className="block">
-            <span className="text-xs font-bold text-white/70">
-              Phone Number <span className="text-fuchsia-400">*</span>
+            <span className="text-xs font-bold text-slate-600">
+              Phone Number <span className="text-slate-700">*</span>
             </span>
             <input
               type="tel"
@@ -182,13 +182,13 @@ export default function AddCandidateForm({ interviewId, role, t, onAdded, emailO
         </div>
 
         {error && (
-          <div className="p-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 text-xs text-rose-300 flex items-center gap-2">
+          <div className="p-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 text-xs text-rose-700 flex items-center gap-2">
             <span>⚠️</span> {error}
           </div>
         )}
 
         {message && (
-          <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 text-xs text-emerald-300 flex items-center gap-2">
+          <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 text-xs text-emerald-700 flex items-center gap-2">
             <span>✅</span> {message}
           </div>
         )}
@@ -197,7 +197,7 @@ export default function AddCandidateForm({ interviewId, role, t, onAdded, emailO
           type="button"
           onClick={submit}
           disabled={busy}
-          className="w-full mt-4 py-4 rounded-2xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white font-black text-sm tracking-wide transition-all disabled:opacity-50 shadow-xl shadow-fuchsia-600/25 active:scale-[0.99]"
+ className="w-full mt-4 py-4 rounded-2xl bg-slate-800 text-white font-black text-sm tracking-wide transition-all disabled:opacity-50 shadow-xl active:scale-[0.99]"
         >
           {busy ? "Registering Candidate..." : "+ Add & Invite Candidate"}
         </button>

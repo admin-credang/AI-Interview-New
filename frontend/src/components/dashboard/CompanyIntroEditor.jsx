@@ -4,7 +4,7 @@ import api from "../../services/api";
 
 const DEFAULT_T = {
   input:
-    "bg-white/5 border-white/10 text-white placeholder:text-slate-500",
+    "bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-500",
 };
 
 const MAX_CHARS = 1800;
@@ -28,7 +28,7 @@ export default function CompanyIntroEditor({
   responsibilities = "",
   t = DEFAULT_T,
 }) {
-  const inputCls = `w-full px-4 py-3 rounded-xl border ${t.input} outline-none focus:ring-2 focus:ring-fuchsia-500 text-sm`;
+  const inputCls = `w-full px-4 py-3 rounded-xl border ${t.input} outline-none focus:ring-2 focus:ring-slate-400 text-sm`;
 
   const [url, setUrl] = useState("");
   const [text, setText] = useState("");
@@ -194,7 +194,7 @@ export default function CompanyIntroEditor({
           type="button"
           onClick={generate}
           disabled={busy || loading}
-          className="shrink-0 px-5 py-3 rounded-xl border border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-200 text-sm font-semibold hover:bg-fuchsia-500/20 transition disabled:opacity-50"
+          className="shrink-0 px-5 py-3 rounded-xl border border-slate-300 bg-slate-100 text-slate-700 text-sm font-semibold hover:bg-slate-100 transition disabled:opacity-50"
         >
           {generating ? "Reading page..." : "Generate with AI"}
         </button>
@@ -228,13 +228,13 @@ export default function CompanyIntroEditor({
       </div>
 
       {error && (
-        <div className="p-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 text-sm text-rose-300">
+        <div className="p-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 text-sm text-rose-700">
           {error}
         </div>
       )}
 
       {notice && (
-        <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 text-sm text-emerald-300">
+        <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 text-sm text-emerald-700">
           {notice}
         </div>
       )}
@@ -244,7 +244,7 @@ export default function CompanyIntroEditor({
           type="button"
           onClick={() => persist(true)}
           disabled={busy || !text.trim() || (saved.approved && !dirty)}
-          className="px-6 py-3 bg-gradient-to-r from-fuchsia-600 to-purple-600 text-white rounded-2xl text-sm font-bold shadow-lg shadow-fuchsia-500/30 active:scale-95 transition disabled:opacity-50"
+ className="px-6 py-3 bg-slate-800 text-white rounded-2xl text-sm font-bold shadow-lg active:scale-95 transition disabled:opacity-50"
         >
           {saving ? "Saving..." : "Approve & save"}
         </button>
@@ -253,7 +253,7 @@ export default function CompanyIntroEditor({
           type="button"
           onClick={() => persist(false)}
           disabled={busy || !text.trim()}
-          className="px-5 py-3 rounded-2xl border border-white/15 text-sm font-semibold hover:bg-white/5 transition disabled:opacity-50"
+          className="px-5 py-3 rounded-2xl border border-slate-200 text-sm font-semibold hover:bg-slate-50 transition disabled:opacity-50"
         >
           Save as draft
         </button>
@@ -263,7 +263,7 @@ export default function CompanyIntroEditor({
             type="button"
             onClick={() => persist(false, "")}
             disabled={busy}
-            className="px-5 py-3 rounded-2xl border border-rose-500/30 text-rose-300 text-sm font-semibold hover:bg-rose-500/10 transition disabled:opacity-50"
+            className="px-5 py-3 rounded-2xl border border-rose-500/30 text-rose-700 text-sm font-semibold hover:bg-rose-500/10 transition disabled:opacity-50"
           >
             Remove
           </button>

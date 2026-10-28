@@ -39,18 +39,18 @@ export default function MonitoringSetup() {
   }, [interviewId]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
-      <header className="border-b border-slate-800 bg-slate-900/70">
+    <div className="min-h-screen bg-white text-slate-900">
+      <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <div>
             <h1 className="text-xl font-bold">AI Interview Agent</h1>
-            <p className="text-sm text-slate-400">Monitoring Setup</p>
+            <p className="text-sm text-slate-500">Monitoring Setup</p>
           </div>
 
           <button
             type="button"
             onClick={() => navigate("/dashboard")}
-            className="rounded-xl border border-slate-700 px-4 py-2 text-sm transition hover:bg-slate-800"
+            className="rounded-xl border border-slate-200 px-4 py-2 text-sm transition hover:bg-slate-100"
           >
             Skip to Dashboard
           </button>
@@ -61,9 +61,9 @@ export default function MonitoringSetup() {
         <FlowSteps current={2} />
 
         <div className="mb-8">
-          <p className="text-sm font-medium text-indigo-400">INTERVIEWER</p>
+          <p className="text-sm font-medium text-slate-700">INTERVIEWER</p>
           <h2 className="mt-2 text-4xl font-bold">Monitoring Setup</h2>
-          <p className="mt-3 text-slate-400">
+          <p className="mt-3 text-slate-500">
             {item ? `For "${item.title}". ` : ""}
             Choose whether eye and face monitoring is required, whether follow-up questions are asked, and what the candidate sees.
             You can change this any time from Interview Controls.
@@ -71,13 +71,13 @@ export default function MonitoringSetup() {
         </div>
 
         {error ? (
-          <div className="rounded-xl border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-400">
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
             {error}
           </div>
         ) : !item ? (
-          <p className="text-sm text-slate-400 animate-pulse">Loading...</p>
+          <p className="text-sm text-slate-500 animate-pulse">Loading...</p>
         ) : (
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 md:p-8">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 md:p-8">
             <InterviewSettingsForm
               interviewId={item.id}
               initialProctoring={item.proctoring}
@@ -98,7 +98,7 @@ export default function MonitoringSetup() {
                 </button>
                 <button
                   onClick={() => navigate("/dashboard")}
-                  className="px-6 py-3 rounded-2xl font-bold border border-slate-700 hover:bg-slate-800 transition"
+                  className="px-6 py-3 rounded-2xl font-bold border border-slate-200 hover:bg-slate-100 transition"
                 >
                   Go to dashboard
                 </button>

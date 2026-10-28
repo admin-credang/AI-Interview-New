@@ -56,7 +56,7 @@ function InterviewPage({ sessionId }) {
   }, [sessionId]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
+    <div className="min-h-screen bg-white text-slate-900">
       <div className="mx-auto max-w-4xl px-6 py-10">
 
         <h1 className="mb-8 text-3xl font-bold">
@@ -75,8 +75,8 @@ function InterviewPage({ sessionId }) {
           - Timer etc.
         */}
 
-        <div className="rounded-xl bg-slate-900 p-6">
-          <p className="text-slate-300">
+        <div className="rounded-xl bg-white p-6">
+          <p className="text-slate-600">
             Interview is in progress.
           </p>
         </div>

@@ -266,7 +266,7 @@ export function ReviewTop({ r, t }) {
           <button
             onClick={exportCsv}
             disabled={list.length === 0}
-            className="px-4 py-3 rounded-2xl border border-white/15 hover:bg-white/10 text-sm font-bold whitespace-nowrap transition disabled:opacity-40"
+            className="px-4 py-3 rounded-2xl border border-slate-200 hover:bg-slate-100 text-sm font-bold whitespace-nowrap transition disabled:opacity-40"
           >
             Export CSV
           </button>
@@ -285,7 +285,7 @@ export function ReviewTop({ r, t }) {
               placeholder="Search name, email or interview..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className={`w-full pl-12 pr-4 py-3 rounded-2xl border ${t.input} outline-none focus:ring-2 focus:ring-fuchsia-500`}
+              className={`w-full pl-12 pr-4 py-3 rounded-2xl border ${t.input} outline-none focus:ring-2 focus:ring-slate-400`}
             />
           </div>
 
@@ -294,13 +294,13 @@ export function ReviewTop({ r, t }) {
             <select
               value={interviewId}
               onChange={(e) => setInterviewId(e.target.value)}
-              className={`px-4 py-3 rounded-2xl border ${t.input} outline-none focus:ring-2 focus:ring-fuchsia-500 md:max-w-xs w-full`}
+              className={`px-4 py-3 rounded-2xl border ${t.input} outline-none focus:ring-2 focus:ring-slate-400 md:max-w-xs w-full`}
             >
-              <option value="all" className="bg-slate-900 text-white">
+              <option value="all" className="bg-white text-slate-900">
                 All interviews
               </option>
               {interviewOptions.map(([id, title]) => (
-                <option key={id} value={id} className="bg-slate-900 text-white">
+                <option key={id} value={id} className="bg-white text-slate-900">
                   {title}
                 </option>
               ))}
@@ -310,22 +310,22 @@ export function ReviewTop({ r, t }) {
           <button
             onClick={exportCsv}
             disabled={list.length === 0}
-            className="px-4 py-3 rounded-2xl border border-white/15 hover:bg-white/10 text-sm font-bold whitespace-nowrap transition disabled:opacity-40"
+            className="px-4 py-3 rounded-2xl border border-slate-200 hover:bg-slate-100 text-sm font-bold whitespace-nowrap transition disabled:opacity-40"
           >
             Export CSV
           </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-black/20 border border-white/10 w-full md:w-auto shadow-inner overflow-x-auto self-start">
+        <div className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-slate-100 border border-slate-200 w-full md:w-auto shadow-inner overflow-x-auto self-start">
           {TABS.map((x) => (
-            <button
+            <button data-plain
               key={x.id}
               onClick={() => setTab(x.id)}
               className={`whitespace-nowrap px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
                 tab === x.id
-                  ? "bg-gradient-to-r from-fuchsia-600 to-purple-600 text-white shadow-md"
-                  : "hover:bg-white/5 opacity-75 hover:opacity-100"
+ ? "bg-violet-600 text-white shadow-md"
+                  : "hover:bg-slate-50 opacity-75 hover:opacity-100"
               }`}
             >
               {x.label}
@@ -369,7 +369,7 @@ export function ReviewTable({ r, t }) {
       {loading ? (
         <p className="text-sm opacity-70 animate-pulse px-2">Loading candidates...</p>
       ) : error ? (
-        <div className="p-6 rounded-2xl border border-rose-500/30 bg-rose-500/10 text-sm text-rose-300">
+        <div className="p-6 rounded-2xl border border-rose-500/30 bg-rose-500/10 text-sm text-rose-700">
           {error}
         </div>
       ) : list.length === 0 ? (
@@ -391,7 +391,7 @@ export function ReviewTable({ r, t }) {
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[880px]">
               <thead>
-                <tr className="text-left text-[11px] uppercase tracking-wider opacity-60 border-b border-white/10">
+                <tr className="text-left text-[11px] uppercase tracking-wider opacity-60 border-b border-slate-200">
                   <th className="px-6 py-4 font-bold">Candidate</th>
                   <th className="px-4 py-4 font-bold">Interview</th>
                   <th className="px-4 py-4 font-bold">Status</th>
@@ -402,14 +402,14 @@ export function ReviewTable({ r, t }) {
                 </tr>
               </thead>
 
-              <tbody className="divide-y divide-white/10">
+              <tbody className="divide-y divide-slate-200">
                 {list.map((c) => (
                   <tr
                     key={c.session_id}
                     onClick={() => openCandidate(c.session_id)}
                     onMouseEnter={() => prefetchCandidate(c.session_id)}
                     onFocus={() => prefetchCandidate(c.session_id)}
-                    className="hover:bg-white/5 cursor-pointer transition"
+                    className="hover:bg-slate-50 cursor-pointer transition"
                   >
                     <td className="px-6 py-4">
                       <p className="font-bold">{c.candidate.name}</p>
@@ -452,9 +452,9 @@ export function ReviewTable({ r, t }) {
                       {!c.proctoring.required ? (
                         <span className="opacity-50">Not required</span>
                       ) : c.proctoring.flagged ? (
-                        <span className="text-rose-300 font-bold">Flagged</span>
+                        <span className="text-rose-700 font-bold">Flagged</span>
                       ) : (
-                        <span className="text-emerald-300 font-bold">Clean</span>
+                        <span className="text-emerald-700 font-bold">Clean</span>
                       )}
                     </td>
 
@@ -463,7 +463,7 @@ export function ReviewTable({ r, t }) {
                     </td>
 
                     <td className="px-6 py-4 text-right">
-                      <span className="text-fuchsia-400 font-bold text-xs">Review →</span>
+                      <span className="text-slate-700 font-bold text-xs">Review →</span>
                     </td>
                   </tr>
                 ))}
@@ -485,9 +485,9 @@ export default function Candidates() {
     <div className="space-y-10">
       <header className="px-1">
         {scopeId && (
-          <button
+          <button data-plain
             onClick={() => navigate("/dashboard/controls")}
-            className="text-sm font-bold text-fuchsia-400 hover:underline mb-3"
+            className="text-sm font-bold text-slate-700 hover:underline mb-3"
           >
             ← Back to interview controls
           </button>
@@ -499,14 +499,14 @@ export default function Candidates() {
 
         {scopeId ? (
           <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
-            <span className="px-3 py-1 rounded-full border border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-300 text-xs font-bold">
+            <span className="px-3 py-1 rounded-full border border-slate-300 bg-slate-100 text-slate-700 text-xs font-bold">
               {scope?.role || "This interview"}
             </span>
             <span className="opacity-70">
               {scope ? `${scope.invited} invited · ` : ""}
               only candidates of this interview
             </span>
-            <button
+            <button data-plain
               onClick={() => setSearchParams({})}
               className="text-xs font-bold underline opacity-80 hover:opacity-100"
             >

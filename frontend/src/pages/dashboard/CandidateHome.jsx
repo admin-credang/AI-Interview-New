@@ -16,23 +16,23 @@ const RESULT = {
   under_review: {
     title: "Submitted - under review",
     text: "Thank you for attending. If you are selected, our team will contact you. Otherwise you will receive an email.",
-    cls: "border-amber-500/30 bg-amber-500/10 text-amber-200",
+    cls: "border-amber-500/30 bg-amber-500/10 text-amber-700",
   },
   selected: {
     title: "You have been selected",
     text: "Congratulations! Our team will contact you shortly.",
-    cls: "border-emerald-500/30 bg-emerald-500/10 text-emerald-200",
+    cls: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700",
   },
   not_selected: {
     title: "Not selected this time",
     text: "Thank you for your time. We have sent the details to your email.",
-    cls: "border-slate-500/30 bg-slate-500/10 text-slate-200",
+    cls: "border-slate-500/30 bg-slate-500/10 text-slate-700",
   },
 };
 
 function Chip({ children }) {
   return (
-    <span className="px-3 py-1 rounded-full text-[11px] font-bold border border-white/15 bg-white/5">
+    <span className="px-3 py-1 rounded-full text-[11px] font-bold border border-slate-200 bg-slate-50">
       {children}
     </span>
   );
@@ -83,7 +83,7 @@ function JobCard({ item, t }) {
             {job.skills.map((s) => (
               <span
                 key={s}
-                className="px-3 py-1 rounded-lg text-xs font-semibold bg-fuchsia-500/10 text-fuchsia-300 border border-fuchsia-500/20"
+                className="px-3 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-300"
               >
                 {s}
               </span>
@@ -98,13 +98,13 @@ function JobCard({ item, t }) {
           <p className="text-xs leading-relaxed opacity-90">{result.text}</p>
         </div>
       ) : closed ? (
-        <div className="p-5 rounded-2xl border border-white/10 bg-white/5 text-sm opacity-80">
+        <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50 text-sm opacity-80">
           This interview is no longer accepting candidates.
         </div>
       ) : (
         <button
           onClick={() => navigate(`/interviews/${item.id}`)}
-          className="mt-auto w-full flex items-center justify-center gap-2.5 px-6 py-4 bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white rounded-2xl font-bold transition active:scale-[0.98] shadow-xl"
+ className="mt-auto w-full flex items-center justify-center gap-2.5 px-6 py-4 bg-slate-800 text-white rounded-2xl font-bold transition active:scale-[0.98] shadow-xl"
         >
           {state === "in_progress" ? "Resume AI Interview" : "Start AI Interview"}
           <span>→</span>
@@ -139,12 +139,12 @@ function InterviewIdBox({ t }) {
           onChange={(e) => setCode(e.target.value.toUpperCase())}
           placeholder="INV-XXXX-XXXX"
           maxLength={20}
-          className={`flex-1 px-4 py-3 rounded-xl border ${t.input} outline-none focus:ring-2 focus:ring-fuchsia-500 font-mono tracking-widest text-sm`}
+          className={`flex-1 px-4 py-3 rounded-xl border ${t.input} outline-none focus:ring-2 focus:ring-slate-400 font-mono tracking-widest text-sm`}
         />
         <button
           type="submit"
           disabled={!code.trim()}
-          className="px-6 py-3 rounded-xl bg-gradient-to-r from-fuchsia-600 to-purple-600 text-white font-bold text-sm disabled:opacity-40"
+ className="px-6 py-3 rounded-xl bg-slate-800 text-white font-bold text-sm disabled:opacity-40"
         >
           Open my interview
         </button>
@@ -173,15 +173,14 @@ export default function CandidateHome() {
     <div className="space-y-12">
       {/* Candidate Profile Welcome Banner */}
       <header className={`p-10 rounded-[3rem] border ${t.welcome} relative overflow-hidden`}>
-        <div className="absolute right-0 top-0 w-96 h-96 bg-gradient-to-br from-fuchsia-500/10 to-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-fuchsia-500/10 border border-fuchsia-500/20 text-fuchsia-300 text-xs font-semibold mb-4">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 border border-slate-300 text-slate-700 text-xs font-semibold mb-4">
               <span>⚡ Active Candidate Profile</span>
             </div>
             <h1 className="text-4xl md:text-5xl font-black mb-3 tracking-tight">
               Welcome back,{" "}
-              <span className="bg-gradient-to-r from-fuchsia-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">
+ <span className="text-slate-700 ">
                 {userName || "Candidate"}
               </span>
             </h1>
@@ -189,11 +188,11 @@ export default function CandidateHome() {
               Your technical assessment and AI interview portal is ready. Review the job details below, pass the system check, and begin when you feel confident.
             </p>
           </div>
-          <div className="shrink-0 bg-white/5 border border-white/10 rounded-2xl p-5 backdrop-blur-md">
+          <div className="shrink-0 bg-slate-50 border border-slate-200 rounded-2xl p-5 backdrop-blur-md">
             <p className="text-xs uppercase tracking-wider opacity-60 font-bold mb-1">
               {open.length > 1 ? "Your roles" : "Your role"}
             </p>
-            <p className="text-sm font-bold text-fuchsia-300">
+            <p className="text-sm font-bold text-slate-700">
               {open.length === 0
                 ? "No interview assigned yet"
                 : open
@@ -221,7 +220,7 @@ export default function CandidateHome() {
         <ol className={`rounded-[2rem] border ${t.card} p-6 md:p-8 grid grid-cols-1 md:grid-cols-2 gap-6`}>
           {steps.map((s, i) => (
             <li key={s.title} className="flex gap-4">
-              <span className="w-9 h-9 shrink-0 rounded-xl bg-gradient-to-br from-fuchsia-500 to-purple-600 text-white font-black flex items-center justify-center text-sm shadow-lg shadow-fuchsia-500/30">
+ <span className="w-9 h-9 shrink-0 rounded-xl bg-slate-800 text-white font-black flex items-center justify-center text-sm shadow-lg ">
                 {i + 1}
               </span>
               <div>
@@ -239,7 +238,7 @@ export default function CandidateHome() {
       {/* JOBS SECTION */}
       <section>
         <div className="flex items-center gap-3 mb-6 px-1">
-          <span className="text-fuchsia-400">
+          <span className="text-slate-700">
             <IconBriefcase />
           </span>
           <h2 className="text-xl font-bold">Your Active Interviews</h2>

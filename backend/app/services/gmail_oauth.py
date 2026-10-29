@@ -25,6 +25,8 @@ SCOPES = [
     "https://www.googleapis.com/auth/gmail.send",
 ]
 
+GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
+
 
 class GmailError(Exception):
     """Raised when Google OAuth or Gmail API operations fail."""
@@ -50,6 +52,7 @@ def _request_json(
         "Accept": "application/json",
         "User-Agent": "AI-Interview-App",
     }
+
     if headers:
         request_headers.update(headers)
 
@@ -136,7 +139,7 @@ def build_auth_url(
 
 
 def exchange_code(code: str) -> dict:
-    """Exchange a one-time authorization code for Google tokens."""
+    """Exchange an authorization code for Google tokens."""
     if not configured():
         raise GmailError("Google OAuth is not configured.")
 
@@ -157,6 +160,20 @@ def exchange_code(code: str) -> dict:
 
     if not result.get("access_token"):
         raise GmailError("Google did not return an access token.")
+
+    # Google normally includes granted scopes in the token response.
+    # If scope is present, verify Gmail sending permission.
+    # If it is absent, do not assume that the permission is missing.
+    scope_value = result.get("scope")
+
+    if scope_value is not None:
+        granted_scopes = set(scope_value.split())
+
+        if GMAIL_SEND_SCOPE not in granted_scopes:
+            raise GmailError(
+                "Google returned scopes without Gmail sending permission. "
+                "Check the OAuth consent and granted permissions."
+            )
 
     return result
 
@@ -220,10 +237,12 @@ def revoke(token: str) -> None:
     try:
         with urllib.request.urlopen(request, timeout=15):
             pass
+
     except urllib.error.HTTPError as exc:
         # Ignore tokens already expired or revoked.
         if exc.code not in (400, 401):
             raise GmailError("Could not revoke the Google token.") from None
+
     except (urllib.error.URLError, TimeoutError, OSError):
         raise GmailError(
             "Could not reach Google to revoke the token."
@@ -240,6 +259,7 @@ def send_email(
     """Send a plain-text email through the connected Gmail account."""
     if not to_email or not to_email.strip():
         raise GmailError("Candidate email address is required.")
+
     if not access_token:
         raise GmailError("No Gmail access token is available.")
 

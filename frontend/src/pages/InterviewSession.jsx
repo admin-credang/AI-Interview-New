@@ -596,8 +596,17 @@ const MONITOR_INTERVAL_MS = 100; // face/eye check ~10x per second (was every fr
 const LOOK_DOWN_CALIBRATION_MS = 3000; // learn the normal "reading the screen" eye angle
 const LOOK_DOWN_MARGIN = 0.2; // must be this much below the learned normal
 
-const WARMUP_GREETING =
-  "Hi, welcome to your interview. How has your day been so far?";
+const WARMUP_PROMPTS = [
+  "Hi, welcome to your interview! How has your day been so far?",
+  "That's nice to hear! Before we begin, how are you feeling about the interview today?",
+  "That's great! There's no need to feel nervous. Take your time, and just answer naturally. If you need a moment to think, that's completely fine. Are you ready to begin?",
+];
+
+const WARMUP_REPLIES = [
+  WARMUP_PROMPTS[1],
+  WARMUP_PROMPTS[2],
+  "Wonderful! Let's get started. I'll ask you questions based on the role you're applying for, one at a time. Best of luck!",
+];
 
 const CLOSING_SPEECH =
   "Thank you. Your interview is complete. The interviewer will review your answers.";
@@ -679,6 +688,15 @@ export default function InterviewSession() {
   const [warmupDraft, setWarmupDraft] =
     useState("");
 
+  const [warmupStep, setWarmupStep] =
+    useState(0);
+
+  const [warmupStarted, setWarmupStarted] =
+    useState(false);
+
+  const [warmupStarting, setWarmupStarting] =
+    useState(false);
+
   const [warmupVoiceError, setWarmupVoiceError] =
     useState("");
 
@@ -702,6 +720,11 @@ export default function InterviewSession() {
 
   const warmupRecognitionRef =
     useRef(null);
+
+  const warmupStepRef = useRef(0);
+  const warmupStartedRef = useRef(false);
+  const warmupListeningRef = useRef(false);
+  const startWarmupListeningRef = useRef(null);
 
   const warmupRecorderRef =
     useRef(null);
@@ -1274,6 +1297,9 @@ export default function InterviewSession() {
   const submitAnswerRef =
     useRef(null);
 
+  const mainSilenceTimerRef =
+    useRef(null);
+
   // Voice follow-up confirmation helpers
   const phaseRef =
     useRef("");
@@ -1382,6 +1408,11 @@ export default function InterviewSession() {
 
   const stopMedia =
     useCallback(() => {
+      if (mainSilenceTimerRef.current) {
+        clearTimeout(mainSilenceTimerRef.current);
+        mainSilenceTimerRef.current = null;
+      }
+
       /*
        * Stop speech recognition
        */
@@ -1654,6 +1685,13 @@ recognitionRef.current.stop();
       mountedRef.current = false;
 
       stopMedia();
+      try {
+        warmupRecognitionRef.current?.abort();
+      } catch (error) {
+        console.warn("Warm-up speech recognition cleanup failed:", error);
+      }
+      warmupRecognitionRef.current = null;
+      warmupListeningRef.current = false;
       warmupRecorderRef.current?.cancel();
 
       if (
@@ -1841,9 +1879,26 @@ recognitionRef.current.stop();
 
   const speakQuestion = useCallback(
     (text) => {
-      void speakText(text).catch((error) => {
-        console.error("Question speech failed:", error);
-      });
+      void speakText(text)
+        .then(() => {
+          if (
+            mountedRef.current &&
+            phaseRef.current === "question" &&
+            !processingRef.current &&
+            !completedRef.current &&
+            !terminatedRef.current
+          ) {
+            startListeningRef.current?.();
+          }
+        })
+        .catch((error) => {
+          console.error("Question speech failed:", error);
+          if (mountedRef.current) {
+            setError(
+              "Question playback failed. You can retry listening or type your answer."
+            );
+          }
+        });
     },
     [speakText],
   );
@@ -1866,49 +1921,43 @@ recognitionRef.current.stop();
         return;
       }
 
-      warmupRecorderRef.current?.cancel();
-      setWarmupRecording(false);
+      const step = warmupStepRef.current;
       warmupRequestInFlightRef.current = true;
+      warmupListeningRef.current = false;
+      try {
+        warmupRecognitionRef.current?.abort();
+      } catch (error) {
+        console.warn("Warm-up speech recognition cleanup failed:", error);
+      }
+      warmupRecognitionRef.current = null;
+      warmupRecorderRef.current?.cancel();
+      setWarmupListening(false);
+      setWarmupRecording(false);
       setWarmupSubmitting(true);
       setWarmupVoiceError("");
       setWarmupDraft(cleanReply);
+      let replyPlayed = false;
 
       try {
-        const result = await api.post(
-          `/interviews/${interviewId}/warmup-response`,
-          {
-            session_id: sessionId,
-            answer: cleanReply,
-          },
-        );
-
-        const response = String(result?.data?.text || "").trim();
-        if (!response) {
-          throw new Error("Warm-up response was empty.");
-        }
-
-        warmupHandledRef.current = true;
-        setSessionFlag(sessionId, "warmup_complete");
+        const response = WARMUP_REPLIES[step];
         setWarmupResponse(response);
-        setWarmupVoiceError("");
+        await speakText(response);
+        replyPlayed = true;
 
-        try {
-          await speakText(response);
-        } catch (error) {
-          console.error("Warm-up response speech failed:", error);
-          if (mountedRef.current) {
-            setWarmupVoiceError(
-              "Your response is shown below, but spoken playback failed."
-            );
-          }
+        if (step === WARMUP_REPLIES.length - 1) {
+          warmupHandledRef.current = true;
+          setSessionFlag(sessionId, "warmup_complete");
+          confirmReady();
+        } else {
+          warmupStepRef.current = step + 1;
+          setWarmupStep(step + 1);
+          setWarmupDraft("");
         }
-        confirmReady();
       } catch (error) {
-        console.error("Warm-up response generation failed:", error);
+        console.error("Warm-up response playback failed:", error);
         if (mountedRef.current) {
           setWarmupVoiceError(
-            error?.response?.data?.detail ||
-              "The AI warm-up response is temporarily unavailable. Try again or continue to the interview."
+            "The interviewer could not finish speaking. Retry the response or continue with text."
           );
         }
       } finally {
@@ -1916,9 +1965,17 @@ recognitionRef.current.stop();
         if (mountedRef.current) {
           setWarmupSubmitting(false);
         }
+
+        if (
+          mountedRef.current &&
+          !warmupHandledRef.current &&
+          replyPlayed
+        ) {
+          setTimeout(() => startWarmupListeningRef.current?.(), 0);
+        }
       }
     },
-    [confirmReady, interviewId, sessionId, speakText],
+    [confirmReady, sessionId, speakText],
   );
 
   const continueWithoutWarmup = useCallback(() => {
@@ -1928,6 +1985,7 @@ recognitionRef.current.stop();
       console.warn("Warm-up speech recognition cleanup failed:", error);
     }
     warmupRecognitionRef.current = null;
+    warmupListeningRef.current = false;
     setWarmupListening(false);
     warmupRecorderRef.current?.cancel();
     setWarmupRecording(false);
@@ -1937,24 +1995,42 @@ recognitionRef.current.stop();
     setWarmupVoiceError("");
   }, [confirmReady, sessionId]);
 
-  const toggleWarmupSpeechRecognition = useCallback(() => {
-    if (warmupListening) {
-      warmupRecognitionRef.current?.stop();
+  const startWarmupListening = useCallback(async () => {
+    if (
+      warmupHandledRef.current ||
+      warmupListeningRef.current ||
+      warmupRequestInFlightRef.current
+    ) {
       return;
     }
 
-    if (warmupSubmitting || warmupTranscribing) {
-      return;
-    }
-
+    warmupListeningRef.current = true;
     const SpeechRecognitionApi =
       window.SpeechRecognition ||
       window.webkitSpeechRecognition;
+    const recordingStarted = canRecordAudio()
+      ? await warmupRecorderRef.current.start()
+      : false;
+
+    if (recordingStarted) {
+      setWarmupRecording(true);
+    }
 
     if (!SpeechRecognitionApi) {
+      if (recordingStarted) {
+        warmupListeningRef.current = true;
+        setWarmupListening(true);
+        setWarmupManualInput(true);
+        setWarmupVoiceError(
+          "Automatic speech recognition is unavailable. Stop the recording when you finish, or type your reply."
+        );
+        return;
+      }
+
+      warmupListeningRef.current = false;
       setWarmupManualInput(true);
       setWarmupVoiceError(
-        "Speech recognition is unavailable in this browser. Type your reply or use the recording fallback."
+        "Voice input is unavailable. Type your reply below."
       );
       return;
     }
@@ -1967,9 +2043,16 @@ recognitionRef.current.stop();
     recognition.continuous = false;
     recognition.interimResults = true;
     warmupRecognitionRef.current = recognition;
+    warmupListeningRef.current = true;
     setWarmupDraft("");
     setWarmupVoiceError("");
-    setWarmupListening(true);
+
+    recognition.onstart = () => {
+      if (mountedRef.current) {
+        setWarmupManualInput(false);
+        setWarmupListening(true);
+      }
+    };
 
     recognition.onresult = (event) => {
       transcript = Array.from(event.results)
@@ -1985,6 +2068,9 @@ recognitionRef.current.stop();
       }
 
       failed = true;
+      warmupListeningRef.current = false;
+      warmupRecorderRef.current?.cancel();
+      setWarmupRecording(false);
       setWarmupListening(false);
       setWarmupManualInput(true);
       setWarmupVoiceError(
@@ -1992,7 +2078,7 @@ recognitionRef.current.stop();
           ? "Microphone permission was denied. Allow microphone access or type your reply."
           : event?.error === "audio-capture"
             ? "No microphone was found. Check your microphone or type your reply."
-            : "Speech recognition failed. You can try again or type your reply."
+            : "Speech recognition failed. Try the microphone again or type your reply."
       );
     };
 
@@ -2000,62 +2086,90 @@ recognitionRef.current.stop();
       if (warmupRecognitionRef.current === recognition) {
         warmupRecognitionRef.current = null;
       }
+      warmupListeningRef.current = false;
       setWarmupListening(false);
 
-      if (failed) {
+      if (failed || warmupRequestInFlightRef.current) {
         return;
       }
 
-      if (transcript) {
-        setWarmupDraft(transcript);
-        void finishWarmup(transcript);
-      } else {
-        setWarmupManualInput(true);
-        setWarmupVoiceError(
-          "No speech was recognized. Try again or type your reply."
-        );
-      }
+      void (async () => {
+        setWarmupTranscribing(true);
+        setWarmupVoiceError("");
+        let finalTranscript = transcript;
+
+        try {
+          if (warmupRecorderRef.current?.isActive()) {
+            const audio = await warmupRecorderRef.current.stop();
+            setWarmupRecording(false);
+
+            if (audio) {
+              try {
+                finalTranscript =
+                  (await transcribeAnswer(interviewId, audio)) ||
+                  finalTranscript;
+              } catch (error) {
+                console.error("Warm-up audio transcription failed:", error);
+                if (!finalTranscript) {
+                  throw error;
+                }
+                setWarmupVoiceError(
+                  "Audio transcription was unavailable; using the live speech transcript."
+                );
+              }
+            }
+          }
+
+          if (!finalTranscript) {
+            throw new Error("No speech was recognized. Try again or type your reply.");
+          }
+
+          setWarmupDraft(finalTranscript);
+          setWarmupTranscribing(false);
+          await finishWarmup(finalTranscript);
+        } catch (error) {
+          console.error("Warm-up response processing failed:", error);
+          setWarmupManualInput(true);
+          setWarmupVoiceError(
+            error?.response?.data?.detail ||
+              error?.message ||
+              "Your response could not be processed. Try again or type your reply."
+          );
+        } finally {
+          if (mountedRef.current) {
+            setWarmupTranscribing(false);
+          }
+        }
+      })();
     };
 
     try {
       recognition.start();
     } catch (error) {
       console.warn("Warm-up speech recognition could not start:", error);
-      failed = true;
+      warmupListeningRef.current = false;
       warmupRecognitionRef.current = null;
+      warmupRecorderRef.current?.cancel();
+      setWarmupRecording(false);
       setWarmupListening(false);
       setWarmupManualInput(true);
       setWarmupVoiceError(
         "Microphone could not start. Check permission or type your reply."
       );
     }
-  }, [finishWarmup, warmupListening, warmupSubmitting, warmupTranscribing]);
+  }, [finishWarmup, interviewId]);
 
-  const startWarmupRecording = useCallback(async () => {
-    if (!canRecordAudio() || warmupSubmitting || warmupTranscribing) {
-      setWarmupVoiceError(
-        "Microphone recording is unavailable. Type your reply instead."
-      );
-      return;
-    }
-
-    const started = await warmupRecorderRef.current.start();
-    if (!started) {
-      setWarmupVoiceError(
-        "Microphone access failed. Check permission or type your reply instead."
-      );
-      return;
-    }
-
-    setWarmupVoiceError("");
-    setWarmupRecording(true);
-  }, [warmupSubmitting, warmupTranscribing]);
+  useEffect(() => {
+    startWarmupListeningRef.current = startWarmupListening;
+  }, [startWarmupListening]);
 
   const stopWarmupRecording = useCallback(async () => {
     if (!warmupRecording || warmupTranscribing) {
       return;
     }
 
+    warmupListeningRef.current = false;
+    setWarmupListening(false);
     setWarmupRecording(false);
     setWarmupTranscribing(true);
     setWarmupVoiceError("");
@@ -2069,6 +2183,7 @@ recognitionRef.current.stop();
         );
       }
 
+      setWarmupTranscribing(false);
       await finishWarmup(transcript);
     } catch (error) {
       console.error("Warm-up microphone transcription failed:", error);
@@ -2085,6 +2200,82 @@ recognitionRef.current.stop();
       }
     }
   }, [finishWarmup, interviewId, warmupRecording, warmupTranscribing]);
+
+  const toggleWarmupSpeechRecognition = useCallback(() => {
+    if (warmupListeningRef.current) {
+      if (warmupRecognitionRef.current) {
+        warmupRecognitionRef.current.stop();
+      } else {
+        void stopWarmupRecording();
+      }
+      return;
+    }
+
+    void startWarmupListening();
+  }, [startWarmupListening, stopWarmupRecording]);
+
+  const beginWarmup = useCallback(async () => {
+    if (warmupStartedRef.current || warmupStarting) {
+      return;
+    }
+
+    warmupStartedRef.current = true;
+    setWarmupStarting(true);
+    setWarmupVoiceError("");
+    let permissionGranted = false;
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: false,
+      });
+      stream.getTracks().forEach((track) => track.stop());
+      permissionGranted = true;
+    } catch (error) {
+      console.warn("Warm-up microphone permission was not granted:", error);
+      setWarmupManualInput(true);
+      setWarmupVoiceError(
+        error?.name === "NotAllowedError" || error?.name === "PermissionDeniedError"
+          ? "Microphone permission was denied. You can type your reply or retry microphone access."
+          : "Microphone access is unavailable. You can type your reply or retry."
+      );
+    }
+
+    setWarmupStarted(true);
+
+    try {
+      await speakText(WARMUP_PROMPTS[0]);
+      if (permissionGranted) {
+        await startWarmupListening();
+      }
+    } catch (error) {
+      console.error("Warm-up greeting playback failed:", error);
+      setWarmupVoiceError(
+        "The greeting could not be played. Retry the greeting or enter your reply below."
+      );
+    } finally {
+      if (mountedRef.current) {
+        setWarmupStarting(false);
+      }
+    }
+  }, [speakText, startWarmupListening, warmupStarting]);
+
+  const replayWarmupPrompt = useCallback(async () => {
+    if (warmupListeningRef.current || warmupRequestInFlightRef.current) {
+      return;
+    }
+
+    setWarmupVoiceError("");
+    try {
+      await speakText(WARMUP_PROMPTS[warmupStepRef.current]);
+      await startWarmupListening();
+    } catch (error) {
+      console.error("Warm-up prompt playback failed:", error);
+      setWarmupVoiceError(
+        "The prompt could not be played. You can retry or type your reply."
+      );
+    }
+  }, [speakText, startWarmupListening]);
 
   /*
    * ============================================================
@@ -2140,6 +2331,11 @@ recognitionRef.current.stop();
         setAnswer("");
 
         setLastAnswer("");
+        latestSpeechRef.current = "";
+        if (mainSilenceTimerRef.current) {
+          clearTimeout(mainSilenceTimerRef.current);
+          mainSilenceTimerRef.current = null;
+        }
 
         setFollowUpQuestion(null);
 
@@ -2672,76 +2868,10 @@ recognitionRef.current.stop();
 
   /*
    * ============================================================
-   * PRE-INTERVIEW WARM-UP
-   * ============================================================
-   * Warm-up replies stay in local state and never enter the interview
-   * answer, recording, transcription, or Dialogflow submission flow.
-   */
-  useEffect(() => {
-    if (phase !== "warmup") {
-      return;
-    }
-
-    let stopped = false;
-
-    const SpeechRecognitionApi =
-      window.SpeechRecognition ||
-      window.webkitSpeechRecognition;
-
-    if (!SpeechRecognitionApi) {
-      setWarmupManualInput(true);
-      setWarmupVoiceError(
-        "Speech recognition is unavailable in this browser. Type your reply or use the recording fallback."
-      );
-    }
-
-    const promptAlreadyPlayed =
-      getSessionFlag(sessionId, "warmup_prompted");
-    let promptTimer = null;
-
-    if (!promptAlreadyPlayed) {
-      promptTimer = window.setTimeout(() => {
-        if (stopped) {
-          return;
-        }
-
-        setSessionFlag(sessionId, "warmup_prompted");
-        void speakText(WARMUP_GREETING)
-          .catch((error) => {
-            console.error("Warm-up prompt speech failed:", error);
-            setWarmupVoiceError(
-              "Spoken playback is unavailable. You can still answer by voice or type your reply."
-            );
-          });
-      }, 0);
-    }
-
-    return () => {
-      stopped = true;
-      if (promptTimer !== null) {
-        window.clearTimeout(promptTimer);
-      }
-      try {
-        warmupRecognitionRef.current?.abort();
-      } catch (error) {
-        console.warn("Warm-up speech recognition cleanup failed:", error);
-      }
-      warmupRecognitionRef.current = null;
-      cancelSpeech();
-    };
-  }, [
-    phase,
-    sessionId,
-    speakText,
-    cancelSpeech,
-  ]);
-
-  /*
-   * ============================================================
    * COMPANY INTRODUCTION (VOICE ONLY)
    * ============================================================
-   * The interviewer-approved text is fetched while the greeting is
-   * playing, so there is no wait. It is only SPOKEN - it is never
+   * The interviewer-approved text is fetched while the warm welcome is
+   * in progress, so there is no wait. It is only SPOKEN - it is never
    * put on the screen. If nothing is approved, or the request
    * fails, the interview starts exactly as before.
    */
@@ -3095,6 +3225,11 @@ recognitionRef.current.stop();
           terminatedRef.current
         ) {
           return;
+        }
+
+        if (mainSilenceTimerRef.current) {
+          clearTimeout(mainSilenceTimerRef.current);
+          mainSilenceTimerRef.current = null;
         }
 
         /*
@@ -3655,10 +3790,9 @@ recognitionRef.current.stop();
       }
 
       /*
-       * The answer is only collected here. It is NEVER sent
-       * automatically - the candidate presses "Submit Answer"
-       * when the answer is really finished (thinking pauses
-       * are fine).
+       * Keep a live preview and submit after a finalized result
+       * has been followed by a short silence. Manual submission
+       * remains available for typed or longer answers.
        */
       let spoken = "";
 
@@ -3691,6 +3825,33 @@ recognitionRef.current.stop();
           full;
 
         setAnswer(full);
+
+        const latestResult =
+          event.results[event.results.length - 1];
+        if (
+          latestResult?.isFinal &&
+          phaseRef.current === "question" &&
+          !userEditedRef.current
+        ) {
+          if (mainSilenceTimerRef.current) {
+            clearTimeout(mainSilenceTimerRef.current);
+          }
+
+          mainSilenceTimerRef.current = setTimeout(() => {
+            mainSilenceTimerRef.current = null;
+            if (
+              mountedRef.current &&
+              wantListeningRef.current &&
+              !processingRef.current &&
+              !completedRef.current &&
+              !terminatedRef.current &&
+              !userEditedRef.current &&
+              latestSpeechRef.current.trim()
+            ) {
+              submitAnswerRef.current?.(latestSpeechRef.current);
+            }
+          }, 1800);
+        }
       }
     };
 
@@ -3709,6 +3870,14 @@ recognitionRef.current.stop();
           "service-not-allowed"
       ) {
         wantListeningRef.current = false;
+        recorderRef.current?.cancel();
+        setError(
+          "Microphone permission was denied. Allow microphone access or type your answer."
+        );
+      } else if (mountedRef.current) {
+        setError(
+          "Speech recognition stopped unexpectedly. Your recording can still be submitted, or you can type your answer."
+        );
       }
 
       if (
@@ -3726,9 +3895,9 @@ recognitionRef.current.stop();
       }
 
       /*
-       * The browser ends recognition by itself after a short
-       * silence. If the candidate did not press Stop, keep
-       * listening and continue the same answer.
+       * Browsers can stop recognition after a short silence.
+       * Keep the same answer open until the finalized-result
+       * silence timer submits it.
        */
       if (
         mountedRef.current &&
@@ -3813,6 +3982,8 @@ recognitionRef.current.stop();
       if (
         (!recognitionRef.current &&
           !canRecordAudio()) ||
+        speechCancelRef.current ||
+        window.speechSynthesis?.speaking ||
         processingRef.current ||
         completedRef.current ||
         terminatedRef.current
@@ -5886,78 +6057,103 @@ recognitionRef.current?.stop();
    */
 
   if (phase === "warmup") {
+    const warmupStatus = isSpeaking
+      ? "AI SPEAKING"
+      : warmupTranscribing
+        ? "PROCESSING / TRANSCRIBING"
+        : warmupSubmitting
+          ? "PROCESSING RESPONSE"
+          : warmupListening
+            ? "LISTENING TO CANDIDATE"
+            : warmupStarted
+              ? "READY FOR YOUR RESPONSE"
+              : "READY TO BEGIN";
+
     return (
       <div className="min-h-screen bg-white text-slate-800 flex items-center justify-center p-6 relative overflow-hidden font-sans">
         <div className="max-w-lg w-full bg-white border border-slate-200 backdrop-blur-2xl p-8 rounded-3xl text-center space-y-5 shadow-2xl relative z-10">
-          <div className="w-16 h-16 bg-slate-100 border border-slate-300 rounded-2xl flex items-center justify-center text-3xl mx-auto">
-            🤖
-          </div>
-
           <h1 className="text-2xl font-bold text-slate-900">
             Welcome to your interview
           </h1>
 
-          <>
-              <p className="text-slate-800 font-semibold">
-                How has your day been so far?
-              </p>
-              <p className="text-slate-500 text-sm">
-                {warmupManualInput
-                  ? "Voice input isn't available right now. Type a short reply below."
-                  : "You can answer out loud or type a short reply below."}
-              </p>
-              {warmupVoiceError && (
-                <p className="text-amber-700 text-sm" role="status">
-                  {warmupVoiceError}
-                </p>
-              )}
-              {(typeof window !== "undefined" &&
-                (window.SpeechRecognition ||
-                  window.webkitSpeechRecognition)) && (
-                <button
-                  type="button"
-                  onClick={toggleWarmupSpeechRecognition}
-                  disabled={warmupTranscribing || warmupSubmitting}
-                  aria-pressed={warmupListening}
-                  className={`w-full py-3 rounded-2xl font-bold text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                    warmupListening
-                      ? "bg-rose-700 hover:bg-rose-600"
-                      : "bg-slate-800 hover:bg-slate-700"
-                  }`}
-                >
-                  {warmupListening
-                    ? "🎙 Listening... click to finish"
-                    : "🎙 Answer with your voice"}
-                </button>
-              )}
-              {warmupListening && (
-                <p className="text-slate-500 text-sm" role="status">
-                  Listening. Your recognized words will appear below.
-                </p>
-              )}
-              {warmupManualInput && canRecordAudio() && (
-                <button
-                  type="button"
-                  onClick={
-                    warmupRecording
-                      ? stopWarmupRecording
-                      : startWarmupRecording
-                  }
-                  disabled={warmupTranscribing || warmupSubmitting}
-                  className="w-full py-3 rounded-2xl font-bold text-white bg-slate-200 hover:bg-slate-300 transition disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {warmupTranscribing
-                    ? "Transcribing your reply..."
-                    : warmupRecording
-                      ? "Stop recording and send"
-                      : "Record a spoken reply"}
-                </button>
-              )}
-              {warmupResponse && (
-                <p className="text-slate-600 text-sm leading-relaxed">
-                  {warmupResponse}
-                </p>
-              )}
+          <div className="text-xs font-bold tracking-widest text-slate-500">
+            WARM WELCOME · {warmupStep + 1} OF 3
+          </div>
+
+          {warmupListening && !isSpeaking ? (
+            <div className="flex flex-col items-center gap-3 py-2" role="status" aria-live="polite">
+              <div className="relative flex h-36 w-36 items-center justify-center">
+                <span className="absolute inset-0 rounded-full bg-violet-300/40 animate-ping" />
+                <span className="absolute inset-3 rounded-full bg-violet-300/25 shadow-[0_0_45px_16px_rgba(139,92,246,0.28)]" />
+                <span className="relative h-24 w-24 rounded-full bg-gradient-to-br from-violet-400 via-violet-600 to-purple-700 shadow-[0_0_32px_12px_rgba(124,58,237,0.45)]" />
+              </div>
+              <span className="text-sm font-extrabold tracking-[0.35em] text-violet-600">
+                SPEAKING
+              </span>
+            </div>
+          ) : (
+            <div className={`mx-auto flex h-20 w-20 items-center justify-center rounded-full border text-3xl ${
+              isSpeaking
+                ? "border-violet-300 bg-violet-50 animate-pulse"
+                : "border-slate-200 bg-slate-50"
+            }`} aria-hidden="true">
+              {isSpeaking ? "🔊" : "🤖"}
+            </div>
+          )}
+
+          <p className="text-sm font-bold text-slate-600" role="status" aria-live="polite">
+            {warmupStatus}
+          </p>
+          <p className="text-slate-800 font-semibold leading-relaxed">
+            {warmupStarted
+              ? WARMUP_PROMPTS[warmupStep]
+              : "We’ll start with a short conversation before your interview."}
+          </p>
+          <p className="text-slate-500 text-sm">
+            {warmupManualInput
+              ? "Voice input is unavailable right now. You can type a reply below."
+              : "The interviewer will pause after each prompt and listen to your response."}
+          </p>
+
+          {warmupVoiceError && (
+            <p className="text-amber-700 text-sm" role="alert">
+              {warmupVoiceError}
+            </p>
+          )}
+
+          {warmupResponse && (
+            <p className="text-slate-600 text-sm leading-relaxed">
+              {warmupResponse}
+            </p>
+          )}
+
+          {!warmupStarted ? (
+            <button
+              type="button"
+              onClick={() => void beginWarmup()}
+              disabled={warmupStarting}
+              className="w-full py-3 rounded-2xl font-bold text-white bg-violet-700 hover:bg-violet-600 transition disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {warmupStarting ? "Starting..." : "Start Interview"}
+            </button>
+          ) : (
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={toggleWarmupSpeechRecognition}
+                disabled={isSpeaking || warmupTranscribing || warmupSubmitting}
+                aria-pressed={warmupListening}
+                className={`w-full py-3 rounded-2xl font-bold text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                  warmupListening
+                    ? "bg-rose-700 hover:bg-rose-600"
+                    : "bg-violet-700 hover:bg-violet-600"
+                }`}
+              >
+                {warmupListening
+                  ? "Stop and process your response"
+                  : "Retry microphone listening"}
+              </button>
+
               <form
                 onSubmit={(event) => {
                   event.preventDefault();
@@ -5970,40 +6166,60 @@ recognitionRef.current?.stop();
                   onChange={(event) => setWarmupDraft(event.target.value)}
                   maxLength={400}
                   rows={3}
-                  disabled={warmupSubmitting}
-                  aria-label="Your response about how your day has been"
-                  placeholder="Your reply"
-                  className="w-full resize-none rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 placeholder:text-slate-500 focus:border-slate-300 focus:outline-none"
+                  disabled={
+                    isSpeaking ||
+                    warmupListening ||
+                    warmupTranscribing ||
+                    warmupSubmitting
+                  }
+                  aria-label={`Your response for warm welcome question ${warmupStep + 1}`}
+                  placeholder="Or type your reply here"
+                  className="w-full resize-none rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 placeholder:text-slate-500 focus:border-violet-400 focus:outline-none disabled:opacity-50"
                 />
                 <button
                   type="submit"
-                  disabled={!warmupDraft.trim() || warmupSubmitting}
- className="w-full py-3 rounded-2xl font-bold text-white bg-slate-800 hover:opacity-90 transition disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={
+                    !warmupDraft.trim() ||
+                    isSpeaking ||
+                    warmupListening ||
+                    warmupTranscribing ||
+                    warmupSubmitting
+                  }
+                  className="w-full py-3 rounded-2xl font-bold text-white bg-slate-800 hover:opacity-90 transition disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {warmupSubmitting ? "Getting a response..." : "Continue"}
+                  {warmupTranscribing
+                    ? "Transcribing..."
+                    : warmupSubmitting
+                      ? "Processing response..."
+                      : "Send typed reply"}
                 </button>
               </form>
-              {warmupVoiceError && !warmupSubmitting && (
-                <button data-plain
-                  type="button"
-                  onClick={continueWithoutWarmup}
-                  className="text-xs text-slate-500 underline underline-offset-4 hover:text-slate-900 transition"
-                >
-                  Continue to interview
-                </button>
-              )}
-              <button data-plain
+
+              <button
                 type="button"
-                onClick={() => {
-                  void speakText(WARMUP_GREETING).catch((error) =>
-                    console.error("Warm-up prompt speech failed:", error)
-                  );
-                }}
-                className="text-xs text-slate-500 underline underline-offset-4 hover:text-slate-900 transition"
+                onClick={() => void replayWarmupPrompt()}
+                disabled={
+                  isSpeaking ||
+                  warmupListening ||
+                  warmupTranscribing ||
+                  warmupSubmitting
+                }
+                className="text-xs text-slate-500 underline underline-offset-4 hover:text-slate-900 transition disabled:opacity-50"
               >
-                Replay question
+                Replay prompt and listen
               </button>
-          </>
+            </div>
+          )}
+
+          {warmupVoiceError && !warmupSubmitting && (
+            <button
+              type="button"
+              onClick={continueWithoutWarmup}
+              className="text-xs text-slate-500 underline underline-offset-4 hover:text-slate-900 transition"
+            >
+              Continue to interview without the warm welcome
+            </button>
+          )}
         </div>
       </div>
     );
@@ -6239,14 +6455,16 @@ recognitionRef.current?.stop();
   const typing = typedLength < questionText.length;
 
   const assistantStatus = transcribing
-    ? "Transcribing..."
+    ? "Processing / transcribing"
     : processing
-    ? "Evaluating..."
+    ? "Processing answer"
     : isSpeaking
-    ? "Speaking..."
+    ? "AI speaking"
     : isListening
-    ? "Listening..."
-    : "Your turn";
+    ? "Listening to candidate"
+    : phase === "question"
+      ? "Ready for your answer"
+      : "Ready for the next question";
 
   const TOTAL_QUESTIONS = Number(totalQuestions) > 0 ? Number(totalQuestions) : 5;
 
@@ -6300,7 +6518,7 @@ recognitionRef.current?.stop();
   ];
 
   return (
-    <div className="h-screen bg-slate-50 text-slate-800 font-sans overflow-hidden">
+    <div className="min-h-screen bg-white text-slate-900 font-sans lg:h-screen lg:overflow-hidden">
       {/* CAMERA REQUIRED (only when the interviewer turned monitoring on) */}
       {policy.loaded && policy.enabled && !cameraEnabled && (
         <div className="fixed inset-0 z-50 bg-slate-50/95 flex items-center justify-center p-6">
@@ -6328,18 +6546,18 @@ recognitionRef.current?.stop();
         </div>
       )}
 
-      <div className="h-full grid grid-cols-1 lg:grid-cols-[60%_40%]">
+      <div className="min-h-screen lg:h-full grid grid-cols-1 lg:grid-cols-[60%_40%]">
         {/* ================= LEFT ================= */}
-        <section className="h-full flex flex-col gap-3 p-4 md:p-8 min-h-0 overflow-y-auto">
+        <section className="min-h-0 flex flex-col gap-3 p-4 md:p-8 lg:h-full lg:overflow-y-auto">
           {/* LOGO */}
-          <div className="h-[56px] shrink-0 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center gap-2 text-xl font-black">
+          <div className="h-[56px] shrink-0 rounded-2xl border border-slate-200 bg-white shadow-sm flex items-center justify-center gap-2 text-xl font-black">
             <span className="text-slate-700">VOLK</span>
             <span>Ai</span>
             <span className="text-slate-700">HR</span>
           </div>
 
           {/* VIDEO */}
-          <div className="relative flex-1 min-h-[220px] rounded-lg border border-slate-200 bg-white overflow-hidden">
+          <div className="relative flex-none lg:flex-1 min-h-[280px] lg:min-h-[220px] rounded-2xl border border-slate-200 bg-slate-900 shadow-sm overflow-hidden">
             {cameraEnabled ? (
               <video
                 ref={attachVideo}
@@ -6389,7 +6607,7 @@ recognitionRef.current?.stop();
                 {voiceSupported && (
                   <button
                     type="button"
-                    disabled={processing}
+                    disabled={processing || transcribing || isSpeaking}
                     onClick={isListening ? stopAndSubmit : startListening}
                     className={`px-4 py-2 rounded-md text-sm font-semibold shadow-lg backdrop-blur disabled:opacity-50 ${
                       isListening
@@ -6406,11 +6624,11 @@ recognitionRef.current?.stop();
 
           {/* INTERVIEWER + MONITORING */}
           <div className="shrink-0 grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-3">
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 flex flex-col items-center justify-center gap-2">
+            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4 flex flex-col items-center justify-center gap-2">
               <div
-                className={`w-14 h-14 rounded-full flex items-center justify-center text-2xl bg-slate-200 border-2 ${
+                className={`w-14 h-14 rounded-full flex items-center justify-center text-2xl bg-slate-100 border-2 ${
                   isSpeaking
-                    ? "border-slate-300 animate-pulse"
+                    ? "border-violet-500 ring-2 ring-violet-200 animate-pulse"
                     : "border-slate-300"
                 }`}
               >
@@ -6438,7 +6656,7 @@ recognitionRef.current?.stop();
               </select>
             </div>
 
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
               <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
                 Monitoring
               </div>
@@ -6473,7 +6691,7 @@ recognitionRef.current?.stop();
           </div>
 
           {/* CONTROLS */}
-          <div className="shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 flex flex-wrap items-center justify-center gap-3">
+          <div className="shrink-0 rounded-2xl border border-slate-200 bg-white shadow-sm px-4 py-3 flex flex-wrap items-center justify-center gap-3">
             <button
               type="button"
               disabled={policy.enabled}
@@ -6500,23 +6718,23 @@ recognitionRef.current?.stop();
         </section>
 
         {/* ================= RIGHT ================= */}
-        <section className="h-full min-h-0 flex flex-col border-l border-slate-200">
+        <section className="h-[80vh] min-h-[560px] lg:h-full lg:min-h-0 flex flex-col border-l border-slate-200">
           <div className="h-[64px] shrink-0 flex items-center justify-center">
             <h1 className="text-xl font-bold text-slate-900">
               AI Interview Assistant 🤖
             </h1>
           </div>
 
-          <div className="flex-1 min-h-0 mx-5 mb-5 rounded-lg border border-slate-200 bg-slate-50 flex flex-col p-4 gap-3">
+          <div className="flex-1 min-h-0 mx-5 mb-5 rounded-2xl border border-slate-200 bg-white shadow-md flex flex-col p-4 gap-3">
             {/* progress */}
             <div className="shrink-0 flex items-center gap-3 text-xs text-slate-500">
               <span>
                 Question {Math.min(Number(questionNumber) || 1, TOTAL_QUESTIONS)} of{" "}
                 {TOTAL_QUESTIONS}
               </span>
-              <div className="flex-1 h-1.5 rounded bg-slate-50 overflow-hidden">
+              <div className="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
                 <div
-                  className="h-full bg-slate-400 transition-all duration-500"
+                  className="h-full bg-violet-600 transition-all duration-500"
                   style={{ width: `${progress}%` }}
                 />
               </div>
@@ -6524,7 +6742,7 @@ recognitionRef.current?.stop();
             </div>
 
             {/* current question (text appears with the voice) */}
-            <div className="shrink-0 min-h-[96px] rounded-md bg-slate-50 px-5 py-4 text-center text-[15px] leading-relaxed">
+            <div className="shrink-0 min-h-[96px] rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-center text-[15px] leading-relaxed text-slate-900">
               {currentQuestion?.is_follow_up && (
                 <div className="text-[10px] font-bold uppercase tracking-wider text-amber-600 mb-1">
                   Follow-up question
@@ -6536,7 +6754,24 @@ recognitionRef.current?.stop();
 
             {/* status + repeat */}
             <div className="shrink-0 flex justify-end items-center gap-2">
-              <span className="px-4 py-2 rounded-md bg-slate-50 text-sm">
+              {isListening && !isSpeaking && (
+                <div className="flex items-center gap-2" role="status" aria-live="polite">
+                  <span className="relative flex h-9 w-9 items-center justify-center">
+                    <span className="absolute inset-0 rounded-full bg-violet-300/50 animate-ping" />
+                    <span className="relative h-6 w-6 rounded-full bg-gradient-to-br from-violet-400 to-purple-700 shadow-[0_0_18px_6px_rgba(124,58,237,0.45)]" />
+                  </span>
+                  <span className="text-[11px] font-extrabold tracking-[0.2em] text-violet-600">
+                    SPEAKING
+                  </span>
+                </div>
+              )}
+              <span className={`px-4 py-2 rounded-xl border text-sm font-semibold ${
+                isSpeaking
+                  ? "bg-violet-50 border-violet-200 text-violet-700"
+                  : isListening
+                  ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                  : "bg-slate-50 border-slate-200 text-slate-700"
+              }`}>
                 {assistantStatus}
               </span>
             </div>
@@ -6550,13 +6785,13 @@ recognitionRef.current?.stop();
               {previousMessages.map((m, i) =>
                 m.role === "you" ? (
                   <div key={i} className="flex justify-end">
-                    <div className="max-w-[85%] rounded-lg border border-slate-300 bg-slate-100 px-4 py-2.5 text-sm">
+                    <div className="max-w-[85%] rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900">
                       <b>You:</b> {m.text}
                     </div>
                   </div>
                 ) : (
                   <div key={i} className="flex justify-start">
-                    <div className="max-w-[85%] rounded-lg border border-slate-300 bg-slate-100 px-4 py-2.5 text-sm leading-relaxed">
+                    <div className="max-w-[85%] rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm leading-relaxed text-slate-900">
                       <b>Interviewer:</b> {m.text}
                     </div>
                   </div>

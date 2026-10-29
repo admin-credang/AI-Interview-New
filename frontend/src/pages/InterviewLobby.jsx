@@ -436,8 +436,8 @@ function InterviewLobby() {
           
           {/* LEFT: LIVE WEBCAM & AI PROCTORING STATUS (7 Cols) */}
           <div className="lg:col-span-7 space-y-6">
-            <div className="p-6 rounded-3xl bg-white border border-slate-200 backdrop-blur-2xl shadow-2xl relative overflow-hidden group">
- <div className="absolute inset-0 bg-slate-50 pointer-events-none" />
+            <div className="p-6 rounded-3xl bg-white border border-slate-200 backdrop-blur-2xl shadow-md relative isolate overflow-hidden group">
+ <div className="absolute inset-0 -z-10 bg-slate-50 pointer-events-none" />
               
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
@@ -581,8 +581,8 @@ function InterviewLobby() {
 
           {/* RIGHT: READY CHECK INTERACTIVE CARD (5 Cols) */}
           <div className="lg:col-span-5 space-y-6">
-            <div className="p-6 rounded-3xl bg-white border border-slate-200 backdrop-blur-2xl shadow-2xl relative overflow-hidden flex flex-col justify-between h-full">
- <div className="absolute inset-0 bg-slate-50 pointer-events-none" />
+            <div className="p-6 rounded-3xl bg-white border border-slate-200 backdrop-blur-2xl shadow-md relative isolate overflow-hidden flex flex-col justify-between h-full">
+ <div className="absolute inset-0 -z-10 bg-slate-50 pointer-events-none" />
               
               <div>
                 <div className="flex items-center justify-between mb-4">

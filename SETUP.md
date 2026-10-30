@@ -10,7 +10,7 @@ local files or commit secret values.
 Use the following URL settings in `backend/.env`:
 
 ```text
-FRONTEND_URL=http://localhost:5173
+FRONTEND_BASE_URL=http://localhost:5173
 CORS_ORIGINS=http://localhost:5173
 GOOGLE_OAUTH_REDIRECT_URI=http://localhost:8000/google-oauth/callback
 ```
@@ -30,7 +30,7 @@ Configure these backend variables in Vercel. The frontend and backend share a
 Vercel domain, so `/api` is routed to FastAPI by `vercel.json`.
 
 ```text
-FRONTEND_URL=https://ai-interview-version-b.vercel.app
+FRONTEND_BASE_URL=https://ai-interview-version-b.vercel.app
 CORS_ORIGINS=https://ai-interview-version-b.vercel.app
 GOOGLE_OAUTH_REDIRECT_URI=https://ai-interview-version-b.vercel.app/api/google-oauth/callback
 ```
@@ -48,13 +48,13 @@ separately hosted backend, set this to that backend's absolute public HTTPS URL
 and set the backend `CORS_ORIGINS` accordingly. The local `.env.local` value is
 overridden by `.env.production` for production builds.
 Production frontend builds reject `localhost` API URLs, and backend-generated
-links reject a localhost `FRONTEND_URL` on Vercel.
+links reject a localhost `FRONTEND_BASE_URL` on Vercel.
 
 Also configure the application's normal backend variables, including
 `DATABASE_URL`, `SECRET_KEY`, `OPENAI_API_KEY`, and any enabled mail, Dialogflow,
 Google OAuth, and voice integrations. Missing `DATABASE_URL` prevents backend
 startup; Gmail OAuth requires its client ID, client secret, redirect URI, and
-`FRONTEND_URL`.
+`FRONTEND_BASE_URL`.
 
 # Gmail OAuth setup
 

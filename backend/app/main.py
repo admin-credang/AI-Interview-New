@@ -168,7 +168,7 @@ app = FastAPI(
 # =========================================================
 
 frontend_url = (
-    getattr(settings, "frontend_url", "") or ""
+    getattr(settings, "frontend_base_url", "") or ""
 ).strip().rstrip("/")
 
 configured_origins = (

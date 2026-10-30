@@ -96,7 +96,7 @@ export default function GmailConnectCard({ onChange }) {
         {info?.loadError && <p className="text-[11px] text-rose-700 mt-1">{info.loadError}</p>}
         {info && !info.configured && (
           <p className="text-[11px] text-rose-700 mt-1">
-            Server Gmail connection settings are incomplete. Configure the OAuth client keys, redirect URI, and FRONTEND_URL.
+            Server Gmail connection settings are incomplete. Configure the OAuth client keys, redirect URI, and FRONTEND_BASE_URL.
           </p>
         )}
         {error && <p className="text-xs text-rose-600 mt-2">{error}</p>}

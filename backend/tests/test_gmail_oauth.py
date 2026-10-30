@@ -9,9 +9,41 @@ os.environ.setdefault(
 )
 
 from app.services import email_service, gmail_oauth, mailbox
+from app.services.url_config import build_invite_url
 
 
 class GmailOAuthTests(unittest.TestCase):
+    def test_invitation_email_uses_same_url_for_button_and_fallback(self):
+        configurations = (
+            (
+                "http://localhost:5173",
+                "INV-LOCAL-1234",
+                {},
+            ),
+            (
+                "https://ai-interview-version-b.vercel.app",
+                "INV-PROD-1234",
+                {"VERCEL": "1", "VERCEL_ENV": "production"},
+            ),
+        )
+
+        for base_url, code, deployment_env in configurations:
+            with self.subTest(code=code), patch.dict(
+                os.environ,
+                deployment_env,
+                clear=True,
+            ):
+                link = build_invite_url(base_url, code)
+                _, body = email_service.build_invite_email(
+                    "Software Engineer",
+                    link,
+                    monitoring=False,
+                )
+
+                self.assertIn(f"Start your interview here:\n{link}", body)
+                self.assertIn(f'href="{link}"', body.html)
+                self.assertIn("Start your interview", body.html)
+
     @patch.object(gmail_oauth, "_request_json")
     def test_userinfo_uses_bearer_access_token(self, request_json):
         request_json.return_value = {

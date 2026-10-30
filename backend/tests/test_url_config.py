@@ -2,6 +2,7 @@ import os
 import unittest
 from unittest.mock import patch
 
+from app.config import Settings
 from app.services.url_config import (
     FrontendURLConfigurationError,
     build_invite_url,
@@ -11,6 +12,25 @@ from app.services.url_config import (
 
 
 class FrontendURLConfigurationTests(unittest.TestCase):
+    def test_settings_prefer_frontend_base_url_and_accept_legacy_name(self):
+        with patch.dict(
+            os.environ,
+            {
+                "DATABASE_URL": "sqlite://",
+                "FRONTEND_BASE_URL": (
+                    "https://ai-interview-version-b.vercel.app"
+                ),
+                "FRONTEND_URL": "http://localhost:5173",
+            },
+            clear=True,
+        ):
+            settings = Settings(_env_file=None)
+
+        self.assertEqual(
+            settings.frontend_base_url,
+            "https://ai-interview-version-b.vercel.app",
+        )
+
     def test_builds_local_invitation_url(self):
         with patch.dict(os.environ, {}, clear=True):
             self.assertEqual(
@@ -107,6 +127,12 @@ class FrontendURLConfigurationTests(unittest.TestCase):
     def test_rejects_missing_frontend_url(self):
         with self.assertRaises(FrontendURLConfigurationError):
             frontend_base_url("")
+
+    def test_rejects_malformed_frontend_urls(self):
+        for value in ("https://bad host", "https://example.com:invalid"):
+            with self.subTest(value=value):
+                with self.assertRaises(FrontendURLConfigurationError):
+                    frontend_base_url(value)
 
 
 if __name__ == "__main__":

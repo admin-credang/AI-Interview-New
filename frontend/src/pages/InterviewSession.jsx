@@ -598,31 +598,25 @@ const LOOK_DOWN_MARGIN = 0.2; // must be this much below the learned normal
 
 const WARMUP_PROMPTS = [
   "Hi, welcome to your interview! How has your day been so far?",
-  "That's nice to hear! Before we begin, how are you feeling about the interview today?",
-  "That's great! There's no need to feel nervous. Take your time, and just answer naturally. If you need a moment to think, that's completely fine. Are you ready to begin?",
-];
-
-const WARMUP_REPLIES = [
-  WARMUP_PROMPTS[1],
-  WARMUP_PROMPTS[2],
-  "Wonderful! Let's get started. I'll ask you questions based on the role you're applying for, one at a time. Best of luck!",
+  "What do you like to do to relax outside of work or school?",
+  "How are you feeling about today's interview? Take your time, and let me know when you're ready to begin.",
 ];
 
 const CLOSING_SPEECH =
   "Thank you. Your interview is complete. The interviewer will review your answers.";
 
 const YES_WORDS =
-  /\b(yes|yeah|yep|yup|yea|sure|ok|okay|please|definitely|absolutely|go ahead|of course|ask)\b/i;
+  /\b(yes|yeah|yep|yup|yea|sure|ok|okay|please|definitely|absolutely|go ahead|of course|ask|ready)\b/i;
 const NO_WORDS =
-  /\b(no|nope|nah|not|skip|next|don'?t|do not|no thanks|no thank you)\b/i;
+  /\b(no|nope|nah|not ready|don'?t feel ready|do not feel ready|not yet|need more time|later|skip|next|don'?t|do not|no thanks|no thank you)\b/i;
 
 const parseYesNo = (text) => {
   const spoken = String(text || "").trim();
   if (!spoken) return null;
   const yes = YES_WORDS.test(spoken);
   const no = NO_WORDS.test(spoken);
-  if (yes && !no) return "yes";
-  if (no && !yes) return "no";
+  if (no) return "no";
+  if (yes) return "yes";
   return null;
 };
 
@@ -671,12 +665,19 @@ export default function InterviewSession() {
    */
 
   const [phase, setPhase] =
-    useState(() =>
-      getSessionFlag(sessionId, "ready") ||
-      getSessionFlag(sessionId, "warmup_complete")
+    useState(() => {
+      const alreadyReady =
+        getSessionFlag(sessionId, "ready") ||
+        getSessionFlag(sessionId, "warmup_complete");
+
+      if (!alreadyReady) {
+        return "warmup";
+      }
+
+      return getSessionFlag(sessionId, "intro_played")
         ? "loading"
-        : "warmup"
-    );
+        : "intro";
+    });
 
   // becomes true when the candidate says / clicks "Yes"
   const [ready, setReady] =
@@ -715,8 +716,13 @@ export default function InterviewSession() {
   const [warmupListening, setWarmupListening] =
     useState(false);
 
+  const [warmupCandidateSpeaking, setWarmupCandidateSpeaking] =
+    useState(false);
+
   const [warmupTranscribing, setWarmupTranscribing] =
     useState(false);
+
+  const warmupSpeakingTimerRef = useRef(null);
 
   const warmupRecognitionRef =
     useRef(null);
@@ -740,8 +746,9 @@ export default function InterviewSession() {
 
   const warmupRequestInFlightRef = useRef(false);
 
-  // Company introduction: spoken once (voice only, never shown as
-  // text) after "Yes, I'm ready" and before the first question.
+  // The approved introduction is displayed and spoken once per session.
+  const [introText, setIntroText] = useState("");
+
   const [introDone, setIntroDone] =
     useState(() =>
       getSessionFlag(sessionId, "intro_played")
@@ -749,12 +756,6 @@ export default function InterviewSession() {
 
   const introPromiseRef =
     useRef(null);
-
-  // chat transcript shown on the right side ("Previous Questions")
-  const [chatLog, setChatLog] =
-    useState([]);
-
-  const chatEndRef = useRef(null);
 
   // how many characters of the current question are shown so far
   // (the text appears gradually while the AI voice is speaking)
@@ -794,11 +795,6 @@ export default function InterviewSession() {
   const [answer, setAnswer] =
     useState("");
 
-  const [
-    lastAnswer,
-    setLastAnswer,
-  ] = useState("");
-
   const [error, setError] =
     useState("");
 
@@ -833,6 +829,16 @@ export default function InterviewSession() {
     setIsListening,
   ] = useState(false);
 
+  const [recordingActive, setRecordingActive] = useState(false);
+
+  const answerRecordingActive = isListening || recordingActive;
+
+  const [candidateSpeaking, setCandidateSpeaking] =
+    useState(false);
+
+  const candidateSpeakingTimerRef =
+    useRef(null);
+
   const [
     isSpeaking,
     setIsSpeaking,
@@ -841,7 +847,16 @@ export default function InterviewSession() {
   const [
     voiceSupported,
     setVoiceSupported,
-  ] = useState(false);
+  ] = useState(() =>
+    typeof window !== "undefined" &&
+    Boolean(
+      window.SpeechRecognition ||
+      window.webkitSpeechRecognition ||
+      canRecordAudio()
+    )
+  );
+
+  const [textFallback, setTextFallback] = useState(false);
 
   const [
     transcribing,
@@ -1300,6 +1315,9 @@ export default function InterviewSession() {
   const mainSilenceTimerRef =
     useRef(null);
 
+  const finishAnswerPendingRef =
+    useRef(false);
+
   // Voice follow-up confirmation helpers
   const phaseRef =
     useRef("");
@@ -1412,6 +1430,10 @@ export default function InterviewSession() {
         clearTimeout(mainSilenceTimerRef.current);
         mainSilenceTimerRef.current = null;
       }
+      if (candidateSpeakingTimerRef.current) {
+        clearTimeout(candidateSpeakingTimerRef.current);
+        candidateSpeakingTimerRef.current = null;
+      }
 
       /*
        * Stop speech recognition
@@ -1429,6 +1451,7 @@ recognitionRef.current.stop();
        * Stop answer audio recording
        */
       recorderRef.current?.cancel();
+      setRecordingActive(false);
 
       /*
        * Stop camera
@@ -1693,6 +1716,10 @@ recognitionRef.current.stop();
       warmupRecognitionRef.current = null;
       warmupListeningRef.current = false;
       warmupRecorderRef.current?.cancel();
+      if (warmupSpeakingTimerRef.current) {
+        clearTimeout(warmupSpeakingTimerRef.current);
+        warmupSpeakingTimerRef.current = null;
+      }
 
       if (
         faceLandmarkerRef.current
@@ -1730,18 +1757,23 @@ recognitionRef.current.stop();
           generation === speechGenerationRef.current;
 
         const browserFallback = () =>
-          new Promise((resolve) => {
-            if (!isCurrent() || !window.speechSynthesis) {
+          new Promise((resolve, reject) => {
+            if (!isCurrent()) {
               resolve();
+              return;
+            }
+            if (!window.speechSynthesis) {
+              reject(new Error("Speech synthesis is unavailable."));
               return;
             }
 
             let settled = false;
             let utterance;
-            const finish = () => {
+            const finish = (error) => {
               if (settled) {
                 return;
               }
+
               settled = true;
               if (utterance) {
                 utterance.onstart = null;
@@ -1754,7 +1786,11 @@ recognitionRef.current.stop();
               if (isCurrent()) {
                 setIsSpeaking(false);
               }
-              resolve();
+              if (error) {
+                reject(error);
+              } else {
+                resolve();
+              }
             };
 
             speechCancelRef.current = finish;
@@ -1767,11 +1803,12 @@ recognitionRef.current.stop();
                 }
               };
               utterance.onend = finish;
-              utterance.onerror = finish;
+              utterance.onerror = () =>
+                finish(new Error("Browser speech playback failed."));
               window.speechSynthesis.speak(utterance);
             } catch (error) {
               console.warn("Browser speech fallback failed.", error);
-              finish();
+              finish(error);
             }
           });
 
@@ -1906,7 +1943,7 @@ recognitionRef.current.stop();
   const confirmReady = useCallback(() => {
     setSessionFlag(sessionId, "ready");
     setReady(true);
-    setPhase("loading");
+    setPhase("intro");
   }, [sessionId]);
 
   const finishWarmup = useCallback(
@@ -1939,25 +1976,52 @@ recognitionRef.current.stop();
       let replyPlayed = false;
 
       try {
-        const response = WARMUP_REPLIES[step];
-        setWarmupResponse(response);
-        await speakText(response);
+        const warmupResponse = await api.post(
+          `/interviews/${interviewId}/warmup-response`,
+          {
+            session_id: sessionId,
+            answer: cleanReply,
+          }
+        );
+        const acknowledgment = String(
+          warmupResponse?.data?.text || ""
+        ).trim();
+
+        if (!acknowledgment) {
+          throw new Error("The warm-up response was empty.");
+        }
+
+        const finalStep = step === WARMUP_PROMPTS.length - 1;
+        const readyConfirmed =
+          finalStep && parseYesNo(cleanReply) === "yes";
+        const spoken = finalStep
+          ? readyConfirmed
+            ? `${acknowledgment} Wonderful! Let's get started. I'll ask you questions based on the role you're applying for, one at a time.`
+            : `${acknowledgment} Take your time. Are you ready to begin?`
+          : `${acknowledgment} ${WARMUP_PROMPTS[step + 1]}`;
+
+        setWarmupResponse(spoken);
+        await speakText(spoken);
         replyPlayed = true;
 
-        if (step === WARMUP_REPLIES.length - 1) {
+        if (readyConfirmed) {
           warmupHandledRef.current = true;
           setSessionFlag(sessionId, "warmup_complete");
           confirmReady();
-        } else {
+        } else if (!finalStep) {
           warmupStepRef.current = step + 1;
           setWarmupStep(step + 1);
+          setWarmupDraft("");
+        } else {
           setWarmupDraft("");
         }
       } catch (error) {
         console.error("Warm-up response playback failed:", error);
         if (mountedRef.current) {
           setWarmupVoiceError(
-            "The interviewer could not finish speaking. Retry the response or continue with text."
+            error?.response?.data?.detail ||
+              error?.message ||
+              "The response could not be prepared or spoken. Retry or type your reply."
           );
         }
       } finally {
@@ -1975,7 +2039,7 @@ recognitionRef.current.stop();
         }
       }
     },
-    [confirmReady, sessionId, speakText],
+    [confirmReady, interviewId, sessionId, speakText],
   );
 
   const continueWithoutWarmup = useCallback(() => {
@@ -1986,6 +2050,7 @@ recognitionRef.current.stop();
     }
     warmupRecognitionRef.current = null;
     warmupListeningRef.current = false;
+    setWarmupCandidateSpeaking(false);
     setWarmupListening(false);
     warmupRecorderRef.current?.cancel();
     setWarmupRecording(false);
@@ -2005,6 +2070,7 @@ recognitionRef.current.stop();
     }
 
     warmupListeningRef.current = true;
+    setWarmupCandidateSpeaking(false);
     const SpeechRecognitionApi =
       window.SpeechRecognition ||
       window.webkitSpeechRecognition;
@@ -2060,6 +2126,14 @@ recognitionRef.current.stop();
         .join(" ")
         .trim();
       setWarmupDraft(transcript);
+      setWarmupCandidateSpeaking(true);
+      if (warmupSpeakingTimerRef.current) {
+        clearTimeout(warmupSpeakingTimerRef.current);
+      }
+      warmupSpeakingTimerRef.current = setTimeout(
+        () => setWarmupCandidateSpeaking(false),
+        700
+      );
     };
 
     recognition.onerror = (event) => {
@@ -2069,6 +2143,11 @@ recognitionRef.current.stop();
 
       failed = true;
       warmupListeningRef.current = false;
+      setWarmupCandidateSpeaking(false);
+      if (warmupSpeakingTimerRef.current) {
+        clearTimeout(warmupSpeakingTimerRef.current);
+        warmupSpeakingTimerRef.current = null;
+      }
       warmupRecorderRef.current?.cancel();
       setWarmupRecording(false);
       setWarmupListening(false);
@@ -2088,6 +2167,11 @@ recognitionRef.current.stop();
       }
       warmupListeningRef.current = false;
       setWarmupListening(false);
+      setWarmupCandidateSpeaking(false);
+      if (warmupSpeakingTimerRef.current) {
+        clearTimeout(warmupSpeakingTimerRef.current);
+        warmupSpeakingTimerRef.current = null;
+      }
 
       if (failed || warmupRequestInFlightRef.current) {
         return;
@@ -2330,8 +2414,13 @@ recognitionRef.current.stop();
 
         setAnswer("");
 
-        setLastAnswer("");
         latestSpeechRef.current = "";
+        speechBaseRef.current = "";
+        userEditedRef.current = false;
+        recorderRef.current?.cancel();
+        setRecordingActive(false);
+        setTextFallback(false);
+        finishAnswerPendingRef.current = false;
         if (mainSilenceTimerRef.current) {
           clearTimeout(mainSilenceTimerRef.current);
           mainSilenceTimerRef.current = null;
@@ -2766,8 +2855,14 @@ recognitionRef.current.stop();
           );
 
           setAnswer("");
-
-          setLastAnswer("");
+          latestSpeechRef.current = "";
+          speechBaseRef.current = "";
+          userEditedRef.current = false;
+          setTextFallback(false);
+          if (mainSilenceTimerRef.current) {
+            clearTimeout(mainSilenceTimerRef.current);
+            mainSilenceTimerRef.current = null;
+          }
 
           setFollowUpQuestion(null);
 
@@ -2871,9 +2966,8 @@ recognitionRef.current.stop();
    * COMPANY INTRODUCTION (VOICE ONLY)
    * ============================================================
    * The interviewer-approved text is fetched while the warm welcome is
-   * in progress, so there is no wait. It is only SPOKEN - it is never
-   * put on the screen. If nothing is approved, or the request
-   * fails, the interview starts exactly as before.
+   * in progress, then shown and spoken before the first question.
+   * If no introduction is approved, the interview can proceed without it.
    */
   useEffect(() => {
     introPromiseRef.current = api
@@ -2884,6 +2978,7 @@ recognitionRef.current.stop();
         const d = res?.data || {};
 
         if (!d.available || !d.text) {
+          setIntroText("");
           return "";
         }
 
@@ -2903,9 +2998,13 @@ recognitionRef.current.stop();
             " Let's continue to the interview. Let's start with your brief introduction.";
         }
 
+        setIntroText(spoken);
         return spoken;
       })
-      .catch(() => "");
+      .catch((error) => {
+        console.error("Company introduction request failed:", error);
+        return null;
+      });
   }, [interviewId]);
 
   useEffect(() => {
@@ -2933,10 +3032,17 @@ recognitionRef.current.stop();
     }
 
     (async () => {
-      const text =
-        (await introPromiseRef.current) || "";
+      const text = await introPromiseRef.current;
 
       if (cancelled) {
+        return;
+      }
+
+      if (text === null) {
+        setError(
+          "The company introduction could not be loaded. Retry the connection before starting the interview."
+        );
+        setPhase("error");
         return;
       }
 
@@ -2944,8 +3050,6 @@ recognitionRef.current.stop();
         finish();
         return;
       }
-
-      setPhase("intro");
 
       // Let the greeting cleanup finish before starting another voice.
       setTimeout(() => {
@@ -2957,7 +3061,12 @@ recognitionRef.current.stop();
           .then(finish)
           .catch((error) => {
             console.error("Company introduction speech failed:", error);
-            finish();
+            if (mountedRef.current) {
+              setError(
+                "The company introduction could not be played. Retry the interview to try again."
+              );
+              setPhase("error");
+            }
           });
       }, 150);
     })();
@@ -3009,44 +3118,6 @@ recognitionRef.current.stop();
     return () => clearInterval(timer);
   }, [currentQuestion?.question]);
 
-  /*
-   * ============================================================
-   * CHAT TRANSCRIPT
-   * ============================================================
-   */
-  useEffect(() => {
-    const text = currentQuestion?.question;
-
-    if (!text) {
-      return;
-    }
-
-    setChatLog((log) => {
-      const last = log[log.length - 1];
-
-      if (last && last.role === "ai" && last.text === text) {
-        return log;
-      }
-
-      return [...log, { role: "ai", text }];
-    });
-  }, [currentQuestion]);
-
-  useEffect(() => {
-    if (!lastAnswer) {
-      return;
-    }
-
-    setChatLog((log) => [
-      ...log,
-      { role: "you", text: lastAnswer },
-    ]);
-  }, [lastAnswer]);
-
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatLog]);
-
   useEffect(() => {
     // wait until the candidate says / clicks "Yes" AND the
     // company introduction (if any) has finished
@@ -3058,7 +3129,6 @@ recognitionRef.current.stop();
 
     async function initializeInterview() {
       try {
-        setPhase("loading");
         setError("");
 
         const response =
@@ -3266,6 +3336,7 @@ recognitionRef.current.stop();
 
           const blob =
             await recorderRef.current.stop();
+          setRecordingActive(false);
 
           if (
             blob &&
@@ -3312,9 +3383,9 @@ recognitionRef.current.stop();
 
           if (mountedRef.current) {
             setProcessing(false);
-
+            setTextFallback(true);
             setError(
-              "Please provide an answer before submitting."
+              "No speech was recognized. Retry the microphone or enter your answer below."
             );
           }
 
@@ -3340,10 +3411,6 @@ recognitionRef.current.stop();
         }
 
         setError("");
-
-        setLastAnswer(
-          cleanAnswer
-        );
 
         if (
           recognitionRef.current
@@ -3442,6 +3509,7 @@ recognitionRef.current.stop();
               err?.message ||
               "Failed to process answer."
           );
+          setTextFallback(true);
 
           setProcessing(false);
         } finally {
@@ -3727,6 +3795,9 @@ recognitionRef.current.stop();
         mountedRef.current
       ) {
         setIsListening(true);
+        setCandidateSpeaking(false);
+        setError("");
+        setTextFallback(false);
       }
     };
 
@@ -3812,6 +3883,15 @@ recognitionRef.current.stop();
         spoken &&
         mountedRef.current
       ) {
+        setCandidateSpeaking(true);
+        if (candidateSpeakingTimerRef.current) {
+          clearTimeout(candidateSpeakingTimerRef.current);
+        }
+        candidateSpeakingTimerRef.current = setTimeout(
+          () => setCandidateSpeaking(false),
+          700
+        );
+
         const base =
           speechBaseRef.current;
 
@@ -3858,10 +3938,17 @@ recognitionRef.current.stop();
     recognition.onerror = (
       event
     ) => {
+      if (event?.error === "aborted") {
+        return;
+      }
+
       console.error(
         "Speech recognition error:",
         event
       );
+
+      wantListeningRef.current = false;
+      setTextFallback(true);
 
       if (
         event?.error ===
@@ -3871,19 +3958,27 @@ recognitionRef.current.stop();
       ) {
         wantListeningRef.current = false;
         recorderRef.current?.cancel();
+        setRecordingActive(false);
+        setIsListening(false);
         setError(
-          "Microphone permission was denied. Allow microphone access or type your answer."
+          "Microphone permission was denied. Allow microphone access or enter your answer below."
         );
       } else if (mountedRef.current) {
+        setRecordingActive(Boolean(recorderRef.current?.isActive()));
         setError(
-          "Speech recognition stopped unexpectedly. Your recording can still be submitted, or you can type your answer."
+          recorderRef.current?.isActive()
+            ? "Speech recognition stopped. Finish your recording or enter your answer below."
+            : "Speech recognition stopped. Retry the microphone or enter your answer below."
         );
       }
 
-      if (
-        mountedRef.current
-      ) {
-        setIsListening(false);
+      if (mountedRef.current) {
+        setIsListening(Boolean(recorderRef.current?.isActive()));
+        setCandidateSpeaking(false);
+      }
+      if (candidateSpeakingTimerRef.current) {
+        clearTimeout(candidateSpeakingTimerRef.current);
+        candidateSpeakingTimerRef.current = null;
       }
     };
 
@@ -3966,6 +4061,11 @@ recognitionRef.current.stop();
         recognition.stop();
       } catch {}
 
+      if (candidateSpeakingTimerRef.current) {
+        clearTimeout(candidateSpeakingTimerRef.current);
+        candidateSpeakingTimerRef.current = null;
+      }
+
       recognitionRef.current =
         null;
     };
@@ -3991,6 +4091,8 @@ recognitionRef.current.stop();
         return;
       }
 
+      setError("");
+      setCandidateSpeaking(false);
       wantListeningRef.current =
         phaseRef.current ===
         "question";
@@ -4002,21 +4104,25 @@ recognitionRef.current.stop();
         if (canRecordAudio()) {
           const recordingStarted =
             await recorderRef.current.start();
+          setRecordingActive(recordingStarted);
 
           if (!recordingStarted && !recognitionRef.current) {
+            setTextFallback(true);
             setError(
-              "Microphone recording could not start. Check microphone permission or type your answer instead."
+              "Microphone recording could not start. Check microphone permission or enter your answer below."
             );
             return;
           }
 
           if (!recordingStarted) {
+            setTextFallback(true);
             setError(
-              "Audio recording is unavailable. You can continue with the live transcript or type your answer."
+              "Audio recording is unavailable. You can continue with live speech recognition or enter your answer below."
             );
           } else if (!recognitionRef.current) {
             setError("");
             setIsListening(true);
+            setTextFallback(false);
           }
         }
       }
@@ -6059,12 +6165,14 @@ recognitionRef.current?.stop();
   if (phase === "warmup") {
     const warmupStatus = isSpeaking
       ? "AI SPEAKING"
+      : warmupCandidateSpeaking
+        ? "SPEAKING"
       : warmupTranscribing
         ? "PROCESSING / TRANSCRIBING"
         : warmupSubmitting
           ? "PROCESSING RESPONSE"
           : warmupListening
-            ? "LISTENING TO CANDIDATE"
+            ? "LISTENING"
             : warmupStarted
               ? "READY FOR YOUR RESPONSE"
               : "READY TO BEGIN";
@@ -6080,7 +6188,7 @@ recognitionRef.current?.stop();
             WARM WELCOME · {warmupStep + 1} OF 3
           </div>
 
-          {warmupListening && !isSpeaking ? (
+          {warmupCandidateSpeaking && !isSpeaking ? (
             <div className="flex flex-col items-center gap-3 py-2" role="status" aria-live="polite">
               <div className="relative flex h-36 w-36 items-center justify-center">
                 <span className="absolute inset-0 rounded-full bg-violet-300/40 animate-ping" />
@@ -6220,51 +6328,6 @@ recognitionRef.current?.stop();
               Continue to interview without the warm welcome
             </button>
           )}
-        </div>
-      </div>
-    );
-  }
-
-  if (phase === "intro") {
-    return (
-      <div className="min-h-screen bg-white text-slate-800 flex items-center justify-center p-6 relative overflow-hidden font-sans">
-        <div className="max-w-lg w-full bg-white border border-slate-200 backdrop-blur-2xl p-8 rounded-3xl text-center space-y-6 shadow-2xl relative z-10">
-          <div className="w-16 h-16 bg-slate-100 border border-slate-300 rounded-2xl flex items-center justify-center text-3xl mx-auto animate-pulse">
-            🤖
-          </div>
-
-          <h1 className="text-2xl font-bold text-slate-900">
-            A quick introduction
-          </h1>
-
-          <p className="text-slate-600 text-sm leading-relaxed">
-            Please listen. Your interviewer is introducing the company.
-            Your first question comes right after.
-          </p>
-
-          <div className="flex items-end justify-center gap-1.5 h-8" aria-hidden="true">
-            {[0, 1, 2, 3, 4].map((i) => (
-              <span
-                key={i}
-                className="w-1.5 rounded-full bg-slate-800 animate-pulse"
-                style={{
-                  height: `${12 + ((i * 7) % 5) * 5}px`,
-                  animationDelay: `${i * 120}ms`,
-                }}
-              />
-            ))}
-          </div>
-
-          <button data-plain
-            type="button"
-            onClick={() => {
-              cancelSpeech();
-              setIntroDone(true);
-            }}
-            className="text-xs text-slate-500 underline underline-offset-4 hover:text-slate-900 transition"
-          >
-            Skip introduction
-          </button>
         </div>
       </div>
     );
@@ -6418,7 +6481,21 @@ recognitionRef.current?.stop();
    * (small delay so the last spoken words are captured first)
    */
   const stopAndSubmit = () => {
+    if (
+      processingRef.current ||
+      finishAnswerPendingRef.current ||
+      completedRef.current ||
+      terminatedRef.current
+    ) {
+      return;
+    }
+
+    finishAnswerPendingRef.current = true;
     wantListeningRef.current = false;
+    if (mainSilenceTimerRef.current) {
+      clearTimeout(mainSilenceTimerRef.current);
+      mainSilenceTimerRef.current = null;
+    }
 
     try {
       recognitionRef.current?.stop();
@@ -6427,6 +6504,7 @@ recognitionRef.current?.stop();
     // small delay so the last live words settle, then the full
     // recording is transcribed on the server and submitted
     setTimeout(() => {
+      finishAnswerPendingRef.current = false;
       if (
         mountedRef.current &&
         !processingRef.current &&
@@ -6442,26 +6520,19 @@ recognitionRef.current?.stop();
     }, 400);
   };
 
-  const lastAiIndex = chatLog.reduce(
-    (found, m, i) => (m.role === "ai" ? i : found),
-    -1
-  );
-
-  const previousMessages = chatLog.filter(
-    (_m, i) => i !== lastAiIndex
-  );
-
   const questionText = currentQuestion?.question || "";
   const typing = typedLength < questionText.length;
 
   const assistantStatus = transcribing
-    ? "Processing / transcribing"
+    ? "Processing answer"
     : processing
     ? "Processing answer"
     : isSpeaking
-    ? "AI speaking"
-    : isListening
-    ? "Listening to candidate"
+    ? "Speaking"
+    : candidateSpeaking
+    ? "Listening"
+    : isListening || recordingActive
+    ? "Listening"
     : phase === "question"
       ? "Ready for your answer"
       : "Ready for the next question";
@@ -6595,29 +6666,20 @@ recognitionRef.current?.stop();
               />
             )}
 
-            {/* RECORDING BUTTONS ON TOP OF THE VIDEO */}
-            {phase !== "followup-confirmation" && (
-              <div className="absolute bottom-3 left-0 right-0 z-10 flex flex-wrap items-center justify-center gap-3 px-3">
-                {isListening && (
-                  <span className="px-2 py-1 rounded bg-rose-600/90 text-[10px] font-bold animate-pulse">
-                    ● REC
-                  </span>
-                )}
-
-                {voiceSupported && (
-                  <button
-                    type="button"
-                    disabled={processing || transcribing || isSpeaking}
-                    onClick={isListening ? stopAndSubmit : startListening}
-                    className={`px-4 py-2 rounded-md text-sm font-semibold shadow-lg backdrop-blur disabled:opacity-50 ${
-                      isListening
-                        ? "bg-rose-600 hover:bg-rose-500 text-white"
-                        : "bg-emerald-600 hover:bg-emerald-500 text-white"
-                    }`}
-                  >
-                    🎤 {transcribing ? "Transcribing..." : processing ? "Submitting..." : isListening ? "Stop Recording" : "Start Recording"}
-                  </button>
-                )}
+            {/* RECORDING STATUS */}
+            {phase === "question" && (
+              <div className="absolute bottom-3 left-3 z-10 flex items-center gap-2">
+                <span className={`px-2 py-1 rounded text-[10px] font-bold shadow ${
+                  answerRecordingActive
+                    ? "bg-rose-600/90 text-white"
+                    : "bg-slate-800/80 text-white"
+                }`}>
+                  {transcribing
+                    ? "PROCESSING"
+                    : answerRecordingActive
+                      ? "● REC"
+                      : "MICROPHONE OFF"}
+                </span>
               </div>
             )}
           </div>
@@ -6726,6 +6788,17 @@ recognitionRef.current?.stop();
           </div>
 
           <div className="flex-1 min-h-0 mx-5 mb-5 rounded-2xl border border-slate-200 bg-white shadow-md flex flex-col p-4 gap-3">
+            {introText && phase === "intro" && !currentQuestion && (
+              <section className="shrink-0 max-h-32 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <h2 className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-600">
+                  Company introduction
+                </h2>
+                <p className="text-sm leading-relaxed text-slate-700">
+                  {introText}
+                </p>
+              </section>
+            )}
+
             {/* progress */}
             <div className="shrink-0 flex items-center gap-3 text-xs text-slate-500">
               <span>
@@ -6748,13 +6821,16 @@ recognitionRef.current?.stop();
                   Follow-up question
                 </div>
               )}
-              Interviewer: "{questionText.slice(0, typedLength)}
-              {typing ? "▍" : ""}"
+              {currentQuestion
+                ? `${questionText.slice(0, typedLength)}${typing ? "▍" : ""}`
+                : phase === "intro"
+                  ? "Your interview is starting."
+                  : "Preparing your first question..."}
             </div>
 
-            {/* status + repeat */}
+            {/* interview status */}
             <div className="shrink-0 flex justify-end items-center gap-2">
-              {isListening && !isSpeaking && (
+              {candidateSpeaking && !isSpeaking && (
                 <div className="flex items-center gap-2" role="status" aria-live="polite">
                   <span className="relative flex h-9 w-9 items-center justify-center">
                     <span className="absolute inset-0 rounded-full bg-violet-300/50 animate-ping" />
@@ -6768,7 +6844,7 @@ recognitionRef.current?.stop();
               <span className={`px-4 py-2 rounded-xl border text-sm font-semibold ${
                 isSpeaking
                   ? "bg-violet-50 border-violet-200 text-violet-700"
-                  : isListening
+                  : answerRecordingActive
                   ? "bg-emerald-50 border-emerald-200 text-emerald-700"
                   : "bg-slate-50 border-slate-200 text-slate-700"
               }`}>
@@ -6776,30 +6852,35 @@ recognitionRef.current?.stop();
               </span>
             </div>
 
-            <h3 className="shrink-0 text-slate-700 font-bold text-sm">
-              Previous Questions:
-            </h3>
-
-            {/* transcript */}
-            <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-1">
-              {previousMessages.map((m, i) =>
-                m.role === "you" ? (
-                  <div key={i} className="flex justify-end">
-                    <div className="max-w-[85%] rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900">
-                      <b>You:</b> {m.text}
-                    </div>
-                  </div>
-                ) : (
-                  <div key={i} className="flex justify-start">
-                    <div className="max-w-[85%] rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm leading-relaxed text-slate-900">
-                      <b>Interviewer:</b> {m.text}
-                    </div>
-                  </div>
-                )
+            <section className="flex-1 min-h-0 overflow-y-auto rounded-xl border border-slate-200 bg-white p-3">
+              <h3 className="mb-2 text-sm font-bold text-slate-700">
+                {textFallback || !voiceSupported
+                  ? "Text answer fallback"
+                  : "Live transcript"}
+              </h3>
+              {(textFallback || !voiceSupported) && phase === "question" ? (
+                <textarea
+                  id="candidate-answer"
+                  value={answer}
+                  onChange={(event) => {
+                    userEditedRef.current = true;
+                    latestSpeechRef.current = event.target.value;
+                    setAnswer(event.target.value);
+                  }}
+                  disabled={processing || transcribing}
+                  rows={4}
+                  placeholder="Enter your answer if voice input is unavailable."
+                  className="min-h-24 w-full resize-y rounded-md bg-slate-50 border border-slate-200 px-4 py-3 focus:border-slate-400 outline-none text-sm placeholder-slate-500 disabled:opacity-70"
+                />
+              ) : (
+                <p className="min-h-20 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
+                  {answer ||
+                    (answerRecordingActive
+                      ? "Listening for your answer..."
+                      : "Your recognized answer will appear here.")}
+                </p>
               )}
-
-              <div ref={chatEndRef} />
-            </div>
+            </section>
 
             {error && (
               <div className="shrink-0 p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-700 text-xs">
@@ -6807,7 +6888,7 @@ recognitionRef.current?.stop();
               </div>
             )}
 
-            {/* follow-up offer OR typed answer */}
+            {/* follow-up offer or voice answer controls */}
             {phase === "followup-confirmation" ? (
               <div className="shrink-0 space-y-3">
                 <p className="text-sm text-slate-600 text-center">
@@ -6837,36 +6918,55 @@ recognitionRef.current?.stop();
                   </button>
                 </div>
               </div>
-            ) : (
-              <div className="shrink-0 flex gap-2">
-                <input
-                  value={answer}
-                  onChange={(event) => {
-                    userEditedRef.current = true;
-                    setAnswer(event.target.value);
-                  }}
-                  onKeyDown={(event) => {
-                    if (
-                      event.key === "Enter" &&
-                      answer.trim() &&
-                      !processing
-                    ) {
-                      submitAnswerWithText(answer);
+            ) : phase === "question" ? (
+              <div className="shrink-0 space-y-2">
+                {voiceSupported && (
+                  <button
+                    type="button"
+                    disabled={processing || transcribing || isSpeaking}
+                    onClick={
+                      answerRecordingActive
+                        ? stopAndSubmit
+                        : startListening
                     }
-                  }}
-                  disabled={processing}
-                  placeholder="Speak, or type your answer here..."
-                  className="flex-1 px-4 py-3 rounded-md bg-slate-50 border border-slate-200 focus:border-slate-400 outline-none text-sm placeholder-slate-500 disabled:opacity-50"
-                />
+                    className={`w-full rounded-md px-5 py-3 font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed ${
+                      answerRecordingActive
+                        ? "bg-violet-700 text-white hover:bg-violet-600"
+                        : "bg-slate-200 text-slate-800 hover:bg-slate-300"
+                    }`}
+                  >
+                    {transcribing
+                      ? "Processing answer..."
+                      : processing
+                        ? "Processing answer..."
+                        : answerRecordingActive
+                          ? "Finish Answer"
+                          : "Retry Microphone"}
+                  </button>
+                )}
 
-                <button
-                  disabled={processing || (!answer.trim() && !isListening)}
-                  onClick={() => submitAnswerWithText(answer)}
-                  className="px-5 rounded-md bg-slate-300 hover:bg-slate-500 text-white font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {processing ? "..." : "Send"}
-                </button>
+                {(textFallback || !voiceSupported) && (
+                  <div>
+                    <button
+                      type="button"
+                      disabled={
+                        processing ||
+                        transcribing ||
+                        !answer.trim() ||
+                        answerRecordingActive
+                      }
+                      onClick={() => submitAnswerWithText(answer)}
+                      className="w-full rounded-md bg-slate-700 px-5 py-3 text-white font-semibold text-sm hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {processing ? "Processing answer..." : "Submit answer"}
+                    </button>
+                  </div>
+                )}
               </div>
+            ) : (
+              <p className="shrink-0 text-center text-xs text-slate-500" role="status">
+                The first interview question will appear shortly.
+              </p>
             )}
           </div>
         </section>

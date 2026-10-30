@@ -33,6 +33,7 @@ from app.services.company_intro_service import (
     CompanyIntroError,
     build_intro_from_url,
     clean_intro_text,
+    summarize_company_intro,
     validate_public_url,
 )
 from app.services.interview_policy import (
@@ -323,6 +324,6 @@ def get_intro_for_voice(
 
     return {
         "available": True,
-        "text": intro["text"],
+        "text": summarize_company_intro(intro["text"], role),
         "role": role,
     }

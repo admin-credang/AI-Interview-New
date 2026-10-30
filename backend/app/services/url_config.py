@@ -2,6 +2,7 @@
 
 import ipaddress
 import os
+import re
 from urllib.parse import urlparse
 
 
@@ -36,33 +37,65 @@ def _is_local_host(host: str) -> bool:
     )
 
 
+def _is_valid_host(host: str) -> bool:
+    if not host or len(host) > 253:
+        return False
+
+    try:
+        ipaddress.ip_address(host)
+        return True
+    except ValueError:
+        pass
+
+    labels = host.rstrip(".").split(".")
+    return all(
+        label
+        and len(label) <= 63
+        and re.fullmatch(
+            r"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?",
+            label,
+        )
+        for label in labels
+    )
+
+
 def frontend_base_url(configured_url: str | None) -> str:
     value = str(configured_url or "").strip().rstrip("/")
     if not value:
         raise FrontendURLConfigurationError(
-            "FRONTEND_URL is not configured on the backend."
+            "FRONTEND_BASE_URL is not configured on the backend."
         )
 
-    parsed = urlparse(value)
+    try:
+        parsed = urlparse(value)
+        host = (parsed.hostname or "").lower().rstrip(".")
+        port = parsed.port
+    except ValueError as exc:
+        raise FrontendURLConfigurationError(
+            "FRONTEND_BASE_URL must be a valid absolute HTTP or HTTPS URL."
+        ) from exc
+
     if (
         parsed.scheme not in {"http", "https"}
         or not parsed.netloc
+        or not _is_valid_host(host)
+        or any(character.isspace() for character in value)
+        or (port is not None and not 1 <= port <= 65535)
         or parsed.username
         or parsed.password
         or parsed.query
         or parsed.fragment
     ):
         raise FrontendURLConfigurationError(
-            "FRONTEND_URL must be an absolute HTTP or HTTPS URL without "
-            "credentials, a query, or a fragment."
+            "FRONTEND_BASE_URL must be a valid absolute HTTP or HTTPS URL "
+            "without credentials, a query, or a fragment."
         )
 
-    host = (parsed.hostname or "").lower()
     if is_vercel_deployment() and (
         _is_local_host(host) or parsed.scheme != "https"
     ):
         raise FrontendURLConfigurationError(
-            "FRONTEND_URL must use the public HTTPS frontend URL on Vercel."
+            "FRONTEND_BASE_URL must use the public HTTPS frontend URL on Vercel."
         )
 
     return value
@@ -108,7 +141,7 @@ def google_oauth_redirect_uri(
         if parsed.path.startswith("/api/") and host != frontend_host:
             raise FrontendURLConfigurationError(
                 "A Vercel /api OAuth callback must use the same host as "
-                "FRONTEND_URL."
+                "FRONTEND_BASE_URL."
             )
 
     return value

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -54,7 +55,13 @@ class Settings(BaseSettings):
     google_oauth_redirect_uri: str = ""
     # extra allowed browser origins (comma separated), e.g. the Vercel URL
     cors_origins: str = ""
-    frontend_url: str = ""
+    frontend_base_url: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "FRONTEND_BASE_URL",
+            "FRONTEND_URL",
+        ),
+    )
 
     # =========================================================
     # SETTINGS

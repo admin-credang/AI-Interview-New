@@ -26,7 +26,7 @@ router = APIRouter(prefix="/google-oauth", tags=["Gmail OAuth"])
 
 def _configured_frontend_base_url() -> str:
     try:
-        return frontend_base_url(settings.frontend_url)
+        return frontend_base_url(settings.frontend_base_url)
     except FrontendURLConfigurationError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
@@ -80,7 +80,7 @@ def connect_url(current_user: User = Depends(get_current_user)):
     try:
         google_oauth_redirect_uri(
             settings.google_oauth_redirect_uri,
-            settings.frontend_url,
+            settings.frontend_base_url,
         )
     except FrontendURLConfigurationError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc

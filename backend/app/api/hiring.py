@@ -112,7 +112,7 @@ def _num(value):
 
 def _configured_frontend_base_url() -> str:
     try:
-        return frontend_base_url(settings.frontend_url)
+        return frontend_base_url(settings.frontend_base_url)
     except FrontendURLConfigurationError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -1218,7 +1218,7 @@ def _local_link_warning(base: str) -> str | None:
     ):
         return (
             f"The interview link in the e-mail points to {base}, so it "
-            "opens only on this computer. Set FRONTEND_URL in the backend "
+            "opens only on this computer. Set FRONTEND_BASE_URL in the backend "
             ".env to your public (https) site address, then invite again."
         )
 

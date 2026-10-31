@@ -1,11 +1,15 @@
 
-from uuid import UUID
+import os
+import json
+import base64
 import logging
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
 from fastapi.responses import Response
 from google.cloud import texttospeech
+from google.oauth2 import service_account
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -31,8 +35,64 @@ router = APIRouter(
     tags=["Interview Speech"],
 )
 
+
 class SpeechRequest(BaseModel):
     text: str = Field(min_length=1, max_length=3000)
+
+
+def get_google_tts_client():
+    """
+    Create a Google Text-to-Speech client using credentials
+    stored in environment variables.
+
+    Supported environment variables:
+    - GOOGLE_SERVICE_ACCOUNT_JSON_BASE64
+    - GOOGLE_SERVICE_ACCOUNT_JSON
+    """
+
+    credentials_base64 = os.getenv(
+        "GOOGLE_SERVICE_ACCOUNT_JSON_BASE64"
+    )
+
+    credentials_json = os.getenv(
+        "GOOGLE_SERVICE_ACCOUNT_JSON"
+    )
+
+    try:
+        if credentials_base64:
+            credentials_info = json.loads(
+                base64.b64decode(
+                    credentials_base64,
+                    validate=True,
+                ).decode("utf-8")
+            )
+
+        elif credentials_json:
+            credentials_info = json.loads(credentials_json)
+
+        else:
+            raise RuntimeError(
+                "Google service account credentials are not configured"
+            )
+
+        credentials = service_account.Credentials.from_service_account_info(
+            credentials_info,
+            scopes=[
+                "https://www.googleapis.com/auth/cloud-platform"
+            ],
+        )
+
+        return texttospeech.TextToSpeechClient(
+            credentials=credentials
+        )
+
+    except Exception as exc:
+        logger.exception(
+            "Failed to initialize Google Text-to-Speech credentials"
+        )
+        raise RuntimeError(
+            "Google Text-to-Speech authentication failed"
+        ) from exc
 
 
 @router.post("/{interview_id}/speech")
@@ -74,14 +134,19 @@ def generate_interview_speech(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You do not have access to this interview",
             )
+
     elif current_user.role == "candidate":
         if not candidate_can_access(
-            db, interview_id, current_user, configuration
+            db,
+            interview_id,
+            current_user,
+            configuration,
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=NOT_INVITED_MESSAGE,
             )
+
     else:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -91,14 +156,25 @@ def generate_interview_speech(
     extra = configuration.extra_config or {}
     voice_name = extra.get("voice_name", DEFAULT_VOICE)
 
-    if not isinstance(voice_name, str) or voice_name not in ALLOWED_VOICES:
+    if (
+        not isinstance(voice_name, str)
+        or voice_name not in ALLOWED_VOICES
+    ):
         voice_name = DEFAULT_VOICE
 
+    speech_text = request.text.strip()
+
+    if not speech_text:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Speech text cannot be empty",
+        )
+
     try:
-        client = texttospeech.TextToSpeechClient()
+        client = get_google_tts_client()
 
         synthesis_input = texttospeech.SynthesisInput(
-            text=request.text.strip()
+            text=speech_text
         )
 
         voice = texttospeech.VoiceSelectionParams(
@@ -119,11 +195,16 @@ def generate_interview_speech(
         return Response(
             content=result.audio_content,
             media_type="audio/mpeg",
-            headers={"Cache-Control": "no-store"},
+            headers={
+                "Cache-Control": "no-store"
+            },
         )
 
     except Exception:
-        logger.exception("Google Text-to-Speech request failed")
+        logger.exception(
+            "Google Text-to-Speech request failed"
+        )
+
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Interview speech is temporarily unavailable",

@@ -15,3 +15,4 @@ google-cloud-dialogflow-cx
 google-cloud-texttospeech
 httpx
 uvicorn
+pypdf

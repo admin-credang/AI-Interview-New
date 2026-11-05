@@ -36,8 +36,11 @@ from app.services.interview_policy import (
     NOT_INVITED_MESSAGE,
     candidate_can_access,
     follow_up_policy,
+    format_code,
+    invitation_by_code,
     invited_role,
     owns_interview,
+    update_invitation_attempt,
 )
 from app.services.warmup_service import generate_warmup_response
 
@@ -482,13 +485,40 @@ def create_session(
     # 5. FIND INTERVIEW CONFIGURATION
     # =====================================================
 
-    configuration = (
-        db.query(InterviewConfiguration)
-        .filter(
-            InterviewConfiguration.interview_id == interview_id
-        )
-        .first()
+    configuration_query = db.query(InterviewConfiguration).filter(
+        InterviewConfiguration.interview_id == interview_id
     )
+    if session_data.invitation_code:
+        configuration_query = configuration_query.with_for_update()
+    configuration = configuration_query.first()
+
+    invitation_code = None
+    invitation_email = None
+    invitation_attempt = None
+    if session_data.invitation_code:
+        invitation_code = format_code(session_data.invitation_code)
+        if invitation_code is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Invitation code is invalid.",
+            )
+
+        found_invitation = invitation_by_code(
+            configuration,
+            invitation_code,
+        )
+        if found_invitation is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=NOT_INVITED_MESSAGE,
+            )
+
+        invitation_email, invitation_attempt = found_invitation
+        if invitation_email != (current_user.email or "").strip().lower():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=NOT_INVITED_MESSAGE,
+            )
 
     # =====================================================
     # 5A. INVITE-ONLY: only the invited e-mail may start
@@ -558,95 +588,106 @@ def create_session(
                 ),
             )
 
-    # =====================================================
-    # 6A. RESUME: one candidate + one interview = one session
-    # =====================================================
-    # Opening the interview again (refresh, closed tab, coming
-    # back later) must continue the SAME session. Creating a new
-    # one every time produced many rows for the same candidate and
-    # generated a new set of questions each time.
+    # Each invitation code identifies one attempt. Reopening its link
+    # resumes that session; a resend gets a new code and a new session.
+    session = None
+    if invitation_attempt and invitation_attempt.get("session_id"):
+        try:
+            mapped_session_id = UUID(
+                str(invitation_attempt["session_id"])
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This invitation has an invalid session mapping.",
+            ) from exc
 
-    # Resume as many times as needed, but once the interview is
-    # COMPLETED the candidate cannot enter it again.
-    already_completed = (
-        db.query(InterviewSession.id)
-        .filter(
-            InterviewSession.interview_id == interview_id,
-            InterviewSession.candidate_id == current_user.id,
-            InterviewSession.status == "completed",
+        session = (
+            db.query(InterviewSession)
+            .filter(
+                InterviewSession.id == mapped_session_id,
+                InterviewSession.interview_id == interview_id,
+                InterviewSession.candidate_id == current_user.id,
+            )
+            .first()
         )
-        .first()
-    )
-
-    if already_completed is not None:
-
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "You have already completed this interview. "
-                "You cannot attend it again."
-            ),
+        if session is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="The session for this invitation could not be found.",
+            )
+        if session.status != "in_progress":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "This invitation attempt is no longer active. "
+                    "Ask the interviewer to send a new invitation."
+                ),
+            )
+    elif invitation_code is None:
+        session = (
+            db.query(InterviewSession)
+            .filter(
+                InterviewSession.interview_id == interview_id,
+                InterviewSession.candidate_id == current_user.id,
+                InterviewSession.status == "in_progress",
+            )
+            .order_by(InterviewSession.started_at.desc().nullslast())
+            .first()
         )
 
-    existing_session = (
-        db.query(InterviewSession)
-        .filter(
-            InterviewSession.interview_id == interview_id,
-            InterviewSession.candidate_id == current_user.id,
-            InterviewSession.status == "in_progress",
-        )
-        .order_by(InterviewSession.started_at.desc().nullslast())
-        .first()
-    )
-
-    if existing_session is not None:
-
+    if session is not None:
         saved_questions = (
             db.query(Question)
-            .filter(Question.session_id == existing_session.id)
+            .filter(Question.session_id == session.id)
             .count()
         )
-
         if saved_questions > 0:
             append_compulsory_questions(
                 db=db,
-                session_id=existing_session.id,
+                session_id=session.id,
                 texts=features.compulsory_questions(configuration),
             )
             db.commit()
-            db.refresh(existing_session)
-            return existing_session
+            db.refresh(session)
+            return session
 
     # =====================================================
-    # 7. CREATE FRESH SESSION
+    # 7. CREATE OR RESUME THIS INVITATION'S SESSION
     # =====================================================
 
-    session = InterviewSession(
-        interview_id=interview_id,
-        candidate_id=current_user.id,
-        started_at=datetime.now(timezone.utc),
-        status="in_progress",
-        current_question=1,
-    )
-
-    try:
-
-        db.add(session)
-
-        # Generate session UUID
-        db.flush()
-
-    except Exception as e:
-
-        db.rollback()
-
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=(
-                "Failed to create interview session: "
-                f"{str(e)}"
-            ),
+    if session is None:
+        session = InterviewSession(
+            interview_id=interview_id,
+            candidate_id=current_user.id,
+            started_at=datetime.now(timezone.utc),
+            status="in_progress",
+            current_question=1,
         )
+
+        try:
+            db.add(session)
+            db.flush()
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to create interview session: {str(e)}",
+            )
+
+    if invitation_code is not None:
+        updated = update_invitation_attempt(
+            configuration,
+            invitation_email,
+            invitation_code,
+            {"session_id": str(session.id)},
+        )
+        if not updated:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This invitation attempt could not be recorded.",
+            )
 
     # =====================================================
     # 8. GENERATE QUESTIONS

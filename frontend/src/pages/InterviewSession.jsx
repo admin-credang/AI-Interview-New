@@ -438,12 +438,8 @@ const REASON_TO_EVENT = {
  * ============================================================
  * AI INTERVIEWER VOICES
  * ============================================================
- * Three voices the candidate can choose from. The browser's
- * installed voices differ per device, so each profile lists
- * the best-sounding voices to look for (natural / online
- * voices first) and falls back to any English voice of the
- * right gender. Rate / pitch are tuned to sound clear and
- * confident.
+ * The server-generated voice is preferred. This profile is the fixed
+ * browser-speech fallback for environments where Google TTS is unavailable.
  */
 const VOICE_PROFILES = {
   aria: {
@@ -993,58 +989,6 @@ export default function InterviewSession() {
   const noticeThrottleRef =
     useRef({});
 
-  const [voiceId, setVoiceId] =
-    useState(() => {
-      try {
-        const saved =
-          localStorage.getItem(
-            "interview_voice"
-          );
-
-        return VOICE_PROFILES[saved]
-          ? saved
-          : DEFAULT_VOICE_ID;
-      } catch {
-        return DEFAULT_VOICE_ID;
-      }
-    });
-
-  const voiceIdRef =
-    useRef(voiceId);
-
-  voiceIdRef.current = voiceId;
-
-  const changeVoice =
-    (nextId) => {
-      if (!VOICE_PROFILES[nextId]) {
-        return;
-      }
-
-      setVoiceId(nextId);
-
-      voiceIdRef.current = nextId;
-
-      try {
-        localStorage.setItem(
-          "interview_voice",
-          nextId
-        );
-      } catch {}
-
-      // short preview so the candidate can hear the voice
-      try {
-        cancelSpeech();
-        if (window.speechSynthesis) {
-          window.speechSynthesis.speak(
-            buildUtterance(
-              "Hello, I will be your interviewer today.",
-              nextId
-            )
-          );
-        }
-      } catch {}
-    };
-
   const lastMonitorTickRef =
     useRef(0);
 
@@ -1318,6 +1262,18 @@ export default function InterviewSession() {
   const finishAnswerPendingRef =
     useRef(false);
 
+  const answerListeningStartedRef =
+    useRef(false);
+
+  const finishAfterSilenceRef =
+    useRef(null);
+
+  const recognitionStopResolverRef =
+    useRef(null);
+
+  const speechActivityRef =
+    useRef(null);
+
   // Voice follow-up confirmation helpers
   const phaseRef =
     useRef("");
@@ -1430,6 +1386,7 @@ export default function InterviewSession() {
         clearTimeout(mainSilenceTimerRef.current);
         mainSilenceTimerRef.current = null;
       }
+      answerListeningStartedRef.current = false;
       if (candidateSpeakingTimerRef.current) {
         clearTimeout(candidateSpeakingTimerRef.current);
         candidateSpeakingTimerRef.current = null;
@@ -1796,7 +1753,7 @@ recognitionRef.current.stop();
             speechCancelRef.current = finish;
 
             try {
-              utterance = buildUtterance(text, voiceIdRef.current);
+              utterance = buildUtterance(text, DEFAULT_VOICE_ID);
               utterance.onstart = () => {
                 if (isCurrent()) {
                   setIsSpeaking(true);
@@ -2421,6 +2378,7 @@ recognitionRef.current.stop();
         setRecordingActive(false);
         setTextFallback(false);
         finishAnswerPendingRef.current = false;
+        answerListeningStartedRef.current = false;
         if (mainSilenceTimerRef.current) {
           clearTimeout(mainSilenceTimerRef.current);
           mainSilenceTimerRef.current = null;
@@ -2859,6 +2817,7 @@ recognitionRef.current.stop();
           speechBaseRef.current = "";
           userEditedRef.current = false;
           setTextFallback(false);
+          answerListeningStartedRef.current = false;
           if (mainSilenceTimerRef.current) {
             clearTimeout(mainSilenceTimerRef.current);
             mainSilenceTimerRef.current = null;
@@ -3286,6 +3245,52 @@ recognitionRef.current.stop();
    * ============================================================
    */
 
+  const resetAnswerSilenceTimer = useCallback(() => {
+    if (mainSilenceTimerRef.current) {
+      clearTimeout(mainSilenceTimerRef.current);
+      mainSilenceTimerRef.current = null;
+    }
+
+    if (
+      !wantListeningRef.current ||
+      phaseRef.current !== "question" ||
+      processingRef.current ||
+      completedRef.current ||
+      terminatedRef.current
+    ) {
+      return;
+    }
+
+    mainSilenceTimerRef.current = setTimeout(() => {
+      mainSilenceTimerRef.current = null;
+      finishAfterSilenceRef.current?.();
+    }, 10000);
+  }, []);
+
+  const noteCandidateSpeechActivity = useCallback(() => {
+    if (
+      !wantListeningRef.current ||
+      phaseRef.current !== "question" ||
+      processingRef.current ||
+      completedRef.current ||
+      terminatedRef.current
+    ) {
+      return;
+    }
+
+    setCandidateSpeaking(true);
+    if (candidateSpeakingTimerRef.current) {
+      clearTimeout(candidateSpeakingTimerRef.current);
+    }
+    candidateSpeakingTimerRef.current = setTimeout(
+      () => setCandidateSpeaking(false),
+      700
+    );
+    resetAnswerSilenceTimer();
+  }, [resetAnswerSilenceTimer]);
+
+  speechActivityRef.current = noteCandidateSpeechActivity;
+
   const submitAnswerWithText =
     useCallback(
       async (answerText) => {
@@ -3323,9 +3328,7 @@ recognitionRef.current.stop();
          * that text. If the candidate typed / edited the answer
          * by hand, the typed text is used as it is.
          */
-        if (
-          recorderRef.current?.isActive()
-        ) {
+        if (recorderRef.current?.hasRecording()) {
           wantListeningRef.current = false;
 
           try {
@@ -3531,6 +3534,80 @@ recognitionRef.current.stop();
         handleDialogflowResponse,
       ]
     );
+
+  const finishAnswerAfterSilence = useCallback(async () => {
+    if (
+      finishAnswerPendingRef.current ||
+      processingRef.current ||
+      completedRef.current ||
+      terminatedRef.current ||
+      phaseRef.current !== "question"
+    ) {
+      return;
+    }
+
+    finishAnswerPendingRef.current = true;
+    wantListeningRef.current = false;
+    setTranscribing(true);
+
+    if (mainSilenceTimerRef.current) {
+      clearTimeout(mainSilenceTimerRef.current);
+      mainSilenceTimerRef.current = null;
+    }
+
+    try {
+      const recognition = recognitionRef.current;
+      if (recognition) {
+        await new Promise((resolve) => {
+          let settled = false;
+          const timeout = setTimeout(finish, 2000);
+
+          function finish() {
+            if (settled) {
+              return;
+            }
+            settled = true;
+            clearTimeout(timeout);
+            if (recognitionStopResolverRef.current === finish) {
+              recognitionStopResolverRef.current = null;
+            }
+            resolve();
+          }
+
+          recognitionStopResolverRef.current = finish;
+          try {
+            recognition.stop();
+          } catch {
+            finish();
+          }
+        });
+      }
+
+      const finalTranscript =
+        answerValueRef.current || latestSpeechRef.current || "";
+      if (
+        !finalTranscript.trim() &&
+        !recorderRef.current?.hasRecording()
+      ) {
+        setTextFallback(true);
+        setError(
+          "No speech was recognized. Retry the microphone or enter your answer below."
+        );
+        return;
+      }
+
+      await submitAnswerRef.current?.(finalTranscript);
+    } finally {
+      finishAnswerPendingRef.current = false;
+      if (mountedRef.current && !processingRef.current) {
+        setTranscribing(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    finishAfterSilenceRef.current = finishAnswerAfterSilence;
+  }, [finishAnswerAfterSilence]);
 
   submitAnswerRef.current =
     submitAnswerWithText;
@@ -3798,6 +3875,10 @@ recognitionRef.current.stop();
         setCandidateSpeaking(false);
         setError("");
         setTextFallback(false);
+        if (!answerListeningStartedRef.current) {
+          answerListeningStartedRef.current = true;
+          resetAnswerSilenceTimer();
+        }
       }
     };
 
@@ -3883,14 +3964,7 @@ recognitionRef.current.stop();
         spoken &&
         mountedRef.current
       ) {
-        setCandidateSpeaking(true);
-        if (candidateSpeakingTimerRef.current) {
-          clearTimeout(candidateSpeakingTimerRef.current);
-        }
-        candidateSpeakingTimerRef.current = setTimeout(
-          () => setCandidateSpeaking(false),
-          700
-        );
+        noteCandidateSpeechActivity();
 
         const base =
           speechBaseRef.current;
@@ -3903,35 +3977,9 @@ recognitionRef.current.stop();
 
         latestSpeechRef.current =
           full;
+        answerValueRef.current = full;
 
         setAnswer(full);
-
-        const latestResult =
-          event.results[event.results.length - 1];
-        if (
-          latestResult?.isFinal &&
-          phaseRef.current === "question" &&
-          !userEditedRef.current
-        ) {
-          if (mainSilenceTimerRef.current) {
-            clearTimeout(mainSilenceTimerRef.current);
-          }
-
-          mainSilenceTimerRef.current = setTimeout(() => {
-            mainSilenceTimerRef.current = null;
-            if (
-              mountedRef.current &&
-              wantListeningRef.current &&
-              !processingRef.current &&
-              !completedRef.current &&
-              !terminatedRef.current &&
-              !userEditedRef.current &&
-              latestSpeechRef.current.trim()
-            ) {
-              submitAnswerRef.current?.(latestSpeechRef.current);
-            }
-          }, 1800);
-        }
       }
     };
 
@@ -3947,9 +3995,6 @@ recognitionRef.current.stop();
         event
       );
 
-      wantListeningRef.current = false;
-      setTextFallback(true);
-
       if (
         event?.error ===
           "not-allowed" ||
@@ -3960,14 +4005,32 @@ recognitionRef.current.stop();
         recorderRef.current?.cancel();
         setRecordingActive(false);
         setIsListening(false);
+        setTextFallback(true);
         setError(
           "Microphone permission was denied. Allow microphone access or enter your answer below."
         );
       } else if (mountedRef.current) {
-        setRecordingActive(Boolean(recorderRef.current?.isActive()));
+        const recordingContinues =
+          Boolean(recorderRef.current?.isActive());
+        setRecordingActive(recordingContinues);
+        wantListeningRef.current = recordingContinues;
+        setTextFallback(!recordingContinues);
+        if (recordingContinues) {
+          setIsListening(true);
+          if (!answerListeningStartedRef.current) {
+            answerListeningStartedRef.current = true;
+            resetAnswerSilenceTimer();
+          }
+        } else {
+          answerListeningStartedRef.current = false;
+          if (mainSilenceTimerRef.current) {
+            clearTimeout(mainSilenceTimerRef.current);
+            mainSilenceTimerRef.current = null;
+          }
+        }
         setError(
-          recorderRef.current?.isActive()
-            ? "Speech recognition stopped. Finish your recording or enter your answer below."
+          recordingContinues
+            ? "Speech recognition stopped. Your recording will be submitted automatically after 10 seconds of silence, or enter your answer below."
             : "Speech recognition stopped. Retry the microphone or enter your answer below."
         );
       }
@@ -3983,6 +4046,8 @@ recognitionRef.current.stop();
     };
 
     recognition.onend = () => {
+      recognitionStopResolverRef.current?.();
+
       if (
         mountedRef.current
       ) {
@@ -4069,7 +4134,7 @@ recognitionRef.current.stop();
       recognitionRef.current =
         null;
     };
-  }, []);
+  }, [noteCandidateSpeechActivity, resetAnswerSilenceTimer]);
 
   /*
    * ============================================================
@@ -4091,6 +4156,10 @@ recognitionRef.current.stop();
         return;
       }
 
+      if (phaseRef.current === "question") {
+        answerListeningStartedRef.current = false;
+      }
+
       setError("");
       setCandidateSpeaking(false);
       wantListeningRef.current =
@@ -4103,7 +4172,18 @@ recognitionRef.current.stop();
 
         if (canRecordAudio()) {
           const recordingStarted =
-            await recorderRef.current.start();
+            await recorderRef.current.start({
+              onVoiceActivity: () =>
+                speechActivityRef.current?.(),
+              onRecordingInterruption: () => {
+                if (mountedRef.current) {
+                  setRecordingActive(false);
+                  setError(
+                    "Microphone recording was interrupted. Processing will continue with the captured speech."
+                  );
+                }
+              },
+            });
           setRecordingActive(recordingStarted);
 
           if (!recordingStarted && !recognitionRef.current) {
@@ -4123,6 +4203,11 @@ recognitionRef.current.stop();
             setError("");
             setIsListening(true);
             setTextFallback(false);
+            answerListeningStartedRef.current = true;
+            resetAnswerSilenceTimer();
+          } else if (recordingStarted) {
+            answerListeningStartedRef.current = true;
+            resetAnswerSilenceTimer();
           }
         }
       }
@@ -4145,31 +4230,20 @@ recognitionRef.current.stop();
 
       try {
         recognitionRef.current.start();
-      } catch {
+      } catch (error) {
         console.warn(
-          "Speech recognition already running."
+          "Speech recognition could not start:",
+          error
         );
+        if (recorderRef.current?.isActive()) {
+          setTextFallback(false);
+          setIsListening(true);
+          resetAnswerSilenceTimer();
+          setError(
+            "Speech recognition could not start. Audio recording is active and will be transcribed automatically."
+          );
+        }
       }
-    };
-
-  /*
-   * ============================================================
-   * STOP LISTENING
-   * ============================================================
-   */
-
-  const stopListening =
-    () => {
-      if (
-        !recognitionRef.current
-      ) {
-        return;
-      }
-
-      try {
-        wantListeningRef.current = false;
-recognitionRef.current.stop();
-      } catch {}
     };
 
   startListeningRef.current =
@@ -6476,50 +6550,6 @@ recognitionRef.current?.stop();
    * ============================================================
    */
 
-  /*
-   * Stop Recording = answer finished -> submit automatically.
-   * (small delay so the last spoken words are captured first)
-   */
-  const stopAndSubmit = () => {
-    if (
-      processingRef.current ||
-      finishAnswerPendingRef.current ||
-      completedRef.current ||
-      terminatedRef.current
-    ) {
-      return;
-    }
-
-    finishAnswerPendingRef.current = true;
-    wantListeningRef.current = false;
-    if (mainSilenceTimerRef.current) {
-      clearTimeout(mainSilenceTimerRef.current);
-      mainSilenceTimerRef.current = null;
-    }
-
-    try {
-      recognitionRef.current?.stop();
-    } catch {}
-
-    // small delay so the last live words settle, then the full
-    // recording is transcribed on the server and submitted
-    setTimeout(() => {
-      finishAnswerPendingRef.current = false;
-      if (
-        mountedRef.current &&
-        !processingRef.current &&
-        !completedRef.current &&
-        !terminatedRef.current
-      ) {
-        submitAnswerWithText(
-          String(
-            answerValueRef.current || ""
-          )
-        );
-      }
-    }, 400);
-  };
-
   const questionText = currentQuestion?.question || "";
   const typing = typedLength < questionText.length;
 
@@ -6700,22 +6730,6 @@ recognitionRef.current?.stop();
               <div className="text-[11px] text-slate-500">
                 {assistantStatus}
               </div>
-              <select
-                value={voiceId}
-                onChange={(e) =>
-                  changeVoice(e.target.value)
-                }
-                aria-label="Interviewer voice"
-                className="mt-1 w-full rounded-md bg-white border border-slate-300 text-[11px] text-slate-700 px-2 py-1 outline-none focus:border-slate-300"
-              >
-                {Object.entries(VOICE_PROFILES).map(
-                  ([id, profile]) => (
-                    <option key={id} value={id}>
-                      {profile.label}
-                    </option>
-                  )
-                )}
-              </select>
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
@@ -6920,28 +6934,20 @@ recognitionRef.current?.stop();
               </div>
             ) : phase === "question" ? (
               <div className="shrink-0 space-y-2">
-                {voiceSupported && (
+                {voiceSupported && textFallback && (
                   <button
                     type="button"
-                    disabled={processing || transcribing || isSpeaking}
-                    onClick={
-                      answerRecordingActive
-                        ? stopAndSubmit
-                        : startListening
+                    disabled={
+                      processing ||
+                      transcribing ||
+                      isSpeaking ||
+                      answerRecordingActive ||
+                      Boolean(answer.trim())
                     }
-                    className={`w-full rounded-md px-5 py-3 font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed ${
-                      answerRecordingActive
-                        ? "bg-violet-700 text-white hover:bg-violet-600"
-                        : "bg-slate-200 text-slate-800 hover:bg-slate-300"
-                    }`}
+                    onClick={() => void startListening()}
+                    className="w-full rounded-md bg-slate-200 px-5 py-3 font-semibold text-sm text-slate-800 hover:bg-slate-300 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    {transcribing
-                      ? "Processing answer..."
-                      : processing
-                        ? "Processing answer..."
-                        : answerRecordingActive
-                          ? "Finish Answer"
-                          : "Retry Microphone"}
+                    Retry microphone
                   </button>
                 )}
 

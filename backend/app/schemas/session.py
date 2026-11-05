@@ -7,6 +7,7 @@ from pydantic import BaseModel
 class SessionCreate(BaseModel):
     interview_id: UUID
     candidate_id: UUID
+    invitation_code: str | None = None
 
 
 class SessionResponse(BaseModel):

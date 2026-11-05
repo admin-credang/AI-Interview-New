@@ -134,6 +134,63 @@ def format_code(value) -> str | None:
     return f"INV-{clean[3:7]}-{clean[7:]}"
 
 
+def invitation_by_code(configuration, code: str):
+    """Find the email and attempt record that owns an invitation code."""
+    canonical = format_code(code)
+    if not canonical:
+        return None
+
+    for email, record in invitations(configuration).items():
+        attempts = list(record.get("attempts") or [])
+        if record.get("code"):
+            attempts.append(record)
+
+        for attempt in attempts:
+            if (attempt.get("code") or "").upper() == canonical:
+                return email, dict(attempt)
+
+    return None
+
+
+def update_invitation_attempt(
+    configuration,
+    email: str,
+    code: str,
+    updates: dict,
+) -> bool:
+    """Update only the matching invitation attempt, preserving older attempts."""
+    canonical = format_code(code)
+    if not canonical or configuration is None:
+        return False
+
+    extra = dict(configuration.extra_config or {})
+    records = dict(extra.get("invitations") or {})
+    normalized_email = (email or "").strip().lower()
+    record = dict(records.get(normalized_email) or {})
+
+    if (record.get("code") or "").upper() == canonical:
+        record.update(updates)
+        records[normalized_email] = record
+    else:
+        attempts = list(record.get("attempts") or [])
+        found = False
+        for index, value in enumerate(attempts):
+            attempt = dict(value or {})
+            if (attempt.get("code") or "").upper() == canonical:
+                attempt.update(updates)
+                attempts[index] = attempt
+                found = True
+                break
+        if not found:
+            return False
+        record["attempts"] = attempts
+        records[normalized_email] = record
+
+    extra["invitations"] = records
+    configuration.extra_config = extra
+    return True
+
+
 def mask_email(email: str) -> str:
     name, _, domain = (email or "").partition("@")
 

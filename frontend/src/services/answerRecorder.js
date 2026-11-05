@@ -39,8 +39,21 @@ export function createAnswerRecorder() {
   let chunks = [];
   let mimeType = "";
   let starting = null;
+  let audioContext = null;
+  let analyser = null;
+  let activityTimer = null;
 
   const releaseStream = () => {
+    if (activityTimer) {
+      clearInterval(activityTimer);
+      activityTimer = null;
+    }
+    if (audioContext && audioContext.state !== "closed") {
+      void audioContext.close();
+    }
+    audioContext = null;
+    analyser = null;
+
     if (stream) {
       stream.getTracks().forEach((track) => {
         try {
@@ -55,7 +68,66 @@ export function createAnswerRecorder() {
 
   const isActive = () => !!recorder && recorder.state !== "inactive";
 
-  const start = async () => {
+  const startVoiceActivityDetection = (onVoiceActivity) => {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext || typeof onVoiceActivity !== "function") {
+      return false;
+    }
+
+    try {
+      audioContext = new AudioContext();
+      analyser = audioContext.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0;
+      audioContext.createMediaStreamSource(stream).connect(analyser);
+      if (audioContext.state === "suspended") {
+        void audioContext.resume().catch((error) => {
+          console.warn("Voice activity audio context could not resume:", error);
+        });
+      }
+
+      const samples = new Uint8Array(analyser.fftSize);
+      let activeFrames = 0;
+      let lastActivityAt = 0;
+
+      activityTimer = setInterval(() => {
+        if (!analyser || audioContext?.state !== "running") {
+          return;
+        }
+
+        analyser.getByteTimeDomainData(samples);
+        let energy = 0;
+        for (const sample of samples) {
+          const amplitude = (sample - 128) / 128;
+          energy += amplitude * amplitude;
+        }
+
+        const rms = Math.sqrt(energy / samples.length);
+        activeFrames = rms >= 0.018 ? activeFrames + 1 : 0;
+
+        const now = Date.now();
+        if (activeFrames >= 2 && now - lastActivityAt >= 250) {
+          lastActivityAt = now;
+          onVoiceActivity();
+        }
+      }, 100);
+
+      return true;
+    } catch (error) {
+      console.warn("Voice activity detection could not start:", error);
+      if (audioContext && audioContext.state !== "closed") {
+        void audioContext.close();
+      }
+      audioContext = null;
+      analyser = null;
+      return false;
+    }
+  };
+
+  const start = async ({
+    onVoiceActivity,
+    onRecordingInterruption,
+  } = {}) => {
     if (isActive()) {
       return true;
     }
@@ -90,6 +162,14 @@ export function createAnswerRecorder() {
             chunks.push(event.data);
           }
         };
+        recorder.onstop = () => {
+          onRecordingInterruption?.();
+        };
+        recorder.onerror = () => {
+          onRecordingInterruption?.();
+        };
+
+        startVoiceActivityDetection(onVoiceActivity);
 
         // 1 s slices: nothing is lost if the tab closes mid-answer
         recorder.start(1000);
@@ -162,7 +242,9 @@ export function createAnswerRecorder() {
     releaseStream();
   };
 
-  return { start, stop, cancel, isActive };
+  const hasRecording = () => isActive() || chunks.length > 0;
+
+  return { start, stop, cancel, isActive, hasRecording };
 }
 
 /** Sends one recorded answer to the server; returns the transcript. */

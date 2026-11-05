@@ -324,12 +324,25 @@ function InterviewLobby() {
 
     try {
       setStarting(true);
+      let invitationCode = null;
+      try {
+        invitationCode = sessionStorage.getItem("active_invitation_code");
+      } catch {
+        /* Starting without an invitation attempt key remains supported. */
+      }
+
       const res = await api.post(`/interviews/${interviewId}/sessions`, {
         interview_id: interviewId,
         candidate_id: candidateId,
+        ...(invitationCode ? { invitation_code: invitationCode } : {}),
       });
       const sessionId = res.data?.id || res.data?.session_id;
       if (!sessionId) throw new Error("Invalid session response.");
+      try {
+        sessionStorage.removeItem("active_invitation_code");
+      } catch {
+        /* The API already bound this invitation to the created session. */
+      }
       stopAllMediaStreams();
       navigate(`/interviews/${interviewId}/sessions/${sessionId}`);
     } catch (err) {

@@ -53,6 +53,14 @@ export default function InviteAccept() {
       .post(`/hiring/invitations/${encodeURIComponent(code)}/enter`)
       .then((res) => {
         setSession(res.data.access_token, res.data.user);
+        try {
+          sessionStorage.setItem(
+            "active_invitation_code",
+            res.data.invitation_code || code
+          );
+        } catch {
+          /* A session can still start without this optional retry key. */
+        }
         navigate(`/interviews/${res.data.interview_id}`, { replace: true });
       })
       .catch((err) => {
@@ -76,6 +84,14 @@ export default function InviteAccept() {
         api
           .post(`/hiring/invitations/${encodeURIComponent(code)}/open`)
           .then((res) => {
+            try {
+              sessionStorage.setItem(
+                "active_invitation_code",
+                res.data.invitation_code || code
+              );
+            } catch {
+              /* The authenticated candidate can still open the interview. */
+            }
             navigate(`/interviews/${res.data.interview_id}`, { replace: true });
           })
           .catch(fail);

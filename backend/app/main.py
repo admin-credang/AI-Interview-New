@@ -61,7 +61,8 @@ from app.api.company_intro import router as company_intro_router
 from app.api.candidate_resume import router as candidate_resume_router
 
 from app.models.session_review import SessionReview
-
+from dotenv import load_dotenv
+load_dotenv()
 
 # =========================================================
 # DATABASE COMPATIBILITY

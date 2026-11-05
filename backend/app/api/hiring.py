@@ -37,6 +37,7 @@ from fastapi import (
 )
 from pydantic import BaseModel, Field
 from sqlalchemy import Text, cast, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.auth.auth import create_access_token, get_current_user
@@ -77,10 +78,12 @@ from app.services.url_config import (
 from app.services.interview_policy import (
     follow_up_policy,
     format_code,
+    invitation_by_code,
     invitation_for,
     invitations as invitation_records,
     mask_email,
     new_invite_code,
+    update_invitation_attempt,
 )
 
 
@@ -233,14 +236,13 @@ def _mail_identity(configuration, fallback_user) -> dict:
     }
 
 
-def _get_configuration(db: Session, interview_id):
-    return (
-        db.query(InterviewConfiguration)
-        .filter(
-            InterviewConfiguration.interview_id == interview_id
-        )
-        .first()
+def _get_configuration(db: Session, interview_id, for_update: bool = False):
+    query = db.query(InterviewConfiguration).filter(
+        InterviewConfiguration.interview_id == interview_id
     )
+    if for_update:
+        query = query.with_for_update()
+    return query.first()
 
 
 def _get_or_create_review(
@@ -1149,7 +1151,7 @@ def _clean_phone(raw: str | None) -> str | None:
 
 
 def _send_invite_task(
-    messages: list[tuple[str, str, str]],
+    messages: list[tuple[str, str, str, str]],
     from_name: str | None,
     reply_to: str | None,
     interview_id: UUID | None = None,
@@ -1162,7 +1164,7 @@ def _send_invite_task(
     (mail_status = sent / failed) so Client Settings can show it.
     """
 
-    for address, subject, body in messages:
+    for address, subject, body, code in messages:
         ok, info = send_email(
             address,
             subject,
@@ -1178,24 +1180,27 @@ def _send_invite_task(
         db = SessionLocal()
 
         try:
-            configuration = _get_configuration(db, interview_id)
+            configuration = _get_configuration(
+                db,
+                interview_id,
+                for_update=True,
+            )
 
             if configuration is None:
                 continue
 
-            extra = dict(configuration.extra_config or {})
-            records = dict(extra.get("invitations") or {})
-            record = dict(records.get(address) or {})
-
-            record["mail_status"] = "sent" if ok else "failed"
-            record["mail_error"] = None if ok else info
-            record["mail_checked_at"] = datetime.now(
-                timezone.utc
-            ).isoformat()
-
-            records[address] = record
-            extra["invitations"] = records
-            configuration.extra_config = extra
+            update_invitation_attempt(
+                configuration,
+                address,
+                code,
+                {
+                    "mail_status": "sent" if ok else "failed",
+                    "mail_error": None if ok else info,
+                    "mail_checked_at": datetime.now(
+                        timezone.utc
+                    ).isoformat(),
+                },
+            )
 
             db.commit()
 
@@ -1246,7 +1251,11 @@ def invite_candidates(
 
     interview = _owned_interview(db, current_user, interview_id)
 
-    configuration = _get_configuration(db, interview_id)
+    configuration = _get_configuration(
+        db,
+        interview_id,
+        for_update=True,
+    )
 
     if configuration is None:
         raise HTTPException(
@@ -1308,9 +1317,16 @@ def invite_candidates(
     now = datetime.now(timezone.utc).isoformat()
 
     records = dict(extra.get("invitations") or {})
-    used_codes = {
-        (r or {}).get("code") for r in records.values()
-    }
+    used_codes = set()
+    for record in records.values():
+        record = record or {}
+        if record.get("code"):
+            used_codes.add(record["code"])
+        used_codes.update(
+            attempt.get("code")
+            for attempt in record.get("attempts") or []
+            if attempt.get("code")
+        )
 
     base = _configured_frontend_base_url()
 
@@ -1326,12 +1342,27 @@ def invite_candidates(
     for address in valid:
 
         record = dict(records.get(address) or {})
+        attempts = [
+            dict(attempt or {})
+            for attempt in record.get("attempts") or []
+        ]
+        if record.get("code"):
+            attempts.append(
+                {
+                    key: value
+                    for key, value in record.items()
+                    if key != "attempts"
+                }
+            )
 
-        # same person invited again -> same ID (just re-sent)
-        if not record.get("code"):
-            record["code"] = new_invite_code(used_codes)
-            used_codes.add(record["code"])
-            record["invited_at"] = now
+        record["attempts"] = attempts
+        record["code"] = new_invite_code(used_codes)
+        used_codes.add(record["code"])
+        record["invited_at"] = now
+        record["opened_at"] = None
+        record["session_id"] = None
+        record["mail_status"] = "draft"
+        record["mail_error"] = None
 
         record["email"] = address
         record["role"] = role
@@ -1375,7 +1406,7 @@ def invite_candidates(
         )
 
         if send_now:
-            messages.append((address, subject, text))
+            messages.append((address, subject, text, record["code"]))
 
     extra["invitations"] = records
 
@@ -1532,11 +1563,11 @@ def open_invitation(
     record = None
 
     for item in candidates:
-        for rec in invitation_records(item).values():
-            if rec.get("code") == canonical:
-                configuration, record = item, rec
-                break
-        if configuration is not None:
+        found = invitation_by_code(item, canonical)
+        if found is not None:
+            invited_email, record = found
+            record["email"] = invited_email
+            configuration = item
             break
 
     if configuration is None:
@@ -1582,17 +1613,12 @@ def open_invitation(
         )
 
     if not record.get("opened_at"):
-
-        extra = dict(configuration.extra_config or {})
-        records = dict(extra.get("invitations") or {})
-
-        updated = dict(records.get(invited_email) or {})
-        updated["opened_at"] = datetime.now(timezone.utc).isoformat()
-        records[invited_email] = updated
-
-        extra["invitations"] = records
-        configuration.extra_config = extra
-
+        update_invitation_attempt(
+            configuration,
+            invited_email,
+            canonical,
+            {"opened_at": datetime.now(timezone.utc).isoformat()},
+        )
         db.commit()
 
     job = _job(configuration)
@@ -1602,6 +1628,7 @@ def open_invitation(
         "title": interview.title,
         "role": record.get("role") or job["role"] or interview.title,
         "company": job["company"] or settings.company_name,
+        "invitation_code": canonical,
     }
 
 
@@ -1623,9 +1650,11 @@ def _find_invitation(db: Session, canonical: str):
     )
 
     for item in rows:
-        for rec in invitation_records(item).values():
-            if rec.get("code") == canonical:
-                return item, rec
+        found = invitation_by_code(item, canonical)
+        if found is not None:
+            invited_email, record = found
+            record["email"] = invited_email
+            return item, record
 
     return None, None
 
@@ -1722,21 +1751,35 @@ def enter_with_invitation(
             role="candidate",
         )
         db.add(user)
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            user = (
+                db.query(User)
+                .filter(func.lower(User.email) == invited_email)
+                .first()
+            )
+            if user is None:
+                raise HTTPException(
+                    409,
+                    "Candidate account creation conflicted. Please retry.",
+                )
+            if user.role != "candidate":
+                raise HTTPException(
+                    403,
+                    "This email belongs to an interviewer account, so it "
+                    "cannot be used as a candidate.",
+                )
         db.refresh(user)
 
     if not record.get("opened_at"):
-
-        extra = dict(configuration.extra_config or {})
-        records = dict(extra.get("invitations") or {})
-
-        updated = dict(records.get(invited_email) or {})
-        updated["opened_at"] = datetime.now(timezone.utc).isoformat()
-        records[invited_email] = updated
-
-        extra["invitations"] = records
-        configuration.extra_config = extra
-
+        update_invitation_attempt(
+            configuration,
+            invited_email,
+            canonical,
+            {"opened_at": datetime.now(timezone.utc).isoformat()},
+        )
         db.commit()
 
     job = _job(configuration)
@@ -1751,6 +1794,7 @@ def enter_with_invitation(
             "role": user.role,
         },
         "interview_id": str(interview.id),
+        "invitation_code": canonical,
         "title": interview.title,
         "role": record.get("role") or job["role"] or interview.title,
         "company": job["company"] or settings.company_name,

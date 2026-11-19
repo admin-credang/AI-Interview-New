@@ -89,7 +89,7 @@ function ControlCard({ item, t, catalog, groups, defaultOpen = false }) {
       } catch {
         /* try again on the next tick */
       }
-      if (tries >= 20) clearInterval(pollRef.current);
+      if (tries >= 60) clearInterval(pollRef.current);
     }, 3000);
 
     return () => clearInterval(pollRef.current);

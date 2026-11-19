@@ -911,7 +911,7 @@ export default function ClientSettings() {
       const list = await load();
       const fresh = list?.find((i) => i.id === item.id);
       if (fresh) setInvitations(fresh.invitations || []);
-      if (tries >= 20) clearInterval(pollRef.current);
+      if (tries >= 60) clearInterval(pollRef.current);
     }, 3000);
     return () => clearInterval(pollRef.current);
   }, [hasPending, item?.id, load]);

@@ -676,6 +676,21 @@ def _all_invited_emails(configurations) -> set[str]:
     return emails
 
 
+_MAIL_PENDING_TIMEOUT = 120  # seconds
+
+
+def _parse_iso(value):
+    try:
+        parsed = datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+
+    return parsed
+
+
 def _invitation_rows(
     configuration,
     sessions: list,
@@ -723,6 +738,26 @@ def _invitation_rows(
         # mail delivery: pending -> sent / failed
         # (old invitations had no tracking -> treated as sent)
         mail_status = record.get("mail_status") or "sent"
+        mail_error = record.get("mail_error")
+
+        # A mail cannot take minutes. If it is still "pending" long after
+        # it was queued, the sender stopped (server restarted, network
+        # hang) - show it as failed so the interviewer can press Retry.
+        if mail_status == "pending":
+            queued = _parse_iso(
+                record.get("last_sent_at") or record.get("invited_at")
+            )
+
+            if (
+                queued is not None
+                and (datetime.now(timezone.utc) - queued).total_seconds()
+                > _MAIL_PENDING_TIMEOUT
+            ):
+                mail_status = "failed"
+                mail_error = (
+                    "The mail did not finish sending (server restarted or "
+                    "network problem). Press Retry."
+                )
 
         rows.append(
             {
@@ -730,7 +765,7 @@ def _invitation_rows(
                 "name": record.get("name") or (user.name if user else None),
                 "phone": record.get("phone") or "",
                 "mail_status": mail_status,
-                "mail_error": record.get("mail_error"),
+                "mail_error": mail_error,
                 "role": record.get("role") or "",
                 "code": record.get("code"),
                 # the personal link - used when the e-mail module is OFF
@@ -1158,24 +1193,38 @@ def _send_invite_task(
     mailbox: dict | None = None,
 ) -> None:
     """
-    messages = [(to_email, subject, body), ...] - one per candidate.
+    messages = [(to_email, subject, body, code), ...] - one per candidate.
 
     After each mail the result is written back to the invitation
     (mail_status = sent / failed) so Client Settings can show it.
+    The status ALWAYS leaves "pending": whatever happens while sending
+    (error, crash, missing config) it ends as "sent" or "failed".
     """
 
     for address, subject, body, code in messages:
-        ok, info = send_email(
-            address,
-            subject,
-            body,
-            from_name=from_name,
-            reply_to=reply_to,
-            mailbox=mailbox,
-        )
+
+        try:
+            ok, info = send_email(
+                address,
+                subject,
+                body,
+                from_name=from_name,
+                reply_to=reply_to,
+                mailbox=mailbox,
+            )
+        except Exception as exc:  # send_email should never raise, but be safe
+            ok, info = False, f"failed: {type(exc).__name__}: {exc}"[:400]
+
+        print(f"INVITE MAIL -> {address}: {'SENT' if ok else 'FAILED'} | {info}")
 
         if interview_id is None:
             continue
+
+        updates = {
+            "mail_status": "sent" if ok else "failed",
+            "mail_error": None if ok else info,
+            "mail_checked_at": datetime.now(timezone.utc).isoformat(),
+        }
 
         db = SessionLocal()
 
@@ -1189,18 +1238,24 @@ def _send_invite_task(
             if configuration is None:
                 continue
 
-            update_invitation_attempt(
-                configuration,
-                address,
-                code,
-                {
-                    "mail_status": "sent" if ok else "failed",
-                    "mail_error": None if ok else info,
-                    "mail_checked_at": datetime.now(
-                        timezone.utc
-                    ).isoformat(),
-                },
+            matched = update_invitation_attempt(
+                configuration, address, code, updates
             )
+
+            if not matched:
+                # code not found (e.g. candidate was re-invited meanwhile):
+                # update the latest record of this e-mail so it never
+                # stays "pending" forever
+                extra = dict(configuration.extra_config or {})
+                records = dict(extra.get("invitations") or {})
+                key = (address or "").strip().lower()
+                record = dict(records.get(key) or {})
+
+                if record and record.get("mail_status") == "pending":
+                    record.update(updates)
+                    records[key] = record
+                    extra["invitations"] = records
+                    configuration.extra_config = extra
 
             db.commit()
 

@@ -4,6 +4,7 @@ import api from "../api";
 import {
   canRecordAudio,
   createAnswerRecorder,
+  pickBestTranscript,
   transcribeAnswer,
 } from "../services/answerRecorder";
 import {
@@ -1235,6 +1236,11 @@ export default function InterviewSession() {
   const userEditedRef =
     useRef(false);
 
+  // late speech-recognition results from the PREVIOUS answer must never
+  // leak into the next question; only accept speech while listening
+  const acceptingSpeechRef =
+    useRef(false);
+
   const streamRef =
     useRef(null);
 
@@ -2369,6 +2375,8 @@ recognitionRef.current.stop();
           );
         }
 
+        acceptingSpeechRef.current = false;
+        answerValueRef.current = "";
         setAnswer("");
 
         latestSpeechRef.current = "";
@@ -2812,6 +2820,9 @@ recognitionRef.current.stop();
             ) || questionNumber
           );
 
+          acceptingSpeechRef.current = false;
+          answerValueRef.current = "";
+          recorderRef.current?.cancel();
           setAnswer("");
           latestSpeechRef.current = "";
           speechBaseRef.current = "";
@@ -3321,6 +3332,9 @@ recognitionRef.current.stop();
             answerText || ""
           );
 
+        // text is captured above; ignore any late recognition results
+        acceptingSpeechRef.current = false;
+
         /*
          * ACCURATE TRANSCRIPT: the browser's live recognition
          * (preview only) misses words. If the answer was spoken,
@@ -3346,10 +3360,17 @@ recognitionRef.current.stop();
             !userEditedRef.current
           ) {
             try {
-              const accurate =
+              const serverText =
                 await transcribeAnswer(
                   interviewId,
                   blob
+                );
+
+              // server text wins unless it looped / lost words
+              const accurate =
+                pickBestTranscript(
+                  finalText,
+                  serverText
                 );
 
               if (accurate) {
@@ -3946,6 +3967,10 @@ recognitionRef.current.stop();
        * has been followed by a short silence. Manual submission
        * remains available for typed or longer answers.
        */
+      if (!acceptingSpeechRef.current) {
+        return;
+      }
+
       let spoken = "";
 
       for (
@@ -4222,6 +4247,8 @@ recognitionRef.current.stop();
 
       latestSpeechRef.current =
         "";
+
+      acceptingSpeechRef.current = true;
 
       // yes/no follow-up offer needs a short single phrase
       recognitionRef.current.continuous =

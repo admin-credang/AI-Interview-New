@@ -155,11 +155,71 @@ def _fix_word_case(text: str) -> str:
     return re.sub(r"[A-Za-z][A-Za-z\-]*", repl, text)
 
 
+_WORD = re.compile(r"[A-Za-z0-9']+")
+
+# a word repeated this many times in a row is a speech-to-text loop,
+# nobody speaks like that
+MAX_LOOP_REPEATS = 4
+
+
+def collapse_repetition_loops(text: str) -> str:
+    """Collapse STT hallucination loops ("the, the, the, ... x1000").
+
+    Real stutters ("I, I, I think") are kept: a run is only collapsed
+    when one word (or one short phrase of up to 4 words) repeats more
+    than MAX_LOOP_REPEATS times in a row. The run is reduced to
+    MAX_LOOP_REPEATS repeats, so genuine speech is never dropped.
+    """
+    if not text:
+        return ""
+
+    tokens = text.split()
+    norm = [(_WORD.findall(t) or [""])[0].lower() for t in tokens]
+    out: list[str] = []
+    i = 0
+    n = len(tokens)
+
+    while i < n:
+        collapsed = False
+        for size in (1, 2, 3, 4):
+            if i + size > n or not all(norm[i : i + size]):
+                continue
+            unit = norm[i : i + size]
+            reps = 1
+            j = i + size
+            while j + size <= n and norm[j : j + size] == unit:
+                reps += 1
+                j += size
+            if reps > MAX_LOOP_REPEATS:
+                keep = size * MAX_LOOP_REPEATS
+                out.extend(tokens[i : i + keep])
+                i = j
+                collapsed = True
+                break
+        if not collapsed:
+            out.append(tokens[i])
+            i += 1
+
+    return " ".join(out)
+
+
+def is_degenerate_transcript(text: str) -> bool:
+    """True when the transcript is (mostly) one repeated word/phrase."""
+    words = [w.lower() for w in _WORD.findall(text or "")]
+    if len(words) < 12:
+        return False
+    if len(collapse_repetition_loops(text).split()) < len(text.split()) * 0.5:
+        return True
+    top = max(words.count(w) for w in set(words))
+    return top / len(words) > 0.6
+
+
 def normalize_transcript(text: str) -> str:
     if not text:
         return ""
 
     result = " ".join(text.split())
+    result = collapse_repetition_loops(result)
 
     result = _join_spelled_letters(result)
 

@@ -12,7 +12,10 @@ import tempfile
 from pathlib import Path
 
 from app.config import settings
-from app.services.transcript_normalizer import normalize_transcript
+from app.services.transcript_normalizer import (
+    is_degenerate_transcript,
+    normalize_transcript,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,14 +28,13 @@ FALLBACK_MODEL = "whisper-1"
 # Shown to the model as "what the speaker said before". It biases the
 # spelling of technical words and keeps filler words / every word.
 TRANSCRIBE_PROMPT = (
-    "Interview answer by an Indian-English speaker. Transcribe every spoken "
-    "word exactly as said, including um, uh, repeated words and false "
-    "starts. Do not summarise, translate or correct grammar. Spelled-out "
-    "letters are acronyms: J S O N is JSON, S Q L is SQL, A P I is API, "
-    "K P I is KPI, E T L is ETL. Technical terms: JSON, SQL, API, KPI, "
-    "ETL, CSV, Python, pandas, NumPy, Excel, Power BI, Tableau, MySQL, "
-    "PostgreSQL, MongoDB, React, FastAPI, JavaScript, machine learning, "
-    "data cleaning, outliers, null values, dashboard, stakeholders."
+    "Interview answer by an Indian-English speaker about data science, "
+    "machine learning, Python and SQL. Spelled-out letters are acronyms: "
+    "J S O N is JSON, S Q L is SQL, A P I is API, K P I is KPI, E T L is "
+    "ETL. Technical terms: JSON, SQL, API, KPI, ETL, CSV, Python, pandas, "
+    "NumPy, Excel, Power BI, Tableau, MySQL, PostgreSQL, MongoDB, React, "
+    "FastAPI, JavaScript, machine learning, deep learning, data cleaning, "
+    "outliers, null values, overfitting, dashboard, stakeholders."
 )
 
 _ALLOWED_SUFFIX = {
@@ -74,18 +76,66 @@ def audio_suffix(content_type: str | None, filename: str | None) -> str:
     return ".webm"
 
 
-def _transcribe_with(model: str, path: str) -> str:
+def _transcribe_with(
+    model: str, path: str, *, temperature: float = 0.0, use_prompt: bool = True
+) -> str:
     kwargs = {
         "model": model,
         "language": "en",
-        "temperature": 0,
-        "prompt": TRANSCRIBE_PROMPT,
+        "temperature": temperature,
     }
+    if use_prompt:
+        kwargs["prompt"] = TRANSCRIBE_PROMPT
 
     with open(path, "rb") as audio_file:
         result = client.audio.transcriptions.create(file=audio_file, **kwargs)
 
     return (getattr(result, "text", "") or "").strip()
+
+
+def _word_count(text: str) -> int:
+    return len((text or "").split())
+
+
+def _best_transcript(path: str) -> str:
+    """Try several models/settings; never accept a looping transcript."""
+    attempts = [
+        (PRIMARY_MODEL, {"temperature": 0.0, "use_prompt": True}),
+        (PRIMARY_MODEL, {"temperature": 0.0, "use_prompt": False}),
+        (FALLBACK_MODEL, {"temperature": 0.2, "use_prompt": False}),
+        (FALLBACK_MODEL, {"temperature": 0.4, "use_prompt": True}),
+    ]
+    candidates: list[str] = []
+    any_succeeded = False
+
+    for model, opts in attempts:
+        try:
+            text = _transcribe_with(model, path, **opts)
+        except Exception:
+            logger.exception("Transcription with %s %s failed", model, opts)
+            continue
+
+        any_succeeded = True
+        if not text:
+            continue
+        if is_degenerate_transcript(text):
+            logger.warning(
+                "Degenerate (looping) transcript from %s %s; retrying",
+                model,
+                opts,
+            )
+            candidates.append(text)
+            continue
+        return text
+
+    if candidates:
+        # every attempt looped: return the cleaned version of the longest
+        return max(candidates, key=_word_count)
+
+    if any_succeeded:
+        return ""  # genuine silence / no speech
+
+    raise RuntimeError("All transcription attempts failed")
 
 
 def transcribe_answer_audio(
@@ -100,14 +150,6 @@ def transcribe_answer_audio(
         with open(path, "wb") as handle:
             handle.write(audio_bytes)
 
-        try:
-            text = _transcribe_with(PRIMARY_MODEL, path)
-        except Exception:
-            logger.exception(
-                "Transcription with %s failed, retrying with %s",
-                PRIMARY_MODEL,
-                FALLBACK_MODEL,
-            )
-            text = _transcribe_with(FALLBACK_MODEL, path)
+        text = _best_transcript(path)
 
     return normalize_transcript(text)

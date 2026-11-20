@@ -1,6 +1,10 @@
 import unittest
 
-from app.services.transcript_normalizer import normalize_transcript
+from app.services.transcript_normalizer import (
+    collapse_repetition_loops,
+    is_degenerate_transcript,
+    normalize_transcript,
+)
 
 
 class TranscriptNormalizerTests(unittest.TestCase):
@@ -54,6 +58,24 @@ class TranscriptNormalizerTests(unittest.TestCase):
     def test_empty(self):
         self.assertEqual(normalize_transcript(""), "")
         self.assertEqual(normalize_transcript(None), "")
+
+    def test_loop_is_collapsed_but_real_words_kept(self):
+        looped = "So, um, I, I, I think that, uh, " + "the, " * 1000
+        result = normalize_transcript(looped)
+        self.assertTrue(result.startswith("So, um, I, I, I think that, uh,"))
+        self.assertLess(len(result.split()), 20)
+        self.assertTrue(is_degenerate_transcript(looped))
+
+    def test_normal_stutter_is_not_touched(self):
+        text = "I, I, I think the the data is clean"
+        self.assertEqual(normalize_transcript(text), text)
+        self.assertFalse(is_degenerate_transcript(text))
+
+    def test_phrase_loop_collapsed(self):
+        text = "I know " + "thank you " * 30 + "and then I cleaned data"
+        out = collapse_repetition_loops(text)
+        self.assertTrue(out.endswith("and then I cleaned data"))
+        self.assertLess(len(out.split()), 25)
 
 
 if __name__ == "__main__":

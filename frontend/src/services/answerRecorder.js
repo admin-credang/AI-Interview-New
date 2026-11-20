@@ -273,3 +273,77 @@ export async function transcribeAnswer(interviewId, blob) {
 
   return String(response?.data?.text || "").trim();
 }
+
+const WORD = /[A-Za-z0-9']+/g;
+
+/** True when a transcript is mostly one repeated word (STT loop). */
+export function isLoopingTranscript(text) {
+  const words = (String(text || "").toLowerCase().match(WORD)) || [];
+  if (words.length < 12) {
+    return false;
+  }
+  const counts = new Map();
+  for (const word of words) {
+    counts.set(word, (counts.get(word) || 0) + 1);
+  }
+  return Math.max(...counts.values()) / words.length > 0.6;
+}
+
+/** Collapses "the the the ... x1000" to 4 repeats, keeps real stutters. */
+export function collapseLoops(text, maxRepeats = 4) {
+  const tokens = String(text || "").split(/\s+/).filter(Boolean);
+  const norm = tokens.map((t) => (t.match(WORD)?.[0] || "").toLowerCase());
+  const out = [];
+  let i = 0;
+  while (i < tokens.length) {
+    let collapsed = false;
+    for (let size = 1; size <= 4 && !collapsed; size += 1) {
+      if (i + size > tokens.length) break;
+      const unit = norm.slice(i, i + size);
+      if (unit.some((w) => !w)) continue;
+      let reps = 1;
+      let j = i + size;
+      while (
+        j + size <= tokens.length &&
+        norm.slice(j, j + size).every((w, k) => w === unit[k])
+      ) {
+        reps += 1;
+        j += size;
+      }
+      if (reps > maxRepeats) {
+        out.push(...tokens.slice(i, i + size * maxRepeats));
+        i = j;
+        collapsed = true;
+      }
+    }
+    if (!collapsed) {
+      out.push(tokens[i]);
+      i += 1;
+    }
+  }
+  return out.join(" ");
+}
+
+const uniqueWordCount = (text) =>
+  new Set((String(text || "").toLowerCase().match(WORD)) || []).size;
+
+/**
+ * Chooses the transcript that best captures what the candidate said.
+ * - server transcript is normally the most accurate (whole recording),
+ * - but if it is a looping/garbage result, or has far fewer distinct
+ *   words than the browser's live text, the live text is used instead,
+ * - nothing is ever invented: an empty result stays empty.
+ */
+export function pickBestTranscript(liveText, serverText) {
+  const live = collapseLoops(String(liveText || "").trim());
+  const server = collapseLoops(String(serverText || "").trim());
+
+  if (!server) return live;
+  if (!live) return server;
+
+  if (isLoopingTranscript(serverText)) return live;
+
+  if (uniqueWordCount(server) < uniqueWordCount(live) * 0.5) return live;
+
+  return server;
+}

@@ -93,12 +93,12 @@ export const formatDate = (value) => {
 
 // One single white theme for the whole app (no dark / vivid switch).
 export const THEME = {
-  bg: "bg-white",
-  text: "text-slate-900",
+  bg: "bg-[#f5f7fa]",
+  text: "text-navy-900",
   nav: "bg-white border-slate-200 shadow-sm",
-  card: "bg-white border-slate-200 hover:border-slate-300 shadow-md hover:shadow-lg",
-  input: "bg-white border-slate-300 text-slate-900 placeholder:text-slate-400",
- welcome: "bg-slate-50 border-slate-300 shadow-sm",
+  card: "bg-white border-slate-200/80 shadow-[var(--shadow-card)] hover:border-brand-200 hover:shadow-[var(--shadow-card-hover)]",
+  input: "bg-white border-slate-200 text-navy-900 placeholder:text-slate-400 focus:border-brand-400",
+  welcome: "bg-brand-50/60 border-brand-100 shadow-sm",
 };
 
 // ============================================================
@@ -156,7 +156,8 @@ export function DashboardProvider({ children }) {
     .toLowerCase();
 
   const isCandidate = role === "candidate";
-  const isInterviewer = role === "interviewer";
+  // Admin works like an interviewer (sees every interview).
+  const isInterviewer = role === "interviewer" || role === "admin";
 
   // ----------------------------------------------------------
   // INTERVIEWER: candidates + summary (one shared load)
@@ -273,7 +274,7 @@ export function DashboardProvider({ children }) {
         alerts.push({
           id: "pending-review",
           text: `${s.pending_review} candidate${s.pending_review === 1 ? " is" : "s are"} waiting for your decision.`,
-          to: "/dashboard/candidates",
+          to: "/dashboard/reports",
         });
       }
 
@@ -281,7 +282,7 @@ export function DashboardProvider({ children }) {
         alerts.push({
           id: "monitoring-flags",
           text: `${s.flagged} interview${s.flagged === 1 ? " has" : "s have"} monitoring flags to check.`,
-          to: "/dashboard/candidates",
+          to: "/dashboard/reports",
         });
       }
 

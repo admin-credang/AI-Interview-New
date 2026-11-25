@@ -3,19 +3,19 @@
 export const DECISIONS = {
   pending: {
     label: "Pending review",
-    cls: "bg-amber-500/15 text-amber-700 border-amber-500/30",
+    cls: "bg-amber-50 text-amber-700 border-amber-200",
   },
   on_hold: {
     label: "On hold",
-    cls: "bg-slate-100 text-slate-700 border-slate-300",
+    cls: "bg-slate-100 text-slate-600 border-slate-200",
   },
   selected: {
     label: "Selected",
-    cls: "bg-emerald-500/15 text-emerald-700 border-emerald-500/30",
+    cls: "bg-emerald-50 text-emerald-700 border-emerald-200",
   },
   rejected: {
     label: "Rejected",
-    cls: "bg-rose-500/15 text-rose-700 border-rose-500/30",
+    cls: "bg-rose-50 text-rose-700 border-rose-200",
   },
 };
 
@@ -24,7 +24,7 @@ export function DecisionBadge({ value }) {
 
   return (
     <span
-      className={`inline-flex items-center px-3 py-1 rounded-full text-[11px] font-bold border whitespace-nowrap ${d.cls}`}
+      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border whitespace-nowrap ${d.cls}`}
     >
       {d.label}
     </span>
@@ -32,10 +32,10 @@ export function DecisionBadge({ value }) {
 }
 
 const SESSION_STATUS = {
-  completed: ["Completed", "bg-emerald-500/10 text-emerald-700 border-emerald-500/30"],
-  in_progress: ["In progress", "bg-amber-500/10 text-amber-700 border-amber-500/30"],
-  terminated: ["Ended early", "bg-rose-500/10 text-rose-700 border-rose-500/30"],
-  not_started: ["Not started", "bg-slate-500/10 text-slate-600 border-slate-500/30"],
+  completed: ["Completed", "bg-emerald-50 text-emerald-700 border-emerald-200"],
+  in_progress: ["In progress", "bg-brand-50 text-brand-700 border-brand-200"],
+  terminated: ["Ended early", "bg-rose-50 text-rose-700 border-rose-200"],
+  not_started: ["Not started", "bg-slate-50 text-slate-500 border-slate-200"],
 };
 
 export function StatusBadge({ status }) {
@@ -43,7 +43,7 @@ export function StatusBadge({ status }) {
 
   return (
     <span
-      className={`inline-flex items-center px-3 py-1 rounded-full text-[11px] font-bold border whitespace-nowrap ${cls}`}
+      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border whitespace-nowrap ${cls}`}
     >
       {label}
     </span>
@@ -60,7 +60,7 @@ export function Toggle({ checked, onChange, disabled = false, label }) {
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={`relative w-12 h-6 rounded-full transition-all shrink-0 disabled:opacity-30 disabled:cursor-not-allowed ${
-        checked ? "bg-emerald-600" : "bg-slate-300"
+        checked ? "bg-brand-500" : "bg-slate-300"
       }`}
     >
       <span
@@ -83,7 +83,7 @@ export const scoreText = (n) =>
   n === null || n === undefined ? "text-slate-500" : n >= 75 ? "text-emerald-600" : n >= 50 ? "text-slate-700" : "text-amber-600";
 
 export const scoreBar = (n) =>
-  n >= 75 ? "bg-emerald-500" : n >= 50 ? "bg-slate-800" : "bg-amber-500";
+  n >= 75 ? "bg-emerald-500" : n >= 50 ? "bg-brand-500" : "bg-amber-500";
 
 export function SkillBar({ label, value }) {
   const v = value === null || value === undefined ? null : Number(value);
@@ -92,7 +92,7 @@ export function SkillBar({ label, value }) {
     <div>
       <div className="flex items-center justify-between text-xs mb-1.5">
         <span className="opacity-80">{label}</span>
-        <span className="font-black">{v === null ? "—" : Math.round(v)}</span>
+        <span className="font-bold">{v === null ? "—" : Math.round(v)}</span>
       </div>
       <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
         <div
@@ -170,11 +170,11 @@ export function FlowSteps({ current }) {
         return (
           <li key={label} className="flex items-center gap-2 sm:gap-3 min-w-0">
             <span
-              className={`w-7 h-7 shrink-0 rounded-full flex items-center justify-center text-xs font-black border ${
+              className={`w-7 h-7 shrink-0 rounded-full flex items-center justify-center text-xs font-bold border ${
                 done
                   ? "bg-emerald-500 border-emerald-500 text-white"
                   : active
-                  ? "bg-slate-800 border-slate-300 text-white"
+                  ? "bg-brand-600 border-brand-600 text-white ring-4 ring-brand-100"
                   : "border-slate-200 text-slate-500"
               }`}
             >
@@ -182,13 +182,13 @@ export function FlowSteps({ current }) {
             </span>
             <span
               className={`truncate font-semibold ${
-                active ? "text-slate-900" : done ? "text-slate-600" : "text-slate-500"
+                active ? "text-navy-900" : done ? "text-slate-600" : "text-slate-400"
               }`}
             >
               {label}
             </span>
             {i < FLOW.length - 1 && (
-              <span className="h-px w-4 sm:w-10 bg-slate-200 shrink-0" />
+              <span className={`h-0.5 w-4 sm:w-12 rounded-full shrink-0 ${done ? "bg-emerald-400" : "bg-slate-200"}`} />
             )}
           </li>
         );
@@ -235,9 +235,9 @@ export function Timeline({ state, result }) {
             <span
               className={`w-5 h-5 rounded-full border-2 shrink-0 ${
                 s.on
-                  ? s.tone || "bg-slate-800 border-slate-300"
+                  ? s.tone || "bg-brand-500 border-brand-500"
                   : s.current
-                  ? "border-slate-300 animate-pulse"
+                  ? "border-brand-400 bg-brand-50 animate-pulse"
                   : "border-slate-200"
               }`}
             />
@@ -245,8 +245,8 @@ export function Timeline({ state, result }) {
               <span
                 className={`h-0.5 flex-1 ${
                   steps[i + 1].on || steps[i + 1].current
-                    ? "bg-slate-100"
-                    : "bg-slate-100"
+                    ? "bg-brand-300"
+                    : "bg-slate-200"
                 }`}
               />
             )}
@@ -263,9 +263,9 @@ export function Timeline({ state, result }) {
 // ------------------------------------------------------------
 export const recommendation = (score) => {
   if (score === null || score === undefined) return null;
-  if (score >= 75) return { label: "Strong match", cls: "text-emerald-700 border-emerald-500/30 bg-emerald-500/10" };
-  if (score >= 55) return { label: "Worth a call", cls: "text-slate-700 border-slate-300 bg-slate-100" };
-  return { label: "Weak match", cls: "text-amber-700 border-amber-500/30 bg-amber-500/10" };
+  if (score >= 75) return { label: "Strong match", cls: "text-emerald-700 border-emerald-200 bg-emerald-50" };
+  if (score >= 55) return { label: "Worth a call", cls: "text-navy-700 border-navy-100 bg-navy-50" };
+  return { label: "Weak match", cls: "text-amber-700 border-amber-200 bg-amber-50" };
 };
 
 export const downloadCsv = (filename, rows) => {

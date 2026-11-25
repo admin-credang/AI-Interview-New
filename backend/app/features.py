@@ -218,7 +218,9 @@ def apply(extra: dict, changes: dict[str, bool]) -> dict:
 
         elif key == "monitoring":
             # ONE switch: face, eye / gaze and phone detection follow it
-            extra["proctoring"] = monitoring_flags(value)
+            extra["proctoring"] = monitoring_flags(
+                value, (extra.get("proctoring") or {}).get("gaze_level")
+            )
 
         else:
             saved = dict(extra.get("features") or {})
@@ -232,8 +234,23 @@ def apply(extra: dict, changes: dict[str, bool]) -> dict:
 # MONITORING  (one switch -> face + eye / gaze + phone)
 # ---------------------------------------------------------
 
-def monitoring_flags(enabled: bool) -> dict[str, bool]:
-    """Everything monitoring does is ON or OFF together."""
+GAZE_LEVELS = ("low", "medium", "high")
+DEFAULT_GAZE_LEVEL = "medium"
+
+
+def normalize_gaze_level(level) -> str:
+    """low / medium / high; anything else = medium."""
+
+    level = str(level or "").strip().lower()
+    return level if level in GAZE_LEVELS else DEFAULT_GAZE_LEVEL
+
+
+def monitoring_flags(enabled: bool, gaze_level=None) -> dict:
+    """Everything monitoring does is ON or OFF together.
+
+    gaze_level = how strict the eye / gaze detection is
+    (low = only clear look-aways, high = also small ones).
+    """
 
     enabled = bool(enabled)
 
@@ -242,16 +259,19 @@ def monitoring_flags(enabled: bool) -> dict[str, bool]:
         "face": enabled,
         "eye": enabled,
         "phone": enabled,
+        "gaze_level": normalize_gaze_level(gaze_level),
     }
 
 
-def monitoring_policy(configuration) -> dict[str, bool]:
+def monitoring_policy(configuration) -> dict:
     """What the interview and the reports use. Old interviews that saved
     face / eye / phone separately now follow the main switch too."""
 
     raw = _extra(configuration).get("proctoring") or {}
 
-    return monitoring_flags(raw.get("enabled", False))
+    return monitoring_flags(
+        raw.get("enabled", False), raw.get("gaze_level")
+    )
 
 
 # ---------------------------------------------------------

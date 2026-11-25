@@ -1,287 +1,246 @@
-// Register.scss — effects on top of Tailwind
-
-@use "sass:color";
-
-$blue: #6d28d9;
-$blue-glow: rgba(109, 40, 217, 0.45);
-$violet: #cbd5e1;
-$pink: #e2e8f0;
-
+// register.scss — auth page effects on top of Tailwind (teal / navy theme)
+$teal: #7c3aed;
+$teal-hover: #6d28d9;
+$teal-glow: rgba(124,58,237, 0.35);
 $ease: cubic-bezier(0.22, 1, 0.36, 1);
 
-@keyframes cardIn {
-  from {
-    opacity: 0;
-    transform: translateY(24px) scale(0.98);
-  }
-
-  to {
-    opacity: 1;
-    transform: none;
-  }
+@keyframes authCardIn {
+  from { opacity: 0; transform: translateY(20px) scale(0.985); }
+  to { opacity: 1; transform: none; }
 }
-
-@keyframes floaty {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-
-  50% {
-    transform: translateY(-10px);
-  }
+@keyframes authDrift {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(30px, -20px); }
 }
-
-@keyframes drift {
-  0%,
-  100% {
-    transform: translate(0, 0);
-  }
-
-  50% {
-    transform: translate(30px, -20px);
-  }
+@keyframes authPulse {
+  0% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.6); }
+  100% { box-shadow: 0 0 0 9px rgba(52, 211, 153, 0); }
 }
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
+@keyframes authSpin { to { transform: rotate(360deg); } }
 
 .register-page {
   position: relative;
   overflow: hidden;
-  background: #ffffff;
+  background: #f5f7fa;
 
   .blob {
     position: absolute;
     border-radius: 50%;
     filter: blur(110px);
     pointer-events: none;
-    animation: drift 14s ease-in-out infinite;
+    animation: authDrift 16s ease-in-out infinite;
 
-    &--violet {
-      width: 460px;
-      height: 460px;
-      top: -140px;
-      left: -100px;
-      background: rgba($violet, 0.18);
+    &--teal {
+      width: 440px; height: 440px; top: -140px; right: -100px;
+      background: rgba(167,139,250, 0.22);
     }
+    &--navy {
+      width: 480px; height: 480px; bottom: -180px; left: -140px;
+      background: rgba(40, 74, 130, 0.16);
+      animation-delay: -7s;
+    }
+  }
 
-    &--blue {
-      width: 460px;
-      height: 460px;
-      bottom: -160px;
-      right: -100px;
-      background: rgba(148, 163, 184, 0.14);
-      animation-delay: -6s;
-    }
+  .live-dot {
+    width: 7px; height: 7px; border-radius: 999px;
+    background: #34d399;
+    animation: authPulse 1.8s ease-out infinite;
   }
 }
 
 .register-card {
-  animation: cardIn 0.8s $ease both;
-  box-shadow: 0 30px 80px -30px rgba(15, 23, 42, 0.25);
+  animation: authCardIn 0.7s $ease both;
   border: 1px solid #e2e8f0;
+  box-shadow: 0 30px 80px -32px rgba(13, 31, 60, 0.28);
 }
-
-// ---------- Left purple panel ----------
-
-.register-visual {
-  position: relative;
-  isolation: isolate;
-  background: linear-gradient(
-    160deg,
-    #334155 0%,
-    #475569 45%,
-    #64748b 120%
-  );
-
-  .visual-bg {
-    filter: blur(30px) saturate(1.4);
-    transform: scale(1.3);
-    opacity: 0.55;
-    mix-blend-mode: screen;
-  }
-
-  .visual-main {
-    z-index: 0;
-    transition: transform 1.2s $ease;
-
-    -webkit-mask-image: linear-gradient(
-      to bottom,
-      transparent 0%,
-      #000 14%,
-      #000 86%,
-      transparent 100%
-    );
-
-    mask-image: linear-gradient(
-      to bottom,
-      transparent 0%,
-      #000 14%,
-      #000 86%,
-      transparent 100%
-    );
-  }
-
-  &:hover .visual-main {
-    transform: scale(1.03);
-  }
-
-  // Soft bottom shade so the text stays readable
-  &::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    background: linear-gradient(
-      to top,
-      rgba(40, 15, 100, 0.75),
-      transparent 45%
-    );
-    pointer-events: none;
-  }
-
-  .brand,
-  .glass-chip {
-    position: absolute;
-    z-index: 2;
-  }
-
-  .brand {
-    top: 1.5rem;
-    left: 1.5rem;
-  }
-
-  .glass-chip {
-    left: 1.5rem;
-    right: 1.5rem;
-    bottom: 1.5rem;
-
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-
-    background: rgba(255, 255, 255, 0.12);
-    border: 1px solid rgba(255, 255, 255, 0.22);
-
-    animation: floaty 5s ease-in-out infinite;
-  }
-}
-
-// ---------- Right form ----------
 
 .register-form {
-  .title-bar {
-    display: block;
-    width: 36px;
-    height: 4px;
-    border-radius: 4px;
-    background: $blue;
-    margin-top: 10px;
-  }
-
-  .field input {
-    transition:
-      border-color 0.2s,
-      box-shadow 0.2s,
-      background 0.2s;
+  .field input,
+  .field select {
+    transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
 
     &:focus {
-      border-color: #64748b;
+      border-color: #a78bfa;
+      box-shadow: 0 0 0 4px rgba(167,139,250, 0.16);
       background: #fff;
-      box-shadow: 0 0 0 4px rgba(100, 116, 139, 0.15);
     }
   }
 
-  .role-card {
-    transition:
-      border-color 0.2s,
-      background 0.2s,
-      box-shadow 0.2s;
-  }
-
-  .strength span {
-    transition: background 0.3s;
-  }
+  .role-card { transition: border-color 0.2s, background 0.2s, box-shadow 0.2s; }
+  .strength span { transition: background 0.3s; }
 
   .btn-primary {
     position: relative;
     overflow: hidden;
-
-    background: $blue;
-
-    box-shadow: 0 14px 30px -10px $blue-glow;
-
-    transition:
-      transform 0.2s $ease,
-      box-shadow 0.2s,
-      background 0.2s;
+    background: linear-gradient(135deg, #8b5cf6, $teal) !important;
+    border: 0;
+    box-shadow: 0 14px 30px -12px $teal-glow;
+    transition: transform 0.2s $ease, box-shadow 0.2s;
 
     &::after {
       content: "";
       position: absolute;
       inset: 0;
-
       transform: translateX(-120%);
-
-      background: linear-gradient(
-        110deg,
-        transparent 30%,
-        rgba(255, 255, 255, 0.3),
-        transparent 70%
-      );
-
+      background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.3), transparent 70%);
       transition: transform 0.7s $ease;
     }
-
-    .arrow {
-      transition: transform 0.25s $ease;
-    }
-
     &:hover:not(:disabled) {
-      transform: translateY(-2px);
-
-      // Replaced deprecated darken()
-      background: color.adjust($blue, $lightness: -4%);
-
-      &::after {
-        transform: translateX(120%);
-      }
-
-      .arrow {
-        transform: translateX(4px);
-      }
+      transform: translateY(-1px);
+      box-shadow: 0 18px 34px -12px $teal-glow;
+      &::after { transform: translateX(120%); }
     }
+    &:active:not(:disabled) { transform: translateY(0); }
 
-    &:active:not(:disabled) {
-      transform: translateY(0);
-    }
+    .arrow { transition: transform 0.2s $ease; }
+    &:hover .arrow { transform: translateX(3px); }
   }
 
   .spinner {
-    width: 18px;
-    height: 18px;
-
+    width: 16px; height: 16px; border-radius: 999px;
     border: 2px solid rgba(255, 255, 255, 0.4);
     border-top-color: #fff;
-
-    border-radius: 50%;
-
-    animation: spin 0.7s linear infinite;
+    animation: authSpin 0.7s linear infinite;
   }
 }
-
-// ---------- Reduced motion ----------
 
 @media (prefers-reduced-motion: reduce) {
   .register-page .blob,
   .register-card,
-  .register-visual .glass-chip,
-  .register-visual .visual-main,
-  .register-form .btn-primary .arrow {
-    animation: none !important;
-    transition: none !important;
+  .register-page .live-dot,
+  .register-form .btn-primary::after { animation: none !important; transition: none !important; }
+}
+
+// ------------------------------------------------------------
+// Register v3: pastel 3D ribbon panel + clean form (white / purple)
+// ------------------------------------------------------------
+@keyframes rg3Float {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(0, -16px, 0); }
+}
+@keyframes rg3Spin {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-4deg); }
+}
+@keyframes rg3In {
+  from { opacity: 0; transform: translateY(18px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+.rg3-page {
+  background:
+    radial-gradient(900px 600px at 0% 0%, rgba(165, 180, 252, 0.55), transparent 60%),
+    radial-gradient(900px 600px at 100% 100%, rgba(244, 114, 182, 0.28), transparent 60%),
+    linear-gradient(120deg, #eef0ff 0%, #f5f0ff 45%, #fdf2f8 100%);
+}
+
+.rg3-orb {
+  position: absolute;
+  border-radius: 999px;
+  pointer-events: none;
+  background: radial-gradient(circle at 32% 28%, #ffffff 0%, #e9d5ff 18%, #a855f7 55%, #6d28d9 100%);
+  box-shadow: inset -10px -14px 24px rgba(76, 29, 149, 0.4), 0 30px 50px -20px rgba(109, 40, 217, 0.5);
+  animation: rg3Float 9s ease-in-out infinite;
+  &--a { width: 90px; height: 90px; right: 4%; top: 6%; }
+  &--b { width: 54px; height: 54px; left: 45%; bottom: 5%; animation-delay: -4s;
+         background: radial-gradient(circle at 32% 28%, #fff 0%, #fbcfe8 20%, #d946ef 60%, #a21caf 100%); }
+}
+
+.rg3-panel {
+  animation: rg3In 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    0 30px 60px -24px rgba(76, 29, 149, 0.45),
+    0 60px 120px -40px rgba(109, 40, 217, 0.35);
+}
+
+.rg3-waves .rg3-rib {
+  transform-origin: 820px 900px;
+  animation: rg3Spin 16s ease-in-out infinite;
+}
+
+.rg3-glass {
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.rg3-glass-card {
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: inset 0 1px 0 #fff, 0 22px 40px -18px rgba(46, 16, 101, 0.55);
+}
+.rg3-float { animation: rg3Float 7s ease-in-out infinite; }
+
+.rg3-title {
+  text-shadow: 0 2px 0 rgba(76, 29, 149, 0.45), 0 14px 30px rgba(46, 16, 101, 0.45);
+}
+
+.rg3-form {
+  animation: rg3In 0.7s 0.08s cubic-bezier(0.22, 1, 0.36, 1) both;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 1px 0 #fff inset, 0 24px 60px -30px rgba(76, 29, 149, 0.35);
+}
+
+.rg3-input {
+  width: 100%;
+  border-radius: 999px;
+  border: 1px solid #e4dcfb;
+  background: #ffffff;
+  padding: 0.85rem 1.2rem;
+  font-size: 0.9rem;
+  color: #13163a;
+  outline: none;
+  box-shadow: 0 1px 0 #fff, 0 8px 18px -14px rgba(76, 29, 149, 0.35);
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+
+  &::placeholder { color: #a09ac4; }
+  &:focus {
+    border-color: #8b5cf6 !important;
+    transform: translateY(-1px);
+    box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.16), 0 12px 24px -14px rgba(109, 40, 217, 0.5) !important;
   }
+}
+
+.rg3-role {
+  background: #ffffff;
+  border: 1px solid #ece6fd;
+  box-shadow: 0 2px 0 #e9e2fb, 0 12px 22px -16px rgba(76, 29, 149, 0.45);
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s, background 0.2s;
+  &:hover { transform: translateY(-2px); }
+}
+.peer:checked + .rg3-role {
+  border-color: #8b5cf6;
+  background: linear-gradient(180deg, #faf7ff, #f3edff);
+  box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.14), 0 3px 0 #c4b5fd, 0 16px 26px -16px rgba(109, 40, 217, 0.6);
+}
+.peer:focus-visible + .rg3-role { outline: 2px solid #8b5cf6; outline-offset: 2px; }
+
+.rg3-btn {
+  background: linear-gradient(180deg, #9b6bff 0%, #7c3aed 55%, #6d28d9 100%) !important;
+  border: 0 !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 5px 0 #5b21b6,
+    0 18px 30px -12px rgba(109, 40, 217, 0.7);
+  transition: transform 0.15s, box-shadow 0.15s, filter 0.15s;
+  &:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.05); }
+  &:active:not(:disabled) {
+    transform: translateY(4px);
+    filter: brightness(0.82);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 1px 0 #5b21b6, 0 6px 12px -6px rgba(109, 40, 217, 0.6);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rg3-orb, .rg3-panel, .rg3-form, .rg3-float, .rg3-waves .rg3-rib { animation: none !important; }
+}
+.reduce-motion {
+  .rg3-orb, .rg3-panel, .rg3-form, .rg3-float, .rg3-waves .rg3-rib { animation: none !important; }
 }

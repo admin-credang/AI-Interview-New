@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { useAuth } from "../context/AuthContext";
+import BrandMark from "../components/BrandMark";
 import api from "../services/api";
 
 /**
@@ -101,24 +102,29 @@ export default function InviteAccept() {
 
   if (checking && !error) {
     return (
-      <div className="min-h-screen bg-white text-slate-900 flex flex-col items-center justify-center gap-4 px-6">
-        <div className="w-10 h-10 rounded-full border-2 border-slate-200 border-t-slate-700 animate-spin" />
+      <div className="min-h-screen bg-[#f5f7fa] text-navy-900 flex flex-col items-center justify-center gap-4 px-6">
+        <BrandMark dark={false} />
+        <div className="mt-4 w-10 h-10 rounded-full border-2 border-slate-200 border-t-brand-500 animate-spin" />
         <p className="text-sm opacity-70">Opening your interview...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-white text-slate-900 flex items-center justify-center px-6">
-      <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-slate-50 p-8 text-center shadow-2xl">
-        <p className="text-[11px] uppercase tracking-wider opacity-50 font-bold mb-2">
-          Interview ID
-        </p>
-        <p className="font-mono text-lg tracking-widest mb-5">{code}</p>
+    <div className="min-h-screen bg-[#f5f7fa] text-navy-900 flex flex-col items-center justify-center gap-8 px-6">
+      <BrandMark dark={false} />
+      <div className="ui-card w-full max-w-md overflow-hidden text-center">
+        <div className="bg-gradient-to-r from-navy-900 to-brand-900 px-8 py-5 text-white">
+          <p className="text-[11px] uppercase tracking-wider text-brand-200 font-semibold mb-1">
+            Interview ID
+          </p>
+          <p className="font-mono text-lg tracking-widest">{code}</p>
+        </div>
+        <div className="p-8">
 
         {isRecruiter ? (
           <>
-            <h1 className="text-xl font-black mb-2">You are signed in as an interviewer</h1>
+            <h1 className="text-xl font-bold mb-2">You are signed in as an interviewer</h1>
             <p className="text-sm opacity-80 leading-relaxed mb-8">
               This link is for the candidate. Open it in another browser or a
               private window, or sign out here to continue as the candidate.
@@ -135,13 +141,13 @@ export default function InviteAccept() {
                   setChecking(true);
                   setSwitching(true);
                 }}
- className="w-full py-3 rounded-2xl bg-slate-800 font-bold text-sm"
+ className="w-full py-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm"
               >
                 Sign out and continue as candidate
               </button>
               <button
                 onClick={() => navigate("/dashboard", { replace: true })}
-                className="w-full py-3 rounded-2xl border border-slate-200 hover:bg-slate-100 font-bold text-sm"
+                className="bg-white text-navy-800 w-full py-3 rounded-xl border border-slate-200 hover:bg-slate-50 font-semibold text-sm"
               >
                 Back to my dashboard
               </button>
@@ -149,7 +155,7 @@ export default function InviteAccept() {
           </>
         ) : (
           <>
-            <h1 className="text-xl font-black mb-2">We could not open this interview</h1>
+            <h1 className="text-xl font-bold mb-2">We could not open this interview</h1>
             <p className="text-sm text-rose-700 leading-relaxed mb-8">{error}</p>
             <p className="text-xs opacity-60">
               Use the button in your latest invitation email, or ask the
@@ -157,6 +163,7 @@ export default function InviteAccept() {
             </p>
           </>
         )}
+        </div>
       </div>
     </div>
   );

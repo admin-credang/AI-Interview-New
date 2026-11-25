@@ -1,0 +1,46 @@
+/* Live Interview Guard - visual theme only (no behaviour changes). Loaded after the built-in styles. */
+:root { --purple: #6d28d9; --bg: #f6f5fb; --line: #ebe7f7; }
+body { font-family: "Plus Jakarta Sans", Inter, system-ui, Arial, sans-serif; max-width: 1180px; margin: 18px auto; }
+header {
+  border-radius: 22px; padding: 28px 30px;
+  background:
+    radial-gradient(500px 260px at 100% 0%, rgba(45, 212, 191, 0.35), transparent 60%),
+    radial-gradient(500px 260px at 0% 100%, rgba(139, 92, 246, 0.5), transparent 60%),
+    linear-gradient(135deg, #1a0c45, #312e81 55%, #0f3b44);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 4px 0 #1e1b4b, 0 24px 50px -24px rgba(30, 27, 75, 0.8);
+}
+header h1 { letter-spacing: -0.02em; }
+.box {
+  border-radius: 18px; border: 1px solid var(--line); padding: 20px 22px; margin: 16px 0;
+  box-shadow: 0 1px 0 #fff inset, 0 18px 40px -30px rgba(49, 46, 129, 0.45);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+.box:hover { box-shadow: 0 1px 0 #fff inset, 0 24px 46px -28px rgba(49, 46, 129, 0.55); }
+.box h2 { color: #312e81; border-left-color: #14b8a6 !important; font-weight: 800; letter-spacing: -0.01em; }
+input, select {
+  border-radius: 12px; border-color: #ddd8ee; background: #fbfaff;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+input:focus, select:focus { outline: none; border-color: #8b5cf6; box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.15); background: #fff; }
+button {
+  border-radius: 12px;
+  background: linear-gradient(180deg, #8b5cf6, #6d28d9);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 4px 0 #4c1d95, 0 12px 22px -12px rgba(109, 40, 217, 0.8);
+  transition: transform 0.12s ease, filter 0.12s ease, box-shadow 0.12s ease;
+}
+button:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.05); }
+button:active:not(:disabled) { transform: translateY(3px); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 1px 0 #4c1d95; }
+button:disabled { filter: grayscale(0.4); opacity: 0.55; box-shadow: none; }
+button.secondary {
+  background: linear-gradient(180deg, #312e81, #1e1b4b);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 4px 0 #0f0d2e, 0 12px 22px -12px rgba(30, 27, 75, 0.8);
+}
+#share, #start {
+  background: linear-gradient(180deg, #2dd4bf, #0d9488);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 4px 0 #115e59, 0 14px 24px -12px rgba(13, 148, 136, 0.8);
+}
+.pill { border-radius: 9999px; }
+.notice { border-radius: 12px; border-left-color: #8b5cf6; background: #f6f3ff; }
+.live-panel { border-radius: 16px; border-color: var(--line); }
+#wrap canvas { border-radius: 16px; box-shadow: 0 20px 40px -24px rgba(15, 23, 42, 0.7); }
+footer { opacity: 0.8; }

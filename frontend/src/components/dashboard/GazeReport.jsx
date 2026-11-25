@@ -21,7 +21,7 @@ function Stat({ label, value, note, color }) {
       style={{ borderTop: `4px solid ${color}` }}
     >
       <p className="text-[11px] opacity-60 font-semibold mb-1">{label}</p>
-      <p className="text-2xl font-black leading-tight" style={{ color }}>
+      <p className="text-2xl font-bold leading-tight" style={{ color }}>
         {value}
       </p>
       <p className="text-[11px] opacity-60 mt-1 break-words">{note}</p>
@@ -36,8 +36,7 @@ export default function GazeReport({ gaze, eyeRequired }) {
 
   const header = (
     <div
-      className="rounded-xl px-5 py-3 mb-5 font-black text-slate-900 text-sm md:text-base"
-      style={{ background: "#db2777" }}
+      className="mb-5 flex items-center gap-2 rounded-xl border border-brand-100 bg-brand-50 px-4 py-2.5 text-sm font-semibold text-brand-800"
     >
       Eye Movement Detection (AI-Assisted Answer Check)
     </div>
@@ -105,8 +104,7 @@ export default function GazeReport({ gaze, eyeRequired }) {
             <table className="w-full text-sm min-w-[640px]">
               <thead>
                 <tr
-                  className="text-left text-slate-900 text-xs"
-                  style={{ background: "#db2777" }}
+                  className="text-left text-[11px] uppercase tracking-wider text-slate-500 bg-slate-50 border-b border-slate-200"
                 >
                   <th className="px-4 py-3 font-bold">#</th>
                   <th className="px-4 py-3 font-bold">Gaze on screen</th>
@@ -119,7 +117,7 @@ export default function GazeReport({ gaze, eyeRequired }) {
               <tbody>
                 {gaze.questions.map((q) => (
                   <tr key={q.question} className="border-b border-black/10 align-top">
-                    <td className="px-4 py-3 font-black" style={{ color: "#db2777" }}>
+                    <td className="px-4 py-3 font-bold" style={{ color: "#7c3aed" }}>
                       Q{q.question}
                     </td>
                     <td className="px-4 py-3">
@@ -136,7 +134,7 @@ export default function GazeReport({ gaze, eyeRequired }) {
                     <td className="px-4 py-3 text-center">
                       {q.assessed ? (
                         <span
-                          className={`inline-block px-3 py-1 rounded-md text-[11px] font-black ${levelOf(q.risk).chip}`}
+                          className={`inline-block px-3 py-1 rounded-md text-[11px] font-bold ${levelOf(q.risk).chip}`}
                         >
                           {q.risk}
                         </span>

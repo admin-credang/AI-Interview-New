@@ -49,12 +49,12 @@ function JobCard({ item, t }) {
   const closed = item.status === "closed" && state === "not_started";
 
   return (
-    <article className={`rounded-[2.5rem] border ${t.card} p-8 flex flex-col gap-5`}>
+    <article className={`rounded-2xl border ${t.card} p-8 flex flex-col gap-5`}>
       <div>
         <p className="text-[11px] uppercase tracking-wider opacity-50 font-bold mb-1">
           {job.company || "AI Tech Solutions"}
         </p>
-        <h3 className="text-2xl font-black tracking-tight leading-tight">{heading}</h3>
+        <h3 className="text-2xl font-bold tracking-tight leading-tight">{heading}</h3>
         {job.role && job.role !== item.title && (
           <p className="text-sm opacity-60 mt-1">{item.title}</p>
         )}
@@ -104,7 +104,7 @@ function JobCard({ item, t }) {
       ) : (
         <button
           onClick={() => navigate(`/interviews/${item.id}`)}
- className="mt-auto w-full flex items-center justify-center gap-2.5 px-6 py-4 bg-slate-800 text-white rounded-2xl font-bold transition active:scale-[0.98] shadow-xl"
+ className="mt-auto w-full flex items-center justify-center gap-2.5 px-6 py-4 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl font-bold transition active:scale-[0.98] shadow-xl"
         >
           {state === "in_progress" ? "Resume AI Interview" : "Start AI Interview"}
           <span>→</span>
@@ -127,7 +127,7 @@ function InterviewIdBox({ t }) {
   };
 
   return (
-    <section className={`rounded-[2rem] border ${t.card} p-6 md:p-8`}>
+    <section className={`rounded-2xl border ${t.card} p-6 md:p-8`}>
       <h2 className="text-lg font-bold">Have an Interview ID?</h2>
       <p className="text-xs opacity-60 mt-1 mb-4">
         Find it in the invitation email, for example INV-K7QM-4X9B.
@@ -144,7 +144,7 @@ function InterviewIdBox({ t }) {
         <button
           type="submit"
           disabled={!code.trim()}
- className="px-6 py-3 rounded-xl bg-slate-800 text-white font-bold text-sm disabled:opacity-40"
+ className="px-6 py-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm disabled:opacity-40"
         >
           Open my interview
         </button>
@@ -178,7 +178,7 @@ export default function CandidateHome() {
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 border border-slate-300 text-slate-700 text-xs font-semibold mb-4">
               <span>⚡ Active Candidate Profile</span>
             </div>
-            <h1 className="text-4xl md:text-5xl font-black mb-3 tracking-tight">
+            <h1 className="text-4xl md:text-5xl font-bold mb-3 tracking-tight">
               Welcome back,{" "}
  <span className="text-slate-700 ">
                 {userName || "Candidate"}
@@ -217,10 +217,10 @@ export default function CandidateHome() {
       {/* PROCESS SECTION */}
       <section>
         <h2 className="text-xl font-bold mb-6 px-1">How your AI interview works</h2>
-        <ol className={`rounded-[2rem] border ${t.card} p-6 md:p-8 grid grid-cols-1 md:grid-cols-2 gap-6`}>
+        <ol className={`rounded-2xl border ${t.card} p-6 md:p-8 grid grid-cols-1 md:grid-cols-2 gap-6`}>
           {steps.map((s, i) => (
             <li key={s.title} className="flex gap-4">
- <span className="w-9 h-9 shrink-0 rounded-xl bg-slate-800 text-white font-black flex items-center justify-center text-sm shadow-lg ">
+ <span className="w-9 h-9 shrink-0 rounded-xl bg-brand-600 text-white font-bold flex items-center justify-center text-sm shadow-lg ">
                 {i + 1}
               </span>
               <div>

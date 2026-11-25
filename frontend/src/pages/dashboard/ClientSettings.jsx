@@ -364,7 +364,7 @@ function EmailStatusBox() {
         type="button"
         onClick={sendTest}
         disabled={busy}
-        className="w-full py-2.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold transition disabled:opacity-50"
+        className="bg-white w-full py-2.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold transition disabled:opacity-50"
       >
         {busy ? "Sending test mail..." : "Send a test mail to me"}
       </button>
@@ -445,7 +445,7 @@ function InterviewerBox({ item, t, onSaved }) {
         type="button"
         onClick={save}
         disabled={busy}
-        className="mt-4 w-full py-2.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold transition disabled:opacity-50"
+        className="bg-white mt-4 w-full py-2.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold transition disabled:opacity-50"
       >
         {busy ? "Saving..." : "Save interviewer"}
       </button>
@@ -592,7 +592,7 @@ function CandidatesColumn({ invitations, t, onResend, resending, emailOn, resume
                       type="button"
                       disabled={resending === inv.email || inv.mail_status === "pending"}
                       onClick={() => onResend(inv)}
-                      className="flex-1 py-2 px-3 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold transition disabled:opacity-50"
+                      className="bg-white flex-1 py-2 px-3 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold transition disabled:opacity-50"
                     >
                       {resending === inv.email || inv.mail_status === "pending"
                         ? "Sending..."
@@ -608,7 +608,7 @@ function CandidatesColumn({ invitations, t, onResend, resending, emailOn, resume
                     <button
                       type="button"
                       onClick={() => copyLink(inv)}
-                      className="flex-1 py-2 px-3 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold transition"
+                      className="bg-white flex-1 py-2 px-3 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold transition"
                     >
                       {copied === inv.email ? "Copied ✓" : "Copy Link"}
                     </button>
@@ -646,7 +646,7 @@ function CandidatesColumn({ invitations, t, onResend, resending, emailOn, resume
             onClick={() => setPage(Math.max(1, current - 1))}
             disabled={current === 1}
             aria-label="Previous page"
-            className="px-3 py-2 bg-slate-50 rounded-xl disabled:opacity-30 hover:bg-slate-100 transition"
+            className="px-3 py-2 bg-slate-50 text-navy-800 rounded-xl disabled:opacity-30 hover:bg-slate-100 transition"
           >
             ‹ Prev
           </button>
@@ -656,7 +656,7 @@ function CandidatesColumn({ invitations, t, onResend, resending, emailOn, resume
                 key={n}
                 type="button"
                 onClick={() => setPage(n)}
-                className={n === current ? "font-black text-slate-700" : "opacity-60 hover:opacity-100"}
+                className={n === current ? "font-bold text-slate-700" : "opacity-60 hover:opacity-100"}
               >
                 {n}
               </button>
@@ -667,7 +667,7 @@ function CandidatesColumn({ invitations, t, onResend, resending, emailOn, resume
             onClick={() => setPage(Math.min(pages, current + 1))}
             disabled={current === pages}
             aria-label="Next page"
-            className="px-3 py-2 bg-slate-50 rounded-xl disabled:opacity-30 hover:bg-slate-100 transition"
+            className="px-3 py-2 bg-slate-50 text-navy-800 rounded-xl disabled:opacity-30 hover:bg-slate-100 transition"
           >
             Next ›
           </button>
@@ -843,7 +843,7 @@ function AddCandidateColumn({ interviewId, t, onAdded, emailOn, cvOn }) {
           type="button"
           onClick={submit}
           disabled={busy}
- className="w-full mt-4 py-4 rounded-2xl bg-slate-800 text-white font-black text-sm tracking-wide transition-all disabled:opacity-50 shadow-xl active:scale-[0.99]"
+ className="w-full mt-4 py-4 rounded-2xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm tracking-wide transition-all disabled:opacity-50 shadow-xl active:scale-[0.99]"
         >
           {busy ? "Registering Candidate..." : "+ Add & Invite Candidate"}
         </button>
@@ -1002,7 +1002,7 @@ export default function ClientSettings() {
           <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-bold border border-slate-300">
             Admin Panel
           </span>
-          <h1 className="text-3xl font-black tracking-tight text-slate-900 mt-2">Client Settings</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900 mt-2">Client Settings</h1>
           <p className="text-slate-500 text-sm mt-1">Manage interview settings, configurations and candidates smoothly.</p>
         </div>
 

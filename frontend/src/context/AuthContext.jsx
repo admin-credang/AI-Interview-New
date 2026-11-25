@@ -72,11 +72,37 @@ export function AuthProvider({ children }) {
   };
 
   // Google sign-in: `credential` is the ID token from Google Identity Services
-  const googleLogin = async (credential, remember = true) => {
+  // `role` is only used when this Google account is new (sign-up).
+  const googleLogin = async (credential, remember = true, role) => {
     setLoading(true);
 
     try {
-      const response = await api.post("/auth/google", { credential });
+      const response = await api.post("/auth/google", role ? { credential, role } : { credential });
+      const { access_token, user } = response.data;
+
+      storeSession(access_token, user, remember);
+      setUser(user);
+
+      return { success: true, user };
+    } catch (error) {
+      return {
+        success: false,
+        message:
+          error.response?.data?.detail ||
+          "Google sign-in failed. Please try again.",
+      };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Redirect sign-in with Google: the backend sends the browser back to
+  // /login?google_ticket=...; swap that short-lived ticket for a session.
+  const googleTicketLogin = async (ticket, remember = true) => {
+    setLoading(true);
+
+    try {
+      const response = await api.post("/auth/google/ticket", { ticket });
       const { access_token, user } = response.data;
 
       storeSession(access_token, user, remember);
@@ -145,7 +171,7 @@ export function AuthProvider({ children }) {
   // Same object between renders -> pages that only read `user`
   // are not re-rendered every time something else changes.
   const value = useMemo(
-    () => ({ user, loading, login, googleLogin, register, logout, setSession }),
+    () => ({ user, loading, login, googleLogin, googleTicketLogin, register, logout, setSession }),
     // login / register / logout only use setters, so they are stable
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [user, loading]

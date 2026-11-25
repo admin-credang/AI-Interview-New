@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { useAuth } from "../context/AuthContext";
+import BrandMark from "../components/BrandMark";
 import api from "../services/api";
 import { processSteps } from "../components/dashboard/hiring";
 
@@ -365,43 +366,38 @@ function InterviewLobby() {
   const questionCount = configuration?.extra_config?.question_count || "10";
 
   return (
-    <div className="min-h-screen bg-white text-slate-800 font-sans relative selection:bg-slate-800 selection:text-white pb-24">
+    <div className="min-h-screen bg-[#f5f7fa] text-navy-900 font-sans relative pb-24">
       
       {/* AMBIENT GLOWS */}
       {/* TOP NAVBAR */}
-      <header className="sticky top-0 z-40 backdrop-blur-xl bg-white/80 border-b border-slate-200 shadow-lg">
-        <div className="max-w-6xl mx-auto px-6 h-18 flex items-center justify-between">
-          <div className="flex items-center gap-3">
- <div className="w-10 h-10 rounded-2xl bg-slate-800 flex items-center justify-center shadow-md border border-slate-300 font-black text-white text-sm">
-              AI
-            </div>
-            <div>
-              <h1 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                Assessment Hub Pro
-                <span className="w-2 h-2 rounded-full bg-slate-800 animate-ping" />
-              </h1>
-              <p className="text-[11px] text-slate-500">Secure AI Proctoring Environment</p>
-            </div>
+      <header className="sticky top-0 z-40 bg-navy-950 text-white">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <BrandMark />
+            <span className="hidden md:inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-brand-200 ring-1 ring-white/10">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Secure AI interview lobby
+            </span>
           </div>
 
           <div className="flex items-center gap-4">
             <button
               onClick={() => setShowDiagnosticsModal(true)}
-              className="px-3.5 py-2 rounded-2xl bg-slate-100 hover:bg-slate-100 border border-slate-300 text-xs font-bold text-slate-700 transition flex items-center gap-1.5"
+              className="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-xs font-semibold text-white transition flex items-center gap-1.5"
             >
               📊 Diagnostics
             </button>
             {user && (
-              <div className="hidden sm:flex items-center gap-2.5 px-3.5 py-1.5 rounded-2xl bg-slate-50 border border-slate-200 shadow-inner">
-                <div className="w-6 h-6 rounded-xl bg-slate-100 border border-slate-300 flex items-center justify-center text-slate-700 font-bold text-xs">
+              <div className="hidden sm:flex items-center gap-2.5 px-2 py-1.5">
+                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-brand-400 to-fuchsia-500 flex items-center justify-center text-white font-bold text-xs">
                   {user?.name?.[0] || "U"}
                 </div>
-                <span className="text-xs font-semibold text-slate-700">{user?.name || "Candidate"}</span>
+                <span className="text-xs font-semibold text-slate-200">{user?.name || "Candidate"}</span>
               </div>
             )}
             <button
               onClick={() => navigate("/dashboard")}
-              className="px-4 py-2 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-600 transition-all hover:text-slate-900"
+              className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 text-xs font-semibold text-white transition-all"
             >
               Dashboard
             </button>
@@ -415,8 +411,8 @@ function InterviewLobby() {
         {/* HERO TITLE BANNER */}
         <div className="text-center sm:text-left flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-8">
           <div>
- <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-slate-100 border border-slate-300 text-slate-700 text-xs font-semibold mb-3 shadow-md">
-              ✨ Pro Evaluation Lobby
+ <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-50 border border-brand-100 text-brand-700 text-xs font-semibold mb-3">
+              Interview lobby
             </div>
  <h2 className="text-slate-700 text-3xl sm:text-4xl font-extrabold ">
               {interview?.title || "AI Evaluation Session"}
@@ -556,7 +552,7 @@ function InterviewLobby() {
                     <span className="font-bold text-slate-700">{isAudioMuted ? "Muted" : `${audioLevel}%`}</span>
                   </div>
                   <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden border border-slate-200">
-                    <div className={`h-full transition-all duration-75 ${noiseDetected ? "bg-amber-400" : "bg-slate-800"}`} style={{ width: `${isAudioMuted ? 0 : audioLevel}%` }} />
+                    <div className={`h-full transition-all duration-75 ${noiseDetected ? "bg-amber-400" : "bg-brand-600"}`} style={{ width: `${isAudioMuted ? 0 : audioLevel}%` }} />
                   </div>
                 </div>
 
@@ -600,10 +596,10 @@ function InterviewLobby() {
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h3 className="text-base font-black text-slate-900">Ready Checklist</h3>
+                    <h3 className="text-base font-bold text-slate-900">Ready Checklist</h3>
                     <p className="text-xs text-slate-500 mt-0.5">Complete all 4 requirements to unlock</p>
                   </div>
-                  <span className={`px-3 py-1 rounded-xl text-xs font-black transition-all ${
+                  <span className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
                     allChecksPassed 
  ? "bg-emerald-500/20 border border-emerald-500/40 text-emerald-700 shadow-md" 
                       : "bg-slate-100 border border-slate-300 text-slate-700"
@@ -704,9 +700,9 @@ function InterviewLobby() {
               <button
                 onClick={startInterviewSession}
                 disabled={starting || !allChecksPassed}
-                className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-wider transition-all duration-300 shadow-xl flex items-center justify-center gap-2 ${
+                className={`w-full py-4 rounded-2xl font-bold text-xs uppercase tracking-wider transition-all duration-300 shadow-xl flex items-center justify-center gap-2 ${
                   allChecksPassed
- ? "bg-slate-800 hover:opacity-95 text-white border border-slate-300 cursor-pointer hover:scale-[1.01]"
+ ? "bg-brand-600 hover:bg-brand-700 hover:opacity-95 text-white border border-slate-300 cursor-pointer hover:scale-[1.01]"
                     : "bg-slate-50 text-slate-500 border border-slate-200 opacity-40 cursor-not-allowed"
                 }`}
               >
@@ -731,7 +727,7 @@ function InterviewLobby() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fadeIn">
           <div className="w-full max-w-md p-6 rounded-3xl border border-slate-300 bg-white shadow-2xl space-y-5">
             <div className="flex justify-between items-center border-b border-slate-200 pb-4">
-              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">🛠️ System Diagnostics Report</h3>
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">🛠️ System Diagnostics Report</h3>
               <button data-plain onClick={() => setShowDiagnosticsModal(false)} className="text-slate-500 hover:text-slate-900 text-sm font-bold">✕</button>
             </div>
             <div className="space-y-3 text-xs">
@@ -758,7 +754,7 @@ function InterviewLobby() {
             </div>
             <button
               onClick={() => setShowDiagnosticsModal(false)}
-              className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-950 font-black text-xs transition"
+              className="w-full py-3 rounded-xl bg-brand-600 hover:bg-brand-700 hover:bg-slate-700 text-slate-950 font-bold text-xs transition"
             >
               Close Report
             </button>
@@ -770,11 +766,11 @@ function InterviewLobby() {
       {showPopupModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fadeIn">
  <div className="w-full max-w-sm p-8 rounded-3xl border border-slate-300 bg-white shadow-2xl text-center space-y-5">
- <div className="w-16 h-16 mx-auto rounded-2xl bg-slate-800 flex items-center justify-center text-3xl shadow-lg ">
+ <div className="w-16 h-16 mx-auto rounded-2xl bg-brand-600 flex items-center justify-center text-3xl shadow-lg ">
               🚀
             </div>
             <div>
-              <h3 className="text-lg font-black text-slate-900">All Checks Verified!</h3>
+              <h3 className="text-lg font-bold text-slate-900">All Checks Verified!</h3>
               <p className="text-slate-600 text-xs mt-1.5 leading-relaxed">
                 {monitoringRequired
                   ? "Your required device checks are complete. Ready to begin."
@@ -793,7 +789,7 @@ function InterviewLobby() {
                   setShowPopupModal(false);
                   startInterviewSession();
                 }}
- className="flex-1 py-3 rounded-xl bg-slate-800 hover:opacity-90 text-xs font-black text-white shadow-lg transition cursor-pointer"
+ className="flex-1 py-3 rounded-xl bg-brand-600 hover:bg-brand-700 hover:opacity-90 text-xs font-bold text-white shadow-lg transition cursor-pointer"
               >
                 Launch Now →
               </button>

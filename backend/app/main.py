@@ -17,6 +17,7 @@ from app.services.url_config import is_vercel_deployment
 from app.api.auth.auth import router as auth_router
 from app.api.auth.google_auth import router as google_auth_router
 from app.api.google_oauth import router as gmail_oauth_router
+from app.api.google_signin import router as google_signin_router
 
 # =========================================================
 # DASHBOARD
@@ -237,6 +238,7 @@ async def strip_api_prefix(request, call_next):
 
 app.include_router(auth_router)
 app.include_router(google_auth_router)
+app.include_router(google_signin_router)  # must be before gmail_oauth_router
 app.include_router(gmail_oauth_router)
 
 
@@ -286,6 +288,10 @@ app.include_router(interview_monitoring_router)
 
 app.include_router(hiring_router)
 app.include_router(candidate_resume_router)
+
+# Live Interview Guard (separate feature: app/live_guard/)
+from app.live_guard import register_live_guard
+register_live_guard(app)
 
 
 # =========================================================

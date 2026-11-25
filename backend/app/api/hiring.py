@@ -546,6 +546,8 @@ class ProctoringSettings(BaseModel):
     face: bool = True
     eye: bool = True
     phone: bool = False
+    # how strict eye / gaze detection is: low | medium | high
+    gaze_level: str | None = None
 
 
 class FollowUpSettings(BaseModel):
@@ -1023,8 +1025,10 @@ def update_interview_settings(
     extra = dict(configuration.extra_config or {})
 
     if body.proctoring is not None:
+        previous_level = (extra.get("proctoring") or {}).get("gaze_level")
         extra["proctoring"] = features.monitoring_flags(
-            body.proctoring.enabled
+            body.proctoring.enabled,
+            body.proctoring.gaze_level or previous_level,
         )
 
     if body.compulsory_questions is not None:

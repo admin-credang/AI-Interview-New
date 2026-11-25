@@ -28,9 +28,9 @@ const dateTime = (v) => (v ? new Date(v).toLocaleString() : "—");
 
 function Card({ t, title, children, right }) {
   return (
-    <section className={`rounded-[2rem] border ${t.card} p-6 md:p-8`}>
+    <section className={`rounded-2xl border ${t.card} p-6 md:p-8`}>
       <div className="flex items-center justify-between gap-4 mb-5">
-        <h2 className="font-black text-lg tracking-tight">{title}</h2>
+        <h2 className="font-bold text-lg tracking-tight">{title}</h2>
         {right}
       </div>
       {children}
@@ -55,7 +55,7 @@ export default function CandidateDetail({ sessionId: propId, onClose, onSwitch, 
   const { t, reloadHiring } = useDashboard();
 
   // back to the list the interviewer came from (same interview filter)
-  const backTo = location.state?.back || "/dashboard/candidates";
+  const backTo = location.state?.back || "/dashboard/reports";
 
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
@@ -151,7 +151,7 @@ export default function CandidateDetail({ sessionId: propId, onClose, onSwitch, 
     return (
       <div className="space-y-6">
         <button data-plain onClick={() => (onClose ? onClose() : navigate(backTo))} className="text-sm font-bold text-slate-700">
-          ← Back to candidates
+          ← Back
         </button>
         <div className="p-6 rounded-2xl border border-rose-500/30 bg-rose-500/10 text-sm text-rose-700">
           {error}
@@ -188,21 +188,21 @@ export default function CandidateDetail({ sessionId: propId, onClose, onSwitch, 
           onClick={() => (onClose ? onClose() : navigate(backTo))}
           className="text-sm font-bold text-slate-700 hover:underline"
         >
-          {onClose ? "✕ Close" : "← Back to candidates"}
+          {onClose ? "✕ Close" : "← Back"}
         </button>
 
         <div className="flex items-center gap-2">
           <button
             onClick={downloadPdf}
             disabled={busy === "pdf"}
-            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-60 text-white text-xs font-bold transition"
+            className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 hover:bg-slate-700 disabled:opacity-60 text-white text-xs font-bold transition"
           >
             {busy === "pdf" ? "Preparing PDF..." : "Download PDF report"}
           </button>
 
           <button
             onClick={() => window.print()}
-            className="px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-100 text-xs font-bold transition"
+            className="bg-white text-navy-800 px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-100 text-xs font-bold transition"
           >
             Print
           </button>
@@ -217,7 +217,7 @@ export default function CandidateDetail({ sessionId: propId, onClose, onSwitch, 
               <StatusBadge status={session.status} />
               <DecisionBadge value={review.decision} />
             </div>
-            <h1 className="text-3xl md:text-4xl font-black tracking-tight truncate">{candidate.name}</h1>
+            <h1 className="text-3xl md:text-4xl font-bold tracking-tight truncate">{candidate.name}</h1>
             <p className="opacity-75 mt-1 text-sm break-all">
               {candidate.email}
             </p>
@@ -235,7 +235,7 @@ export default function CandidateDetail({ sessionId: propId, onClose, onSwitch, 
           </div>
 
           <div className="text-center shrink-0">
-            <p className={`text-6xl font-black ${scoreText(score)}`}>
+            <p className={`text-6xl font-bold ${scoreText(score)}`}>
               {score === null ? "—" : Math.round(score)}
             </p>
             <p className="text-[11px] uppercase tracking-wider opacity-60 font-bold mt-1">Overall score</p>
@@ -296,7 +296,7 @@ export default function CandidateDetail({ sessionId: propId, onClose, onSwitch, 
               ].map(([title, key, color]) =>
                 (data.candidate_feedback[key] || []).length > 0 ? (
                   <div key={key} className="mb-5">
-                    <h4 className={`text-xs font-black uppercase tracking-wider mb-2 ${color}`}>
+                    <h4 className={`text-xs font-bold uppercase tracking-wider mb-2 ${color}`}>
                       {title}
                     </h4>
                     <ul className="list-disc pl-5 space-y-1.5 text-sm leading-relaxed opacity-90">
@@ -310,7 +310,7 @@ export default function CandidateDetail({ sessionId: propId, onClose, onSwitch, 
 
               {(data.candidate_feedback.answer_notes || []).length > 0 && (
                 <div>
-                  <h4 className="text-xs font-black uppercase tracking-wider mb-2 text-slate-700">
+                  <h4 className="text-xs font-bold uppercase tracking-wider mb-2 text-slate-700">
                     Comments on the answers
                   </h4>
                   <ol className="list-decimal pl-5 space-y-2 text-sm leading-relaxed opacity-90">
@@ -358,7 +358,7 @@ export default function CandidateDetail({ sessionId: propId, onClose, onSwitch, 
                           </p>
                           <p className="text-sm font-semibold">{q.question}</p>
                         </div>
-                        <span className={`text-lg font-black shrink-0 ${scoreText(overall)}`}>
+                        <span className={`text-lg font-bold shrink-0 ${scoreText(overall)}`}>
                           {overall === null ? "—" : Math.round(overall)}
                         </span>
                       </button>
@@ -377,7 +377,7 @@ export default function CandidateDetail({ sessionId: propId, onClose, onSwitch, 
                               {Object.entries(SKILL_LABELS).map(([key, label]) => (
                                 <div key={key} className="rounded-xl bg-slate-100 px-3 py-2">
                                   <p className="text-[10px] opacity-60">{label}</p>
-                                  <p className="font-black">{q.scores[key] === null ? "—" : Math.round(q.scores[key])}</p>
+                                  <p className="font-bold">{q.scores[key] === null ? "—" : Math.round(q.scores[key])}</p>
                                   <div className="h-1 rounded-full bg-slate-100 mt-1">
                                     <div
                                       className={`h-full rounded-full ${scoreBar(q.scores[key] || 0)}`}
@@ -471,8 +471,8 @@ export default function CandidateDetail({ sessionId: propId, onClose, onSwitch, 
         {/* RIGHT / SIDE */}
         <div className="space-y-8">
           {/* DECISION */}
-          <section className={`rounded-[2rem] border ${t.card} p-6 md:p-8 xl:sticky xl:top-28 print:hidden`}>
-            <h2 className="font-black text-lg tracking-tight mb-1">Your decision</h2>
+          <section className={`rounded-2xl border ${t.card} p-6 md:p-8 xl:sticky xl:top-28 print:hidden`}>
+            <h2 className="font-bold text-lg tracking-tight mb-1">Your decision</h2>
             <p className="text-xs opacity-60 mb-5">
               The candidate is emailed the result with feedback (strengths, weak points, how to improve). They never see scores.
             </p>
@@ -499,21 +499,21 @@ export default function CandidateDetail({ sessionId: propId, onClose, onSwitch, 
               <button
                 disabled={Boolean(busy)}
                 onClick={() => decide("selected")}
- className="py-3.5 rounded-2xl font-bold text-white bg-slate-800 hover:opacity-90 transition disabled:opacity-50"
+ className="py-3 rounded-xl font-semibold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm shadow-emerald-600/20 transition disabled:opacity-50"
               >
                 {busy === "selected" ? "Saving..." : "Select candidate"}
               </button>
               <button
                 disabled={Boolean(busy)}
                 onClick={() => decide("on_hold")}
-                className="py-3.5 rounded-2xl font-bold border border-slate-200 hover:bg-slate-100 transition disabled:opacity-50"
+                className="py-3 rounded-xl font-semibold text-amber-800 bg-amber-50 border border-amber-200 hover:bg-amber-100 transition disabled:opacity-50"
               >
                 {busy === "on_hold" ? "Saving..." : "Put on hold"}
               </button>
               <button
                 disabled={Boolean(busy)}
                 onClick={() => decide("rejected")}
-                className="py-3.5 rounded-2xl font-bold text-rose-700 border border-rose-500/30 hover:bg-rose-500/10 transition disabled:opacity-50"
+                className="py-3 rounded-xl font-semibold text-rose-700 bg-white border border-rose-200 hover:bg-rose-50 transition disabled:opacity-50"
               >
                 {busy === "rejected" ? "Saving..." : "Reject candidate"}
               </button>

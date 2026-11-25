@@ -177,7 +177,7 @@ function InterviewerBox({ item, t, onSaved }) {
         type="button"
         onClick={() => save()}
         disabled={busy}
-        className="mt-4 w-full py-2.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold transition disabled:opacity-50"
+        className="bg-white mt-4 w-full py-2.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold transition disabled:opacity-50"
       >
         {busy ? "Saving..." : "Save interviewer"}
       </button>
@@ -281,7 +281,7 @@ function CompulsoryBox({ item, t }) {
         <button
           type="button"
           onClick={add}
-          className="w-full py-2 rounded-xl border border-dashed border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-bold transition"
+          className="bg-white w-full py-2 rounded-xl border border-dashed border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-bold transition"
         >
           + Add question ({list.length}/{MAX_COMPULSORY})
         </button>
@@ -294,7 +294,7 @@ function CompulsoryBox({ item, t }) {
         type="button"
         onClick={save}
         disabled={busy}
-        className="w-full py-2.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold transition disabled:opacity-50"
+        className="bg-white w-full py-2.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold transition disabled:opacity-50"
       >
         {busy ? "Saving..." : "Save compulsory questions"}
       </button>

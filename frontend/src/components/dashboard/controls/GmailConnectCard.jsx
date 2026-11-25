@@ -108,7 +108,7 @@ export default function GmailConnectCard({ onChange }) {
           type="button"
           onClick={connect}
           disabled={busy || !info?.configured}
- className="px-5 py-2.5 rounded-xl bg-slate-800 text-white text-xs font-bold shadow-md disabled:opacity-50"
+ className="px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-md disabled:opacity-50"
         >
           {connected ? "Reconnect Gmail" : "Connect Gmail"}
         </button>
@@ -118,7 +118,7 @@ export default function GmailConnectCard({ onChange }) {
             type="button"
             onClick={disconnect}
             disabled={busy}
-            className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-500 hover:text-rose-600 hover:border-rose-500/40 text-xs font-bold transition disabled:opacity-50"
+            className="bg-white px-4 py-2.5 rounded-xl border border-slate-200 text-slate-500 hover:text-rose-600 hover:border-rose-500/40 text-xs font-bold transition disabled:opacity-50"
           >
             Disconnect
           </button>

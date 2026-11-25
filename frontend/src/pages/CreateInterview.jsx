@@ -1,14 +1,17 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import api from "../services/api";
+import WizardHeader from "../components/WizardHeader";
 import { FlowSteps } from "../components/dashboard/hiring";
 
 function CreateInterview() {
   const navigate = useNavigate();
 
+  // Welcome page can pass a job role to start with.
+  const location = useLocation();
   const [form, setForm] = useState({
-    title: "",
+    title: location.state?.title || "",
     description: "",
     duration: 30,
   });
@@ -114,39 +117,13 @@ function CreateInterview() {
   };
 
   return (
-    <div className="min-h-screen bg-white text-slate-900">
+    <div className="min-h-screen bg-[#f5f7fa] text-navy-900">
 
       {/* -----------------------------------------
           Header
       ----------------------------------------- */}
 
-      <header className="border-b border-slate-200 bg-white">
-
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-
-          <div>
-            <h1 className="text-xl font-bold">
-              AI Interview Agent
-            </h1>
-
-            <p className="text-sm text-slate-500">
-              Create Interview
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() =>
-              navigate("/dashboard")
-            }
-            className="rounded-xl border border-slate-200 px-4 py-2 text-sm transition hover:bg-slate-100"
-          >
-            Back to Dashboard
-          </button>
-
-        </div>
-
-      </header>
+      <WizardHeader step="Create Interview" backLabel="Back to Dashboard" />
 
       {/* -----------------------------------------
           Main
@@ -160,11 +137,11 @@ function CreateInterview() {
 
         <div className="mb-8">
 
-          <p className="text-sm font-medium text-slate-700">
+          <p className="text-xs font-semibold uppercase tracking-wider text-brand-600">
             INTERVIEWER
           </p>
 
-          <h2 className="mt-2 text-4xl font-bold">
+          <h2 className="mt-1 text-3xl font-extrabold tracking-tight text-navy-900">
             Create Interview
           </h2>
 
@@ -179,7 +156,7 @@ function CreateInterview() {
             Form Card
         ----------------------------------------- */}
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-2xl">
+        <div className="ui-card p-6 sm:p-8">
 
           <form
             onSubmit={handleSubmit}
@@ -285,7 +262,7 @@ function CreateInterview() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-xl bg-slate-800 px-5 py-3 font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full rounded-xl bg-brand-600 hover:bg-brand-700 px-5 py-3 font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading
                 ? "Creating Interview..."

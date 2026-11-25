@@ -266,14 +266,14 @@ export function ReviewTop({ r, t }) {
           <button
             onClick={exportCsv}
             disabled={list.length === 0}
-            className="px-4 py-3 rounded-2xl border border-slate-200 hover:bg-slate-100 text-sm font-bold whitespace-nowrap transition disabled:opacity-40"
+            className="bg-white text-navy-800 px-4 py-3 rounded-2xl border border-slate-200 hover:bg-slate-100 text-sm font-bold whitespace-nowrap transition disabled:opacity-40"
           >
             Export CSV
           </button>
         </div>
       ) : (
       <section
-        className={`p-5 rounded-[2rem] border ${t.card} flex flex-col gap-4 backdrop-blur-2xl`}
+        className={`p-5 rounded-2xl border ${t.card} flex flex-col gap-4 backdrop-blur-2xl`}
       >
         <div className="flex flex-col md:flex-row gap-4 md:items-center justify-between">
           <div className="relative w-full md:max-w-sm">
@@ -310,7 +310,7 @@ export function ReviewTop({ r, t }) {
           <button
             onClick={exportCsv}
             disabled={list.length === 0}
-            className="px-4 py-3 rounded-2xl border border-slate-200 hover:bg-slate-100 text-sm font-bold whitespace-nowrap transition disabled:opacity-40"
+            className="bg-white text-navy-800 px-4 py-3 rounded-2xl border border-slate-200 hover:bg-slate-100 text-sm font-bold whitespace-nowrap transition disabled:opacity-40"
           >
             Export CSV
           </button>
@@ -387,7 +387,7 @@ export function ReviewTable({ r, t }) {
           </p>
         </div>
       ) : (
-        <section className={`rounded-[2rem] border ${t.card} overflow-hidden`}>
+        <section className={`rounded-2xl border ${t.card} overflow-hidden`}>
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[880px]">
               <thead>
@@ -430,7 +430,7 @@ export function ReviewTable({ r, t }) {
 
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-2">
-                        <span className={`text-lg font-black ${scoreText(c.score)}`}>
+                        <span className={`text-lg font-bold ${scoreText(c.score)}`}>
                           {c.score === null ? "—" : `${Math.round(c.score)}%`}
                         </span>
                         {rankMap[c.session_id] && (
@@ -493,7 +493,7 @@ export default function Candidates() {
           </button>
         )}
 
-        <h1 className="text-3xl md:text-4xl font-black tracking-tight">
+        <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
           {scopeId ? scope?.title || "Candidates" : "Candidates"}
         </h1>
 

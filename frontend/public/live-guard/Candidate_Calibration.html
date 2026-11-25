@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Look at the number</title>
+<style>
+  html,body{margin:0;height:100%;background:#0d0b1a;color:#fff;font-family:system-ui,Segoe UI,Arial,sans-serif;overflow:hidden}
+  .n{position:absolute;width:11vmin;height:11vmin;border-radius:50%;display:flex;align-items:center;justify-content:center;
+     font-size:6.5vmin;font-weight:800;background:#241f45;color:#6f68a3;transform:translate(-50%,-50%);transition:all .15s}
+  .n.on{background:#ffd23f;color:#1b1530;box-shadow:0 0 0 1.6vmin #ffd23f55,0 0 6vmin #ffd23f;font-size:8vmin;width:14vmin;height:14vmin}
+  .n.done{background:#16794d;color:#d7ffe9}
+  #box{position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);text-align:center;max-width:56vw;color:#cfcaf5;font-size:3vmin;line-height:1.4}
+  #box b{color:#fff}
+  button{margin-top:2.4vmin;border:0;border-radius:1.4vmin;padding:2vmin 5vmin;font-size:3.6vmin;font-weight:800;background:#7042e8;color:#fff;cursor:pointer}
+  #count{font-size:14vmin;font-weight:900;color:#ffd23f}
+</style>
+</head>
+<body>
+<div class="n" id="n1" style="left:6%;top:9%">1</div>
+<div class="n" id="n2" style="left:50%;top:9%">2</div>
+<div class="n" id="n3" style="left:94%;top:9%">3</div>
+<div class="n" id="n4" style="left:6%;top:50%">4</div>
+<div class="n" id="n5" style="left:50%;top:50%">5</div>
+<div class="n" id="n6" style="left:94%;top:50%">6</div>
+<div class="n" id="n7" style="left:6%;top:91%">7</div>
+<div class="n" id="n8" style="left:50%;top:91%">8</div>
+<div class="n" id="n9" style="left:94%;top:91%">9</div>
+<div id="box">
+  <b>Gaze calibration (about 40 seconds)</b><br>
+  1. Keep your <b>meeting window open</b> (do not close or minimise it) and your <b>camera ON</b>.<br>
+  2. Sit straight, whole face visible, a normal distance from the screen.<br>
+  3. Press <b>Start</b>. The page goes full screen. Look ONLY at the glowing number and say it aloud. Do not move your head more than needed.<br>
+  <button id="go">Start</button>
+</div>
+<script>
+  // AI Interview companion page: ?back=/live-guard/Candidate_Companion.html?... -> return there when the check is done
+  window.__goBack = function (delay) {
+    var b = new URLSearchParams(location.search).get("back") || "";
+    if (!/^\/live-guard\/Candidate_Companion\.html\?/.test(b)) return false;
+    setTimeout(function () { try { document.fullscreenElement && document.exitFullscreen(); } catch (e) {} location.href = b; }, delay || 4000);
+    return true;
+  };
+
+  // Fixed schedule (the proctor page uses the same numbers): 3 s countdown, then 4 s for each number 1..9.
+  const LEAD = 3000, DWELL = 4000;
+  const box = document.getElementById("box"), nums = [...document.querySelectorAll(".n")];
+  const reset = () => nums.forEach((e) => (e.className = "n"));
+  let timers = [];
+  function run() {
+    try { document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); } catch (e) {}
+    reset(); let c = 3; box.innerHTML = '<div id="count">3</div>Get ready';
+    const cd = setInterval(() => { c--; if (c > 0) document.getElementById("count").textContent = c; else clearInterval(cd); }, 1000);
+    for (let k = 1; k <= 9; k++) timers.push(setTimeout(() => {
+      reset(); for (let i = 1; i < k; i++) nums[i - 1].classList.add("done"); nums[k - 1].classList.add("on");
+      box.innerHTML = "Look at the <b>glowing number</b><br>and say it aloud";
+    }, LEAD + (k - 1) * DWELL));
+    timers.push(setTimeout(() => {
+      reset(); nums.forEach((e) => e.classList.add("done"));
+      box.innerHTML = window.__goBack && window.__goBack(5000) ? '<b>Thank you.</b><br>Calibration finished. Taking you back to your interview page…' : '<b>Thank you.</b><br>Calibration finished. You can close this page and look at the interviewer normally.<br><button id="again">Do it again</button>';
+      var again = document.getElementById("again"); if (again) again.onclick = run;
+      try { document.fullscreenElement && document.exitFullscreen(); } catch (e) {}
+    }, LEAD + 9 * DWELL));
+  }
+  document.getElementById("go").onclick = run;
+</script>
+</body>
+</html>

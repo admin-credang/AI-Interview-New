@@ -7,51 +7,191 @@ import {
   IconAlert,
   IconBarChart,
   IconBell,
+  IconCalendar,
+  IconFileText,
+  IconMic,
   IconChevronDown,
   IconDashboard,
+  IconEye,
   IconHelp,
+  IconLayers,
   IconLogOut,
+  IconMenu,
+  IconPlus,
   IconSearch,
   IconSettings,
   IconShield,
+  IconSparkles,
   IconUserCircle,
   IconUsers,
-  IconZap,
+  IconX,
 } from "./icons";
+import BrandMark from "../BrandMark";
 
 // ============================================================
-// SIDEBAR ITEMS  ->  each one has its OWN page / route
+// SIDEBAR ITEMS  ->  each one points to an EXISTING route
+// (no route / page logic was changed in the redesign)
 // ============================================================
 
 const INTERVIEWER_NAV = [
-  { to: "/dashboard", label: "Overview Dashboard", icon: IconDashboard, end: true },
-  { to: "/dashboard/controls", label: "Interview Controls", icon: IconShield },
-  { to: "/dashboard/analytics", label: "Analytics & Reports", icon: IconBarChart },
+  {
+    section: "Workspace",
+    items: [
+      { to: "/dashboard", label: "Dashboard", icon: IconDashboard, end: true },
+      { to: "/dashboard/scheduling", label: "Interview Scheduling", icon: IconCalendar },
+    ],
+  },
+  {
+    section: "Interviews",
+    items: [
+      { to: "/dashboard/controls", label: "Interview Controls", icon: IconShield },
+      { to: "/dashboard/assessments", label: "Assessments", icon: IconLayers },
+    ],
+  },
+  {
+    section: "Live Interviews",
+    items: [{ to: "/dashboard/live-guard", label: "Live Interview Guard", icon: IconEye, badge: "New" }],
+  },
+  {
+    section: "Insights",
+    items: [
+      { to: "/dashboard/transcripts", label: "Answers & Transcripts", icon: IconMic },
+      { to: "/dashboard/reports", label: "Reports", icon: IconFileText },
+      { to: "/dashboard/analytics", label: "Analytics", icon: IconBarChart },
+    ],
+  },
+  {
+    section: "Account",
+    items: [
+      { to: "/dashboard/configuration", label: "Settings", icon: IconSettings },
+      { to: "/dashboard/profile", label: "Profile", icon: IconUserCircle },
+      { to: "/dashboard/help", label: "FAQ", icon: IconHelp },
+    ],
+  },
 ];
 
 // Candidates only see their interviews and the process. No scores, no reports.
 const CANDIDATE_NAV = [
-  { to: "/dashboard", label: "My Interviews", icon: IconDashboard, end: true },
-  { to: "/dashboard/help", label: "Help", icon: IconHelp },
+  {
+    section: "Interviews",
+    items: [{ to: "/dashboard", label: "My Interviews", icon: IconDashboard, end: true }],
+  },
+  {
+    section: "Account",
+    items: [
+      { to: "/dashboard/profile", label: "Profile", icon: IconUserCircle },
+      { to: "/dashboard/help", label: "FAQ", icon: IconHelp },
+    ],
+  },
 ];
 
-const SideLink = ({ to, label, icon: Icon, end, onClick }) => (
+const PAGE_TITLES = [
+  ["/dashboard/candidates/", "Candidate Profile"],
+  ["/dashboard/live-guard", "Live Interview Guard"],
+  ["/dashboard/controls", "Interview Controls"],
+  ["/dashboard/assessments", "Assessments"],
+  ["/dashboard/analytics", "Analytics"],
+  ["/dashboard/scheduling", "Interview Scheduling"],
+  ["/dashboard/transcripts", "Answers & Transcripts"],
+  ["/dashboard/reports", "Reports"],
+  ["/dashboard/configuration", "Settings"],
+  ["/dashboard/profile", "Profile"],
+  ["/dashboard/help", "FAQ"],
+];
+
+function pageTitle(pathname, isCandidate) {
+  const hit = PAGE_TITLES.find(([p]) => pathname.startsWith(p));
+  if (hit) return hit[1];
+  return isCandidate ? "My Interviews" : "Dashboard";
+}
+
+const SideLink = ({ to, label, icon: Icon, end, onClick, badge }) => (
   <NavLink
     to={to}
     end={end}
     onClick={onClick}
     className={({ isActive }) =>
-      `flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
+      `group relative flex items-center gap-3 rounded-xl px-2.5 py-1.5 text-[13.5px] font-medium transition-all ${
         isActive
-          ? "bg-slate-100 text-slate-700 shadow-inner border border-slate-300"
-          : "text-slate-500 hover:bg-slate-50 hover:text-current border border-transparent"
+          ? "bg-white font-semibold text-brand-800 shadow-[inset_0_-2px_0_#ddd6fe,0_10px_22px_-10px_rgba(30,8,70,0.7)]"
+          : "text-white/80 hover:bg-white/10 hover:text-white hover:translate-x-0.5"
       }`
     }
   >
-    <Icon />
+    {({ isActive }) => (
+      <>
+        {isActive && (
+          <span className="absolute -left-3 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-gradient-to-b from-fuchsia-300 to-white shadow-[0_0_12px_rgba(255,255,255,0.9)]" />
+        )}
+        <span
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition [&_svg]:h-[18px] [&_svg]:w-[18px] ${
+            isActive
+              ? "ui-icon-3d bg-gradient-to-br from-brand-400 to-brand-700 text-white"
+              : "bg-white/10 text-white ring-1 ring-white/15 group-hover:bg-white/20"
+          }`}
+        >
+          <Icon />
+        </span>
+        {label}
+        {badge && (
+          <span className="ml-auto rounded-full bg-gradient-to-r from-emerald-300 to-cyan-300 px-1.5 py-px text-[9.5px] font-extrabold uppercase tracking-wide text-emerald-950">
+            {badge}
+          </span>
+        )}
+      </>
+    )}
+  </NavLink>
+);
+
+const MenuLink = ({ to, label, icon: Icon }) => (
+  <NavLink
+    to={to}
+    className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 hover:text-navy-900"
+  >
+    <span className="text-slate-400"><Icon /></span>
     {label}
   </NavLink>
 );
+
+function Sidebar({ nav, isInterviewer, onNavigate, onHelp, userName, role }) {
+  return (
+    <div className="dash-side relative flex h-full flex-col overflow-hidden text-white/80 shadow-[10px_0_34px_-14px_rgba(46,16,101,0.65)]">
+      <span className="dash-side-glow" aria-hidden="true" />
+      <div className="relative flex h-16 items-center px-5 border-b border-white/10">
+        <NavLink to="/dashboard" onClick={onNavigate}>
+          <BrandMark />
+        </NavLink>
+      </div>
+
+      <nav className="relative flex-1 overflow-y-auto px-3 py-5">
+        {nav.map((group) => (
+          <div key={group.section} className="mb-6">
+            <p className="mb-2 px-3 text-[10.5px] font-bold uppercase tracking-[0.12em] text-white/50">
+              {group.section}
+            </p>
+            <div className="space-y-0.5">
+              {group.items.map((item) => (
+                <SideLink key={item.to} {...item} onClick={onNavigate} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </nav>
+
+      <div className="relative px-3 pb-4">
+        <div className="flex items-center gap-3 rounded-xl border border-white/15 bg-white/10 px-2 py-2 backdrop-blur">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-400 to-fuchsia-500 text-xs font-bold text-white">
+            {userName.charAt(0).toUpperCase()}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-white">{userName}</p>
+            <p className="text-[11px] capitalize text-white/60">{role}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function DashboardLayout() {
   const { logout } = useAuth();
@@ -62,19 +202,21 @@ export default function DashboardLayout() {
     loading,
     error,
     reload,
-    t,
     searchQuery,
     setSearchQuery,
     notifications,
     userName,
+    userEmail,
     role,
     isInterviewer,
+    isCandidate,
   } = useDashboard();
 
-  const NAV_ITEMS = isInterviewer ? INTERVIEWER_NAV : CANDIDATE_NAV;
+  const NAV = isInterviewer ? INTERVIEWER_NAV : CANDIDATE_NAV;
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const notifRef = useRef(null);
   const profileRef = useRef(null);
@@ -97,8 +239,17 @@ export default function DashboardLayout() {
   useEffect(() => {
     setShowNotifications(false);
     setShowProfileMenu(false);
+    setMobileOpen(false);
     window.scrollTo({ top: 0 });
   }, [location.pathname]);
+
+  // lock body scroll while the mobile drawer is open
+  useEffect(() => {
+    document.body.style.overflow = mobileOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [mobileOpen]);
 
   // Search lives in the top bar, so take the user to the page that lists
   // assessments when they start typing from any other page.
@@ -112,12 +263,15 @@ export default function DashboardLayout() {
 
   if (loading) {
     return (
-      <div className={`min-h-screen ${t.bg} ${t.text} flex flex-col items-center justify-center`}>
-        <div className="text-slate-700 animate-bounce mb-6">
-          <IconZap />
+      <div className="min-h-screen bg-[#f5f7fa] flex flex-col items-center justify-center gap-5">
+        <div className="relative h-14 w-14">
+          <div className="absolute inset-0 rounded-2xl bg-brand-500/20 animate-ping" />
+          <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-400 to-fuchsia-500 text-white shadow-xl shadow-brand-500/30">
+            <IconSparkles />
+          </div>
         </div>
-        <p className="text-lg font-bold tracking-widest animate-pulse">
-          SECURING AI ENVIRONMENT...
+        <p className="text-sm font-semibold tracking-wide text-navy-700">
+          Preparing your workspace…
         </p>
       </div>
     );
@@ -125,25 +279,24 @@ export default function DashboardLayout() {
 
   if (error) {
     return (
-      <div className={`min-h-screen ${t.bg} ${t.text} flex items-center justify-center p-6`}>
-        <div className={`max-w-md w-full p-8 rounded-[2rem] border ${t.card} text-center shadow-2xl`}>
-          <div className="text-red-500 mx-auto mb-4 flex justify-center">
+      <div className="min-h-screen bg-[#f5f7fa] flex items-center justify-center p-6">
+        <div className="ui-card max-w-md w-full p-8 text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-500">
             <IconAlert />
           </div>
-          <p className="font-semibold text-red-600 mb-6">{error}</p>
+          <h2 className="text-lg font-bold text-navy-900">Couldn't load your dashboard</h2>
+          <p className="mt-2 mb-6 text-sm text-slate-500">{error}</p>
           <div className="flex gap-3 justify-center">
-            <button
-              onClick={reload}
- className="px-6 py-3 bg-slate-800 text-white rounded-xl font-bold hover:opacity-90 shadow-lg"
-            >
-              Retry Connection
+            <button onClick={reload} className="ui-btn">
+              Retry connection
             </button>
             <button
+              data-plain
               onClick={() => {
                 logout();
                 navigate("/login");
               }}
-              className="px-6 py-3 bg-slate-100 rounded-xl font-bold hover:bg-slate-100"
+              className="ui-btn-ghost"
             >
               Login again
             </button>
@@ -155,181 +308,207 @@ export default function DashboardLayout() {
 
   const handleLogout = () => {
     logout();
-    navigate("/login", { replace: true });
+    navigate("/", { replace: true });
+  };
+
+  const sidebarProps = {
+    nav: NAV,
+    isInterviewer,
+    userName,
+    role,
+    onNavigate: () => setMobileOpen(false),
+    onHelp: () => navigate("/dashboard/help"),
   };
 
   return (
-    <div className={`min-h-screen ${t.bg} ${t.text} font-sans transition-colors duration-500`}>
-      {/* ================= TOP NAVBAR ================= */}
-      <nav className={`sticky top-0 z-50 border-b backdrop-blur-2xl transition-colors duration-300 ${t.nav}`}>
-        <div className="max-w-[96rem] mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
-          <NavLink to="/dashboard" className="flex items-center gap-3">
- <div className="w-11 h-11 rounded-2xl bg-slate-800 flex items-center justify-center shadow-lg text-white">
-              <IconZap />
-            </div>
-            <div className="flex flex-col">
- <span className="text-slate-700 font-black text-xl tracking-tight">
-                AI
-              </span>
-              <span className="text-[10px] tracking-widest uppercase opacity-60 font-bold">
-                Platform v3.5
-              </span>
-            </div>
-          </NavLink>
+    <div className="min-h-screen bg-[#f7f5fd] text-navy-900">
+      {/* ================= SIDEBAR (desktop) ================= */}
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 lg:block">
+        <Sidebar {...sidebarProps} />
+      </aside>
 
-          <div className="flex-1 max-w-xl px-6 lg:px-12 hidden md:block">
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2">
-                <IconSearch />
-              </span>
-              <input
-                type="text"
-                placeholder="Search assessments, categories, or keywords..."
-                value={searchQuery}
-                onChange={(e) => handleSearch(e.target.value)}
-                className={`w-full pl-12 pr-4 py-3.5 rounded-2xl border ${t.input} focus:ring-2 focus:ring-slate-400 outline-none transition shadow-inner`}
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 sm:gap-4">
-            {/* Notifications (real, generated from your assessments) */}
-            <div className="relative" ref={notifRef}>
-              <button data-plain
-                aria-label="Notifications"
-                onClick={() => setShowNotifications((v) => !v)}
-                className="p-3.5 rounded-2xl hover:bg-slate-100 relative transition-colors border border-slate-200"
-              >
-                <IconBell />
-                {notifications.length > 0 && (
-                  <span className="absolute top-2.5 right-2.5 w-2.5 h-2.5 bg-slate-800 rounded-full border-2 border-white" />
-                )}
-              </button>
-
-              {showNotifications && (
-                <div className={`absolute right-0 mt-3 w-80 p-5 rounded-[2rem] border ${t.card} shadow-2xl z-50`}>
-                  <h4 className="font-bold text-base mb-3">Notifications</h4>
-
-                  {notifications.length === 0 ? (
-                    <p className="text-xs opacity-70 p-3">You're all caught up.</p>
-                  ) : (
-                    <div className="space-y-2.5 text-xs max-h-72 overflow-y-auto">
-                      {notifications.map((n) => (
-                        <button data-plain
-                          key={n.id}
-                          onClick={() => navigate(n.to)}
-                          className="block w-full text-left p-3 rounded-xl bg-slate-50 border border-slate-200 hover:bg-slate-100 transition"
-                        >
-                          {n.text}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Profile menu */}
-            <div className="relative" ref={profileRef}>
-              <button data-plain
-                onClick={() => setShowProfileMenu((v) => !v)}
-                className="flex items-center gap-3 pl-3 pr-4 py-2 rounded-2xl hover:bg-slate-100 transition-colors border border-slate-200"
-              >
- <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-white font-black text-sm shadow-md">
-                  {userName.charAt(0).toUpperCase()}
-                </div>
-                <div className="hidden text-left sm:block">
-                  <p className="font-bold text-sm leading-tight">{userName}</p>
-                  <p className="text-[11px] opacity-60 capitalize font-medium">{role}</p>
-                </div>
-                <IconChevronDown />
-              </button>
-
-              {showProfileMenu && (
-                <div className={`absolute right-0 mt-3 w-56 p-2 rounded-[2rem] border ${t.card} shadow-2xl z-50`}>
-                  <SideLink to="/dashboard/profile" label="My Profile" icon={IconUserCircle} />
-                  <SideLink to="/dashboard/configuration" label="Platform Settings" icon={IconSettings} />
-                  <SideLink to="/dashboard/help" label="Help Center" icon={IconHelp} />
-                  <div className="h-px bg-slate-100 my-2" />
-                  <button
-                    onClick={handleLogout}
-                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-red-600 hover:bg-red-500/15 transition-all"
-                  >
-                    <IconLogOut />
-                    Secure Logout
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Mobile / tablet navigation (sidebar is hidden below lg) */}
-        <div className="lg:hidden flex gap-2 overflow-x-auto px-4 pb-3">
-          {NAV_ITEMS.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) =>
-                `whitespace-nowrap px-4 py-2 rounded-full text-xs font-bold border transition ${
-                  isActive
-                    ? "bg-slate-100 text-slate-700 border-slate-300"
-                    : "border-slate-200 opacity-70"
-                }`
-              }
-            >
-              {item.label}
-            </NavLink>
-          ))}
-        </div>
-      </nav>
-
-      <div className="flex">
-        {/* ================= SIDEBAR ================= */}
-        <aside className={`w-72 shrink-0 p-6 border-r ${t.nav} hidden lg:block sticky top-[81px] h-[calc(100vh-81px)] overflow-y-auto`}>
-          <nav className="space-y-2.5">
-            {NAV_ITEMS.map((item) => (
-              <SideLink key={item.to} {...item} />
-            ))}
-          </nav>
-
-          <div className={`mt-12 p-6 rounded-[2rem] border ${t.welcome} text-center relative overflow-hidden`}>
-            <div className="text-slate-700 mb-3 flex justify-center">
-              <IconZap />
-            </div>
-            <p className="text-sm font-bold mb-1">Need Assistance?</p>
-            <p className="text-xs opacity-70 mb-5 leading-relaxed">
-              {isInterviewer
-                ? "Guides for creating and configuring assessments."
-                : "Read how assessments and AI proctoring work."}
-            </p>
-            <button
-              onClick={() => navigate("/dashboard/help")}
-              className="w-full py-3 bg-slate-100 hover:bg-slate-100 rounded-xl text-xs font-bold transition shadow-md border border-slate-200"
-            >
-              Help Center
-            </button>
-          </div>
+      {/* ================= SIDEBAR (mobile drawer) ================= */}
+      <div
+        className={`fixed inset-0 z-50 lg:hidden ${mobileOpen ? "" : "pointer-events-none"}`}
+        aria-hidden={!mobileOpen}
+      >
+        <div
+          onClick={() => setMobileOpen(false)}
+          className={`absolute inset-0 bg-navy-950/50 backdrop-blur-sm transition-opacity ${mobileOpen ? "opacity-100" : "opacity-0"}`}
+        />
+        <aside
+          className={`absolute inset-y-0 left-0 w-72 shadow-2xl transition-transform duration-300 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
+        >
+          <Sidebar {...sidebarProps} />
+          <button
+            data-plain
+            aria-label="Close menu"
+            onClick={() => setMobileOpen(false)}
+            className="absolute right-3 top-4 z-10 rounded-lg bg-white/15 p-1.5 text-white hover:bg-white/25"
+          >
+            <IconX />
+          </button>
         </aside>
+      </div>
+
+      <div className="lg:pl-64">
+        {/* ================= TOP NAVBAR ================= */}
+        <header
+          data-topbar
+          className="dash-top sticky top-0 z-30 border-b border-white/10 text-white backdrop-blur-xl"
+        >
+          <div className="flex h-16 items-center gap-3 px-4 sm:px-6 lg:px-8">
+            <button
+              data-plain
+              aria-label="Open menu"
+              onClick={() => setMobileOpen(true)}
+              className="rounded-lg p-2 text-white/80 hover:bg-white/10 hover:text-white lg:hidden"
+            >
+              <IconMenu />
+            </button>
+
+            <div className="min-w-0">
+              <p className="hidden text-[11px] font-semibold text-fuchsia-200 sm:block">
+                {isInterviewer ? "Workspace" : "Candidate"} <span className="mx-1">/</span>
+              </p>
+              <h1 className="truncate text-[15px] font-bold leading-tight text-white">
+                {pageTitle(location.pathname, isCandidate)}
+              </h1>
+            </div>
+
+            <div className="ml-auto hidden w-full max-w-sm md:block">
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/60">
+                  <IconSearch />
+                </span>
+                <input
+                  type="text"
+                  placeholder="Search assessments…"
+                  value={searchQuery}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  className="w-full rounded-xl border border-white/15 bg-white/10 py-2 pl-10 pr-4 text-sm text-white shadow-[inset_0_1px_3px_rgba(0,0,0,0.25)] outline-none transition placeholder:text-white/50 focus:border-white/40 focus:bg-white/15 focus:ring-4 focus:ring-white/10"
+                />
+              </div>
+            </div>
+
+            <div className="ml-auto flex items-center gap-2 md:ml-3">
+              {isInterviewer && (
+                <button
+                  onClick={() => navigate("/create-interview")}
+                  className="hidden items-center gap-1.5 rounded-xl bg-white px-3.5 py-2 text-sm font-bold text-brand-700 shadow-[0_3px_0_#c4b5fd,0_10px_20px_-10px_rgba(0,0,0,0.5)] hover:bg-brand-50 sm:inline-flex"
+                >
+                  <IconPlus className="h-4 w-4" />
+                  New Interview
+                </button>
+              )}
+
+              {/* Notifications (real, generated from your assessments) */}
+              <div className="relative" ref={notifRef}>
+                <button
+                  data-plain
+                  aria-label="Notifications"
+                  onClick={() => setShowNotifications((v) => !v)}
+                  className="relative rounded-xl border border-white/15 bg-white/10 p-2 text-white shadow-[0_3px_0_rgba(0,0,0,0.25)] transition hover:bg-white/20"
+                >
+                  <IconBell />
+                  {notifications.length > 0 && (
+                    <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-fuchsia-500 px-1 text-[10px] font-bold text-white ring-2 ring-white">
+                      {notifications.length}
+                    </span>
+                  )}
+                </button>
+
+                {showNotifications && (
+                  <div className="ui-card ui-fade-up absolute right-0 z-50 mt-2 w-80 overflow-hidden p-0 text-navy-900">
+                    <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                      <h4 className="text-sm font-bold">Notifications</h4>
+                      <span className="ui-pill bg-brand-50 text-brand-700">{notifications.length} new</span>
+                    </div>
+
+                    {notifications.length === 0 ? (
+                      <p className="px-4 py-8 text-center text-xs text-slate-500">You're all caught up.</p>
+                    ) : (
+                      <div className="max-h-80 divide-y divide-slate-100 overflow-y-auto">
+                        {notifications.map((n) => (
+                          <button
+                            data-plain
+                            key={n.id}
+                            onClick={() => navigate(n.to)}
+                            className="flex w-full gap-3 px-4 py-3 text-left text-xs leading-relaxed text-slate-600 transition hover:bg-brand-50/60"
+                          >
+                            <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-brand-500" />
+                            {n.text}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Profile menu */}
+              <div className="relative" ref={profileRef}>
+                <button
+                  data-plain
+                  onClick={() => setShowProfileMenu((v) => !v)}
+                  className="flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 py-1 pl-1 pr-2 text-white shadow-[0_3px_0_rgba(0,0,0,0.25)] transition hover:bg-white/20"
+                >
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand-400 to-fuchsia-500 text-xs font-bold text-white">
+                    {userName.charAt(0).toUpperCase()}
+                  </div>
+                  <span className="hidden text-left sm:block">
+                    <span className="block text-[13px] font-semibold leading-tight">{userName}</span>
+                    <span className="block text-[11px] capitalize leading-tight text-white/60">{role}</span>
+                  </span>
+                  <IconChevronDown />
+                </button>
+
+                {showProfileMenu && (
+                  <div className="ui-card ui-fade-up absolute right-0 z-50 mt-2 w-60 p-1.5 text-navy-900">
+                    <div className="px-3 py-2.5">
+                      <p className="truncate text-sm font-semibold">{userName}</p>
+                      {userEmail && <p className="truncate text-xs text-slate-400">{userEmail}</p>}
+                    </div>
+                    <div className="my-1 h-px bg-slate-100" />
+                    <MenuLink to="/dashboard/profile" label="My Profile" icon={IconUserCircle} />
+                    <MenuLink to="/dashboard/configuration" label="Platform Settings" icon={IconSettings} />
+                    <MenuLink to="/dashboard/help" label="FAQ" icon={IconHelp} />
+                    <div className="my-1 h-px bg-slate-100" />
+                    <button
+                      data-plain
+                      onClick={handleLogout}
+                      className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50"
+                    >
+                      <IconLogOut />
+                      Sign out
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </header>
 
         {/* ================= PAGE CONTENT ================= */}
-        <main className="flex-1 min-w-0 p-4 sm:p-6 md:p-12">
+        <main className="mx-auto w-full max-w-[90rem] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
           {/* Suspense here: opening a page that is still loading only
               shows a small loader inside the content area, the sidebar
               and header stay on screen. */}
           <Suspense
             fallback={
               <div className="py-24 flex justify-center">
-                <div className="w-8 h-8 rounded-full border-2 border-slate-200 border-t-slate-700 animate-spin" />
+                <div className="w-8 h-8 rounded-full border-2 border-slate-200 border-t-brand-500 animate-spin" />
               </div>
             }
           >
-            <Outlet />
+            <div key={location.pathname} className="ui-fade-up">
+              <Outlet />
+            </div>
           </Suspense>
 
-          <footer className="mt-20 pt-8 border-t border-slate-200 text-center text-xs opacity-50 font-medium">
-            <p>&copy; 2026 AI Interview & Assessment Platform. All rights reserved.</p>
+          <footer className="mt-16 flex flex-col items-center justify-between gap-2 border-t border-slate-200 pt-6 text-xs text-slate-400 sm:flex-row">
+            <p>&copy; {new Date().getFullYear()} AI Interview & Assessment Platform</p>
+            <p>Secure AI-proctored interviews</p>
           </footer>
         </main>
       </div>

@@ -3,14 +3,15 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 
 import api from "../../services/api";
 import InterviewSettingsForm from "../../components/dashboard/InterviewSettingsForm";
+import StatCard from "../../components/dashboard/StatCard";
 import AddCandidateForm from "../../components/dashboard/controls/AddCandidateForm";
 import CandidatesTable from "../../components/dashboard/controls/CandidatesTable";
 import FeaturesPanel from "../../components/dashboard/controls/FeaturesPanel";
 import GmailConnectCard from "../../components/dashboard/controls/GmailConnectCard";
 import { readBase64, validResume } from "../../components/dashboard/controls/shared";
 import { Toggle } from "../../components/dashboard/hiring";
-import { IconAlert, IconAward, IconHourglass, IconLayers, IconTrendingUp } from "../../components/dashboard/icons";
-import { useReviewState } from "./Candidates";
+import { IconAlert, IconAward, IconChevronDown, IconHourglass, IconLayers, IconTrendingUp } from "../../components/dashboard/icons";
+import { useReviewState } from "./useReviewState";
 import { useDashboard } from "../../context/DashboardContext";
 
 const TABS = [
@@ -173,14 +174,14 @@ function ControlCard({ item, t, catalog, groups, defaultOpen = false }) {
   const flaggedCount = review?.summary?.flagged ?? 0;
 
   return (
-    <section className="rounded-[2.5rem] border border-slate-200 bg-white shadow-[0_20px_50px_rgba(8_11_20_0.15)] transition-all duration-300">
+    <section className="rounded-2xl border border-slate-200 bg-white shadow-[var(--shadow-card)] transition-all duration-300">
       <div
         className={`p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-4 border-slate-200 ${
           isOpen ? "border-b" : ""
         }`}
       >
         <div className="min-w-0 flex-1">
-          <h2 className="text-2xl font-black tracking-tight text-slate-900 truncate">{item.title}</h2>
+          <h2 className="text-2xl font-bold tracking-tight text-slate-900 truncate">{item.title}</h2>
           <p className="text-xs text-slate-500 mt-1">
             {invitations.length} {invitations.length === 1 ? "candidate" : "candidates"} · {withResume} with resume
           </p>
@@ -206,7 +207,7 @@ function ControlCard({ item, t, catalog, groups, defaultOpen = false }) {
             className="p-2.5 rounded-xl hover:bg-slate-100 transition text-slate-700 font-extrabold text-lg flex items-center justify-center"
             title="Toggle interview details"
           >
-            <span className={`transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`}>▼</span>
+            <span className={`inline-flex transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`}><IconChevronDown /></span>
           </button>
         </div>
       </div>
@@ -231,70 +232,18 @@ function ControlCard({ item, t, catalog, groups, defaultOpen = false }) {
             </div>
           ) : (
             <>
-              {/* Proper Grid Layout for 4 Stat Cards without overlapping */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                {/* Attended Card */}
-                <div className="bg-gradient-to-br from-purple-100/90 via-white to-purple-50 p-6 rounded-[2rem] shadow-[0_15px_35px_rgba(147,51,235,0.18)] hover:shadow-[0_25px_50px_rgba(147,51,235,0.35)] hover:-translate-y-2 transition-all duration-300 border-2 border-purple-200/80 flex flex-col justify-between group">
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="text-xs font-black tracking-wider text-purple-800 uppercase">Attended</span>
-                    <div className="w-12 h-12 rounded-2xl bg-purple-600 text-white flex items-center justify-center shadow-lg shadow-purple-500/50 group-hover:scale-110 transition-all duration-300">
-                      <IconLayers className="w-6 h-6" />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-3xl font-black text-slate-900 mb-1">{attendedCount}</div>
-                    <p className="text-xs text-purple-900 font-bold">Total attendees</p>
-                  </div>
-                </div>
-
-                {/* Pending Review Card */}
-                <div className="bg-gradient-to-br from-amber-100/90 via-white to-amber-50 p-6 rounded-[2rem] shadow-[0_15px_35px_rgba(245,158,11,0.18)] hover:shadow-[0_25px_50px_rgba(245,158,11,0.35)] hover:-translate-y-2 transition-all duration-300 border-2 border-amber-200/80 flex flex-col justify-between group">
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="text-xs font-black tracking-wider text-amber-800 uppercase">Pending Review</span>
-                    <div className="w-12 h-12 rounded-2xl bg-amber-600 text-white flex items-center justify-center shadow-lg shadow-amber-500/50 group-hover:scale-110 transition-all duration-300">
-                      <IconHourglass className="w-6 h-6" />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-3xl font-black text-slate-900 mb-1">{pendingReviewCount}</div>
-                    <p className="text-xs text-amber-900 font-bold">Waiting for decision</p>
-                  </div>
-                </div>
-
-                {/* Selected Card */}
-                <div className="bg-gradient-to-br from-emerald-100/90 via-white to-emerald-50 p-6 rounded-[2rem] shadow-[0_15px_35px_rgba(16,185,129,0.18)] hover:shadow-[0_25px_50px_rgba(16,185,129,0.35)] hover:-translate-y-2 transition-all duration-300 border-2 border-emerald-200/80 flex flex-col justify-between group">
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="text-xs font-black tracking-wider text-emerald-800 uppercase">Selected</span>
-                    <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-lg shadow-emerald-500/50 group-hover:scale-110 transition-all duration-300">
-                      <IconAward className="w-6 h-6" />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-3xl font-black text-slate-900 mb-1">{selectedCount}</div>
-                    <p className="text-xs text-emerald-900 font-bold">Approved candidates</p>
-                  </div>
-                </div>
-
-                {/* Monitoring Flags Card */}
-                <div className="bg-gradient-to-br from-rose-100/90 via-white to-rose-50 p-6 rounded-[2rem] shadow-[0_15px_35px_rgba(244,63,94,0.18)] hover:shadow-[0_25px_50px_rgba(244,63,94,0.35)] hover:-translate-y-2 transition-all duration-300 border-2 border-rose-200/80 flex flex-col justify-between group">
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="text-xs font-black tracking-wider text-rose-800 uppercase">Monitoring Flags</span>
-                    <div className="w-12 h-12 rounded-2xl bg-rose-600 text-white flex items-center justify-center shadow-lg shadow-rose-500/50 group-hover:scale-110 transition-all duration-300">
-                      <IconAlert className="w-6 h-6" />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-3xl font-black text-slate-900 mb-1">{flaggedCount}</div>
-                    <p className="text-xs text-rose-900 font-bold">Ended early or flagged</p>
-                  </div>
-                </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <StatCard title="Attended" value={attendedCount} icon={IconLayers} variant="teal" change="Total attendees" />
+                <StatCard title="Pending review" value={pendingReviewCount} icon={IconHourglass} variant="amber" change="Waiting for decision" />
+                <StatCard title="Selected" value={selectedCount} icon={IconAward} variant="emerald" change="Approved candidates" />
+                <StatCard title="Monitoring flags" value={flaggedCount} icon={IconAlert} variant="navy" change="Ended early or flagged" />
               </div>
 
               <div className="flex justify-start pt-2">
                 <div
                   role="tablist"
                   aria-label="Interview control sections"
-                  className="inline-flex max-w-full overflow-x-auto gap-1.5 p-1.5 rounded-2xl bg-white border border-slate-200 backdrop-blur-md shadow-lg"
+                  className="flex w-full max-w-full overflow-x-auto gap-1 border-b border-slate-200"
                 >
                   {TABS.map((tb) => {
                     const active = tab === tb.key;
@@ -307,15 +256,15 @@ function ControlCard({ item, t, catalog, groups, defaultOpen = false }) {
                         role="tab"
                         aria-selected={active}
                         onClick={() => openTab(tb.key)}
-                        className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                        className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors whitespace-nowrap ${
                           active
-                            ? "bg-violet-600 text-white shadow-md"
-                            : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                            ? "border-brand-500 text-navy-900"
+                            : "border-transparent text-slate-500 hover:text-navy-900 hover:border-slate-300"
                         }`}
                       >
                         {tb.label}
                         {count !== null && (
-                          <span className="ml-2 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-900">
+                          <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-50 text-brand-700">
                             {count}
                           </span>
                         )}
@@ -445,7 +394,7 @@ export default function InterviewControls() {
           </p>
           <button
             onClick={() => navigate("/create-interview")}
-            className="mt-6 px-6 py-3 rounded-xl bg-slate-800 text-white text-xs font-bold shadow-lg active:scale-95 transition"
+            className="mt-6 px-6 py-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-lg active:scale-95 transition"
           >
             + Create Assessment
           </button>
@@ -477,7 +426,7 @@ export default function InterviewControls() {
 
             <button
               onClick={() => navigate("/create-interview")}
-              className="sm:ml-auto px-5 py-3 rounded-xl bg-slate-800 text-white text-xs font-bold shadow-lg active:scale-95 transition whitespace-nowrap"
+              className="sm:ml-auto px-5 py-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-lg active:scale-95 transition whitespace-nowrap"
             >
               + Create Assessment
             </button>

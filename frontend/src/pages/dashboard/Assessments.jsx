@@ -46,10 +46,10 @@ export default function Assessments() {
   return (
     <div className="space-y-10 p-3">
       {/* Header with 3D shadow and gradient styling */}
-      <header className="bg-white p-8 md:p-10 rounded-[2.5rem] shadow-[0_20px_50px_rgba(8_11_20_0.15)] border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_25px_60px_rgba(8_11_20_0.22)]">
+      <header className="bg-white p-8 md:p-10 rounded-2xl shadow-[var(--shadow-card)] border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-[var(--shadow-card-hover)]">
         <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-violet-100/80 via-purple-100/50 to-transparent rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
         <div className="relative z-10">
-          <h1 className="text-3xl md:text-4xl font-black tracking-tight text-slate-900">My Assessments</h1>
+          <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-slate-900">My Assessments</h1>
           <p className="text-slate-600 mt-2 text-sm font-normal">
             {isCandidate
               ? "Every assessment assigned to you, with its current status."
@@ -68,7 +68,7 @@ export default function Assessments() {
       </header>
 
       {/* Filter and Search Bar Section */}
-      <section className="p-6 rounded-[2.5rem] bg-white shadow-[0_20px_50px_rgba(8_11_20_0.15)] border border-slate-100 flex flex-col md:flex-row items-center justify-between gap-4">
+      <section className="p-6 rounded-2xl bg-white shadow-[var(--shadow-card)] border border-slate-100 flex flex-col md:flex-row items-center justify-between gap-4">
         <div className="relative w-full md:max-w-md">
           <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
             <IconSearch />
@@ -103,7 +103,7 @@ export default function Assessments() {
       </section>
 
       {list.length === 0 ? (
-        <div className="text-center py-24 px-6 rounded-[2.5rem] bg-white shadow-[0_20px_50px_rgba(8_11_20_0.15)] border border-slate-100">
+        <div className="text-center py-24 px-6 rounded-2xl bg-white shadow-[var(--shadow-card)] border border-slate-100">
           <div className="opacity-30 mx-auto mb-6 flex justify-center scale-150 text-slate-400">
             <IconAlert />
           </div>
@@ -117,7 +117,7 @@ export default function Assessments() {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 p-2 [&>*]:rounded-[2.5rem] [&>*]:bg-white [&>*]:shadow-[0_20px_50px_rgba(8_11_20_0.15)] [&>*]:border [&>*]:border-slate-100 [&>*]:hover:-translate-y-2 [&>*]:hover:shadow-[0_30px_70px_rgba(8_11_20_0.25)] [&>*]:transition-all [&>*]:duration-300">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 p-2 [&>*]:rounded-2xl [&>*]:bg-white [&>*]:shadow-[var(--shadow-card)] [&>*]:border [&>*]:border-slate-100 [&>*]:hover:-translate-y-0.5 [&>*]:hover:shadow-[var(--shadow-card-hover)] [&>*]:transition-all [&>*]:duration-300">
           {list.map((i) => (
             <div key={i.id} className="flex flex-col">
               <InterviewCard interview={i} />

@@ -416,10 +416,10 @@ const PHONE_TERMINATE_MS = 3000; // phone must stay visible this long
 const PHONE_GRACE_MS = 1500; // tolerate missed frames before resetting
 
 // Looking down (eye-ball movement, via MediaPipe blendshapes)
-const LOOK_DOWN_SCORE = 0.5; // 0..1, average of both eyes
-const LOOK_DOWN_EPISODE_MS = 1000; // one "glance down" = at least this long
+const LOOK_DOWN_SCORE = 0.6; // 0..1, average of both eyes
+const LOOK_DOWN_EPISODE_MS = 2000; // one "glance down" = at least this long
 const LOOK_DOWN_TERMINATE_MS = 2500; // one long continuous look down
-const LOOK_DOWN_REPEAT_COUNT = 4; // this many glances ...
+const LOOK_DOWN_REPEAT_COUNT = 6; // this many glances ...
 const LOOK_DOWN_REPEAT_WINDOW_MS = 90000; // ... within this window
 
 // Cheating / monitoring flags are NOT ending the interview any more.
@@ -580,8 +580,8 @@ function buildUtterance(text, voiceId) {
 const VIOLATION_MESSAGES = {
   face_not_found: "Face not visible - please stay in front of the camera.",
   multiple_faces: "More than one person detected in the camera.",
-  eyes_closed: "Eyes closed for a long time.",
-  looking_away: "Please look at the screen.",
+  eyes_closed: "Eyes closed for a long time - please keep your eyes open.",
+  looking_away: "Please look at the screen (not the camera) while you answer.",
   looking_down: "Please avoid looking down.",
   phone_detected: "Phone detected - please keep it away.",
   tab_left: "Please stay on the interview page.",
@@ -591,7 +591,7 @@ const VIOLATION_REPEAT_MS = 30000; // same flag saved to the report at most ever
 const VIOLATION_NOTICE_REPEAT_MS = 8000; // warning on screen again after this long
 const MONITOR_INTERVAL_MS = 100; // face/eye check ~10x per second (was every frame)
 const LOOK_DOWN_CALIBRATION_MS = 3000; // learn the normal "reading the screen" eye angle
-const LOOK_DOWN_MARGIN = 0.2; // must be this much below the learned normal
+const LOOK_DOWN_MARGIN = 0.3; // must be this much below the learned normal
 
 const WARMUP_PROMPTS = [
   "Hi, welcome to your interview! How has your day been so far?",
@@ -615,6 +615,25 @@ const parseYesNo = (text) => {
   if (no) return "no";
   if (yes) return "yes";
   return null;
+};
+
+// Warm-up "are you ready?" answer.
+// parseYesNo() checks NO words first, so a natural answer like
+// "I'm ready, no problem" or "I don't mind, let's start" was read as NO
+// and the warm-up kept asking "Are you ready to begin?" forever.
+// Here a clear readiness phrase wins; only an explicit "not ready /
+// not yet / wait" counts as no.
+const NOT_READY_WORDS =
+  /\b(not ready|not yet|not now|not (feeling |so |that |very )?(good|fine|great|ok|okay)|need (some |a little |a bit )?more time|give me (a|one) (minute|moment|second|sec)|wait|hold on|one (minute|moment|second))\b/i;
+const READY_WORDS =
+  /\b(ready|let'?s (start|begin|go|do (it|this))|start|begin|go ahead|yes|yeah|yep|yup|yea|sure|ok|okay|of course|absolutely|definitely|fine|good|great)\b/i;
+
+const parseReady = (text) => {
+  const spoken = String(text || "").trim();
+  if (!spoken) return null;
+  if (NOT_READY_WORDS.test(spoken)) return "no";
+  if (READY_WORDS.test(spoken)) return "yes";
+  return parseYesNo(spoken);
 };
 
 function getSessionFlag(sessionId, flag) {
@@ -725,6 +744,9 @@ export default function InterviewSession() {
     useRef(null);
 
   const warmupStepRef = useRef(0);
+  const warmupReadyAttemptsRef = useRef(0);
+  const googleTtsDownRef = useRef(false);
+  const warmupNoSpeechRetriesRef = useRef(0);
   const warmupStartedRef = useRef(false);
   const warmupListeningRef = useRef(false);
   const startWarmupListeningRef = useRef(null);
@@ -1236,6 +1258,16 @@ export default function InterviewSession() {
   const userEditedRef =
     useRef(false);
 
+  // FAST TRANSCRIPT: while the candidate is quiet, the recording so far is
+  // already sent to the server. If they say nothing more, that result is
+  // used the moment they finish, so there is almost no waiting.
+  const speculativeRef =
+    useRef(null);
+  const speculativeTimerRef =
+    useRef(null);
+  const speechSinceSnapshotRef =
+    useRef(false);
+
   // late speech-recognition results from the PREVIOUS answer must never
   // leak into the next question; only accept speech while listening
   const acceptingSpeechRef =
@@ -1319,6 +1351,9 @@ export default function InterviewSession() {
 
   const multipleFaceSinceRef =
     useRef(null);
+
+  const eyesClosedLoggedRef =
+    useRef(false);
 
   const eyesClosedSinceRef =
     useRef(null);
@@ -1758,6 +1793,18 @@ recognitionRef.current.stop();
 
             speechCancelRef.current = finish;
 
+            // Chrome sometimes never fires onend / onerror (no voices
+            // installed, tab in background ...). Never wait forever:
+            // after roughly the time the text needs, carry on.
+            const watchdog = setTimeout(
+              () => finish(),
+              Math.max(4000, String(text).length * 90 + 2000),
+            );
+            const done = (error) => {
+              clearTimeout(watchdog);
+              finish(error);
+            };
+
             try {
               utterance = buildUtterance(text, DEFAULT_VOICE_ID);
               utterance.onstart = () => {
@@ -1765,15 +1812,34 @@ recognitionRef.current.stop();
                   setIsSpeaking(true);
                 }
               };
-              utterance.onend = finish;
-              utterance.onerror = () =>
-                finish(new Error("Browser speech playback failed."));
+              utterance.onend = () => done();
+              utterance.onerror = (event) =>
+                // "interrupted" / "canceled" happen when a new prompt
+                // replaces the old one - that is not a failure.
+                event?.error === "interrupted" || event?.error === "canceled"
+                  ? done()
+                  : done(new Error(`Browser speech playback failed (${event?.error || "unknown"}).`));
               window.speechSynthesis.speak(utterance);
             } catch (error) {
               console.warn("Browser speech fallback failed.", error);
-              finish(error);
+              done(error);
             }
           });
+
+        // Google TTS already answered "not configured" (503) once in this
+        // session -> go straight to the browser voice, no extra wait.
+        if (googleTtsDownRef.current) {
+          try {
+            await browserFallback();
+          } catch (error) {
+            console.warn("Browser speech failed; continuing without voice.", error);
+          } finally {
+            if (generation === speechGenerationRef.current && mountedRef.current) {
+              setIsSpeaking(false);
+            }
+          }
+          return;
+        }
 
         try {
           const response = await api.post(
@@ -1783,6 +1849,18 @@ recognitionRef.current.stop();
           );
 
           if (!isCurrent()) {
+            return;
+          }
+
+          // 204 = Google voice is not configured on the server.
+          // Use the browser voice for the rest of this session.
+          if (response.status === 204 || !response.data?.size) {
+            googleTtsDownRef.current = true;
+            try {
+              await browserFallback();
+            } catch (fallbackError) {
+              console.warn("Browser speech failed; continuing without voice.", fallbackError);
+            }
             return;
           }
 
@@ -1847,9 +1925,19 @@ recognitionRef.current.stop();
             audio.play().catch(fail);
           });
         } catch (error) {
+          const status = error?.response?.status;
+          if (status === 503 || status === 501 || status === 404) {
+            googleTtsDownRef.current = true;
+          }
           if (isCurrent()) {
             console.warn("Google TTS failed; using browser speech.", error);
-            await browserFallback();
+            try {
+              await browserFallback();
+            } catch (fallbackError) {
+              // The question text is already on screen. A missing voice
+              // must not stop listening / auto-transcription / next step.
+              console.warn("Browser speech failed; continuing without voice.", fallbackError);
+            }
           }
         } finally {
           if (generation === speechGenerationRef.current) {
@@ -1955,8 +2043,16 @@ recognitionRef.current.stop();
         }
 
         const finalStep = step === WARMUP_PROMPTS.length - 1;
+        const readyAnswer = finalStep ? parseReady(cleanReply) : null;
+        if (finalStep) {
+          warmupReadyAttemptsRef.current += 1;
+        }
+        // An unclear answer (neither ready nor "not ready") twice in a
+        // row starts the interview instead of looping forever.
         const readyConfirmed =
-          finalStep && parseYesNo(cleanReply) === "yes";
+          finalStep &&
+          (readyAnswer === "yes" ||
+            (readyAnswer === null && warmupReadyAttemptsRef.current >= 2));
         const spoken = finalStep
           ? readyConfirmed
             ? `${acknowledgment} Wonderful! Let's get started. I'll ask you questions based on the role you're applying for, one at a time.`
@@ -2067,6 +2163,7 @@ recognitionRef.current.stop();
     const recognition = new SpeechRecognitionApi();
     let transcript = "";
     let failed = false;
+    let retryAfterSilence = false;
 
     recognition.lang = "en-US";
     recognition.continuous = false;
@@ -2104,6 +2201,17 @@ recognitionRef.current.stop();
         return;
       }
 
+      // Candidate stayed silent a few seconds: listen again
+      // automatically (twice) instead of falling back to typing.
+      if (event?.error === "no-speech" && warmupNoSpeechRetriesRef.current < 2) {
+        warmupNoSpeechRetriesRef.current += 1;
+        failed = true;
+        retryAfterSilence = true;
+        warmupRecorderRef.current?.cancel();
+        setWarmupRecording(false);
+        return;
+      }
+
       failed = true;
       warmupListeningRef.current = false;
       setWarmupCandidateSpeaking(false);
@@ -2136,9 +2244,16 @@ recognitionRef.current.stop();
         warmupSpeakingTimerRef.current = null;
       }
 
+      if (retryAfterSilence && !warmupRequestInFlightRef.current && !warmupHandledRef.current) {
+        setTimeout(() => startWarmupListeningRef.current?.(), 300);
+        return;
+      }
+
       if (failed || warmupRequestInFlightRef.current) {
         return;
       }
+
+      warmupNoSpeechRetriesRef.current = 0;
 
       void (async () => {
         setWarmupTranscribing(true);
@@ -2376,6 +2491,8 @@ recognitionRef.current.stop();
         }
 
         acceptingSpeechRef.current = false;
+        speculativeRef.current = null;
+        speechSinceSnapshotRef.current = false;
         answerValueRef.current = "";
         setAnswer("");
 
@@ -2821,6 +2938,8 @@ recognitionRef.current.stop();
           );
 
           acceptingSpeechRef.current = false;
+          speculativeRef.current = null;
+          speechSinceSnapshotRef.current = false;
           answerValueRef.current = "";
           recorderRef.current?.cancel();
           setAnswer("");
@@ -3275,10 +3394,38 @@ recognitionRef.current.stop();
     mainSilenceTimerRef.current = setTimeout(() => {
       mainSilenceTimerRef.current = null;
       finishAfterSilenceRef.current?.();
-    }, 10000);
-  }, []);
+    }, 7000);
+
+    // start transcribing early while the candidate is quiet
+    if (speculativeTimerRef.current) {
+      clearTimeout(speculativeTimerRef.current);
+    }
+    speculativeTimerRef.current = setTimeout(() => {
+      speculativeTimerRef.current = null;
+
+      const snap = recorderRef.current?.snapshot?.();
+      if (
+        !snap ||
+        userEditedRef.current ||
+        processingRef.current ||
+        speculativeRef.current?.count === snap.count
+      ) {
+        return;
+      }
+
+      speechSinceSnapshotRef.current = false;
+      speculativeRef.current = {
+        count: snap.count,
+        promise: transcribeAnswer(interviewId, snap.blob).catch(
+          () => null
+        ),
+      };
+    }, 2500);
+  }, [interviewId]);
 
   const noteCandidateSpeechActivity = useCallback(() => {
+    speechSinceSnapshotRef.current = true;
+
     if (
       !wantListeningRef.current ||
       phaseRef.current !== "question" ||
@@ -3335,6 +3482,11 @@ recognitionRef.current.stop();
         // text is captured above; ignore any late recognition results
         acceptingSpeechRef.current = false;
 
+        if (speculativeTimerRef.current) {
+          clearTimeout(speculativeTimerRef.current);
+          speculativeTimerRef.current = null;
+        }
+
         /*
          * ACCURATE TRANSCRIPT: the browser's live recognition
          * (preview only) misses words. If the answer was spoken,
@@ -3360,11 +3512,27 @@ recognitionRef.current.stop();
             !userEditedRef.current
           ) {
             try {
-              const serverText =
-                await transcribeAnswer(
-                  interviewId,
-                  blob
-                );
+              const speculative =
+                speculativeRef.current;
+
+              const reusable =
+                speculative &&
+                !speechSinceSnapshotRef.current;
+
+              let serverText = null;
+
+              if (reusable) {
+                serverText =
+                  await speculative.promise;
+              }
+
+              if (serverText === null) {
+                serverText =
+                  await transcribeAnswer(
+                    interviewId,
+                    blob
+                  );
+              }
 
               // server text wins unless it looped / lost words
               const accurate =
@@ -3581,7 +3749,7 @@ recognitionRef.current.stop();
       if (recognition) {
         await new Promise((resolve) => {
           let settled = false;
-          const timeout = setTimeout(finish, 2000);
+          const timeout = setTimeout(finish, 800);
 
           function finish() {
             if (settled) {
@@ -4962,6 +5130,10 @@ recognitionRef.current?.stop();
           enabled &&
           Boolean(raw.phone);
 
+        gazeTrackerRef.current?.setLevel(
+          raw.gaze_level
+        );
+
         setPolicy({
           loaded: true,
           enabled,
@@ -5570,18 +5742,27 @@ recognitionRef.current?.stop();
               ) {
                 eyesClosedSinceRef.current =
                   Date.now();
-
-              logMonitoringEventRef.current?.(
-                "eyes_closed"
-              );
+                eyesClosedLoggedRef.current = false;
               }
 
               const duration =
                 Date.now() -
                 eyesClosedSinceRef.current;
 
+              // blinks / thinking with closed eyes are normal: only a
+              // long closure is saved for the report
               if (
-                duration >= 1800 &&
+                duration >= 3000 &&
+                !eyesClosedLoggedRef.current
+              ) {
+                eyesClosedLoggedRef.current = true;
+                logMonitoringEventRef.current?.(
+                  "eyes_closed"
+                );
+              }
+
+              if (
+                duration >= 5000 &&
                 eyeGazeEnabled
               ) {
                 flagViolationRef.current?.("eyes_closed");
@@ -5638,37 +5819,25 @@ recognitionRef.current?.stop();
              */
 
             const lookingAway =
-              averageGaze < 0.20 ||
-              averageGaze > 0.80;
+              averageGaze < 0.12 ||
+              averageGaze > 0.88;
 
-            gazeFrame.away =
-              lookingAway;
+            // gazeFrame.away stays false: the tracker compares against
+            // the candidate's own screen range instead of fixed numbers.
 
             if (lookingAway) {
               setEyeStatus(
                 "Looking away"
               );
 
+              // Only the status text changes here. Warnings and the
+              // report come from the calibrated gaze tracker (it knows
+              // where THIS candidate looks when reading the screen).
               if (
                 !lookingAwaySinceRef.current
               ) {
                 lookingAwaySinceRef.current =
                   Date.now();
-
-              logMonitoringEventRef.current?.(
-                "looking_away"
-              );
-              }
-
-              const duration =
-                Date.now() -
-                lookingAwaySinceRef.current;
-
-              if (
-                duration >= 1800 &&
-                eyeGazeEnabled
-              ) {
-                flagViolationRef.current?.("looking_away");
               }
             } else {
               lookingAwaySinceRef.current =
@@ -5873,6 +6042,12 @@ recognitionRef.current?.stop();
                 gazeFrame
               );
 
+            if (!gazeTrackerRef.current.debug.calibrated) {
+              setEyeStatus(
+                "Learning your normal: look at the screen (not the camera)"
+              );
+            }
+
             // tell the candidate when they keep looking away while answering
             if (gz && gz.off && gz.offFor >= GAZE_CONFIG.warnAfterMs) {
               logMonitoringEventRef.current?.(
@@ -5894,10 +6069,11 @@ recognitionRef.current?.stop();
                   : `LEARNING YOUR NORMAL ${Math.round(d.calibrationProgress * 100)}% (look at the screen)`) +
                 `\nanswering: ${d.answering}` +
                 `\nOFF SCREEN: ${d.off ? "YES - " + d.reason : "no"}` +
-                `\nhead turn : ${d.yawDev.toFixed(3)}  (limit ${GAZE_CONFIG.yawDev})` +
-                `\nhead down : ${d.pitchDev.toFixed(3)}  (limit ${GAZE_CONFIG.pitchDownDev})` +
-                `\neyes down : ${d.eyeDownDev.toFixed(3)}  (limit ${GAZE_CONFIG.eyeDownDev})` +
-                `\neyes side : ${d.irisDev.toFixed(3)}  (limit ${GAZE_CONFIG.irisDev})` +
+                `\nlevel: ${d.level}` +
+                `\nhead turn : ${d.yawDev.toFixed(3)}  (limit ${(d.limits.yaw || 0).toFixed(3)})` +
+                `\nhead down : ${d.pitchDev.toFixed(3)}  (limit ${(d.limits.pitchDown || 0).toFixed(3)})` +
+                `\neyes down : ${d.eyeDownDev.toFixed(3)}  (limit ${(d.limits.eyeDown || 0).toFixed(3)})` +
+                `\neyes side : ${d.irisDev.toFixed(3)}  (limit ${(d.limits.iris || 0).toFixed(3)})` +
                 `\nphone seen: ${d.phone}`;
             }
           }
@@ -6279,8 +6455,8 @@ recognitionRef.current?.stop();
               : "READY TO BEGIN";
 
     return (
-      <div className="min-h-screen bg-white text-slate-800 flex items-center justify-center p-6 relative overflow-hidden font-sans">
-        <div className="max-w-lg w-full bg-white border border-slate-200 backdrop-blur-2xl p-8 rounded-3xl text-center space-y-5 shadow-2xl relative z-10">
+      <div className="min-h-screen bg-[#f5f7fa] text-navy-900 flex items-center justify-center p-6 relative overflow-hidden font-sans">
+        <div className="max-w-lg w-full bg-white border border-slate-200/80 p-8 rounded-2xl text-center space-y-5 shadow-[var(--shadow-card-hover)] relative z-10">
           <h1 className="text-2xl font-bold text-slate-900">
             Welcome to your interview
           </h1>
@@ -6394,7 +6570,7 @@ recognitionRef.current?.stop();
                     warmupTranscribing ||
                     warmupSubmitting
                   }
-                  className="w-full py-3 rounded-2xl font-bold text-white bg-slate-800 hover:opacity-90 transition disabled:cursor-not-allowed disabled:opacity-50"
+                  className="w-full py-3 rounded-2xl font-bold text-white bg-brand-600 hover:bg-brand-700 hover:opacity-90 transition disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {warmupTranscribing
                     ? "Transcribing..."
@@ -6413,7 +6589,7 @@ recognitionRef.current?.stop();
                   warmupTranscribing ||
                   warmupSubmitting
                 }
-                className="text-xs text-slate-500 underline underline-offset-4 hover:text-slate-900 transition disabled:opacity-50"
+                className="bg-transparent text-xs text-slate-500 underline underline-offset-4 hover:text-slate-900 transition disabled:opacity-50"
               >
                 Replay prompt and listen
               </button>
@@ -6424,7 +6600,7 @@ recognitionRef.current?.stop();
             <button
               type="button"
               onClick={continueWithoutWarmup}
-              className="text-xs text-slate-500 underline underline-offset-4 hover:text-slate-900 transition"
+              className="bg-transparent text-xs text-slate-500 underline underline-offset-4 hover:text-slate-900 transition"
             >
               Continue to interview without the warm welcome
             </button>
@@ -6464,7 +6640,7 @@ recognitionRef.current?.stop();
 
   if (phase === "error") {
     return (
-      <div className="min-h-screen bg-white text-slate-800 flex items-center justify-center p-6">
+      <div className="min-h-screen bg-[#f5f7fa] text-navy-900 flex items-center justify-center p-6">
         <div className="max-w-lg w-full bg-white border border-rose-500/30 backdrop-blur-2xl rounded-3xl p-8 shadow-2xl space-y-4">
           <div className="w-12 h-12 bg-rose-500/10 border border-rose-500/20 text-rose-600 rounded-2xl flex items-center justify-center font-bold text-xl">
             ⚠️
@@ -6499,7 +6675,7 @@ recognitionRef.current?.stop();
 
   if (phase === "terminated") {
     return (
-      <div className="min-h-screen bg-white text-slate-800 flex items-center justify-center p-6">
+      <div className="min-h-screen bg-[#f5f7fa] text-navy-900 flex items-center justify-center p-6">
         <div className="max-w-md w-full bg-white border border-rose-500/30 backdrop-blur-2xl p-8 rounded-3xl text-center space-y-4 shadow-2xl">
           <div className="w-16 h-16 bg-rose-500/10 border border-rose-500/30 text-rose-600 rounded-2xl flex items-center justify-center text-3xl mx-auto">
             ⚠
@@ -6529,7 +6705,7 @@ recognitionRef.current?.stop();
 
   if (phase === "completed") {
     return (
-      <div className="min-h-screen bg-white text-slate-800 flex items-center justify-center p-6 relative overflow-hidden font-sans">
+      <div className="min-h-screen bg-[#f5f7fa] text-navy-900 flex items-center justify-center p-6 relative overflow-hidden font-sans">
         <div className="max-w-md w-full bg-white border border-emerald-500/30 backdrop-blur-2xl p-8 rounded-3xl text-center space-y-4 shadow-2xl">
           <div className="w-16 h-16 bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 rounded-2xl flex items-center justify-center text-3xl mx-auto">
             ✓
@@ -6562,7 +6738,7 @@ recognitionRef.current?.stop();
           <button
             type="button"
             onClick={() => navigate("/dashboard")}
- className="w-full py-3 rounded-2xl font-bold text-white bg-slate-800 hover:opacity-90 transition"
+ className="w-full py-3 rounded-2xl font-bold text-white bg-brand-600 hover:bg-brand-700 hover:opacity-90 transition"
           >
             Back to dashboard
           </button>
@@ -6646,11 +6822,11 @@ recognitionRef.current?.stop();
   ];
 
   return (
-    <div className="min-h-screen bg-white text-slate-900 font-sans lg:h-screen lg:overflow-hidden">
+    <div className="min-h-screen bg-[#f5f7fa] text-navy-900 font-sans lg:h-screen lg:overflow-hidden">
       {/* CAMERA REQUIRED (only when the interviewer turned monitoring on) */}
       {policy.loaded && policy.enabled && !cameraEnabled && (
-        <div className="fixed inset-0 z-50 bg-slate-50/95 flex items-center justify-center p-6">
-          <div className="max-w-md w-full bg-slate-50 border border-slate-300 rounded-xl p-8 text-center space-y-4">
+        <div className="fixed inset-0 z-50 bg-navy-950/60 backdrop-blur-sm flex items-center justify-center p-6">
+          <div className="max-w-md w-full bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-4 shadow-2xl">
             <h2 className="text-xl font-bold text-slate-900">
               Camera required
             </h2>
@@ -6665,7 +6841,7 @@ recognitionRef.current?.stop();
               <button
                 type="button"
                 onClick={startMonitoring}
-                className="w-full py-3 rounded-lg font-semibold text-white bg-slate-300 hover:bg-slate-500"
+                className="w-full py-3 rounded-xl font-semibold text-white bg-brand-600 hover:bg-brand-700"
               >
                 Allow camera and continue
               </button>
@@ -6678,14 +6854,22 @@ recognitionRef.current?.stop();
         {/* ================= LEFT ================= */}
         <section className="min-h-0 flex flex-col gap-3 p-4 md:p-8 lg:h-full lg:overflow-y-auto">
           {/* LOGO */}
-          <div className="h-[56px] shrink-0 rounded-2xl border border-slate-200 bg-white shadow-sm flex items-center justify-center gap-2 text-xl font-black">
-            <span className="text-slate-700">VOLK</span>
-            <span>Ai</span>
-            <span className="text-slate-700">HR</span>
+          <div className="h-[56px] shrink-0 rounded-2xl bg-navy-950 px-4 shadow-sm flex items-center justify-between gap-2">
+            <span className="flex items-center gap-2.5">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand-400 to-fuchsia-500 text-white">
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M4 12a8 8 0 0 1 16 0" /><path d="M8 12a4 4 0 0 1 8 0" /><circle cx="12" cy="16" r="2.2" fill="currentColor" stroke="none" /></svg>
+              </span>
+              <span className="font-display text-lg font-extrabold tracking-tight text-white">
+                VOLK <span className="text-brand-300">Ai</span> HR
+              </span>
+            </span>
+            <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-medium text-brand-200">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" /> Secure session
+            </span>
           </div>
 
           {/* VIDEO */}
-          <div className="relative flex-none lg:flex-1 min-h-[280px] lg:min-h-[220px] rounded-2xl border border-slate-200 bg-slate-900 shadow-sm overflow-hidden">
+          <div className="relative flex-none lg:flex-1 min-h-[280px] lg:min-h-[220px] rounded-2xl border border-navy-900 bg-navy-950 shadow-[var(--shadow-card)] overflow-hidden">
             {cameraEnabled ? (
               <video
                 ref={attachVideo}
@@ -6704,7 +6888,7 @@ recognitionRef.current?.stop();
             )}
 
             {cameraEnabled && (
-              <span className="absolute top-3 left-3 px-2 py-1 rounded bg-white/90 text-slate-800 text-[10px] font-semibold shadow">
+              <span className="absolute top-3 left-3 px-2 py-1 rounded-md bg-rose-600 text-white text-[10px] font-bold shadow">
                 ● LIVE
               </span>
             )}
@@ -6743,7 +6927,7 @@ recognitionRef.current?.stop();
 
           {/* INTERVIEWER + MONITORING */}
           <div className="shrink-0 grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-3">
-            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4 flex flex-col items-center justify-center gap-2">
+            <div className="rounded-2xl border border-slate-200/80 bg-white shadow-[var(--shadow-card)] p-4 flex flex-col items-center justify-center gap-2">
               <div
                 className={`w-14 h-14 rounded-full flex items-center justify-center text-2xl bg-slate-100 border-2 ${
                   isSpeaking
@@ -6759,7 +6943,7 @@ recognitionRef.current?.stop();
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
+            <div className="rounded-2xl border border-slate-200/80 bg-white shadow-[var(--shadow-card)] p-4">
               <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
                 Monitoring
               </div>
@@ -6794,12 +6978,12 @@ recognitionRef.current?.stop();
           </div>
 
           {/* CONTROLS */}
-          <div className="shrink-0 rounded-2xl border border-slate-200 bg-white shadow-sm px-4 py-3 flex flex-wrap items-center justify-center gap-3">
+          <div className="shrink-0 rounded-2xl border border-slate-200/80 bg-white shadow-[var(--shadow-card)] px-4 py-3 flex flex-wrap items-center justify-center gap-3">
             <button
               type="button"
               disabled={policy.enabled}
               onClick={toggleCamera}
-              className="px-4 py-2 rounded-md text-sm bg-slate-200 hover:bg-slate-300 disabled:opacity-60 disabled:cursor-not-allowed"
+              className="px-4 py-2 rounded-xl text-sm font-semibold bg-white border border-slate-200 text-navy-800 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               📹{" "}
               {cameraEnabled
@@ -6821,14 +7005,18 @@ recognitionRef.current?.stop();
         </section>
 
         {/* ================= RIGHT ================= */}
-        <section className="h-[80vh] min-h-[560px] lg:h-full lg:min-h-0 flex flex-col border-l border-slate-200">
-          <div className="h-[64px] shrink-0 flex items-center justify-center">
-            <h1 className="text-xl font-bold text-slate-900">
-              AI Interview Assistant 🤖
+        <section className="h-[80vh] min-h-[560px] lg:h-full lg:min-h-0 flex flex-col border-l border-slate-200 bg-white/60">
+          <div className="h-[64px] shrink-0 flex items-center justify-between px-5">
+            <h1 className="flex items-center gap-2.5 text-lg font-bold text-navy-900">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-50 text-base">🤖</span>
+              AI Interview Assistant
             </h1>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-100">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live
+            </span>
           </div>
 
-          <div className="flex-1 min-h-0 mx-5 mb-5 rounded-2xl border border-slate-200 bg-white shadow-md flex flex-col p-4 gap-3">
+          <div className="flex-1 min-h-0 mx-5 mb-5 rounded-2xl border border-slate-200/80 bg-white shadow-[var(--shadow-card)] flex flex-col p-4 gap-3">
             {introText && phase === "intro" && !currentQuestion && (
               <section className="shrink-0 max-h-32 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <h2 className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-600">
@@ -6848,7 +7036,7 @@ recognitionRef.current?.stop();
               </span>
               <div className="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
                 <div
-                  className="h-full bg-violet-600 transition-all duration-500"
+                  className="h-full bg-gradient-to-r from-brand-400 to-fuchsia-500 transition-all duration-500"
                   style={{ width: `${progress}%` }}
                 />
               </div>
@@ -6856,7 +7044,7 @@ recognitionRef.current?.stop();
             </div>
 
             {/* current question (text appears with the voice) */}
-            <div className="shrink-0 min-h-[96px] rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-center text-[15px] leading-relaxed text-slate-900">
+            <div className="shrink-0 min-h-[96px] rounded-2xl border border-brand-100 bg-brand-50/50 px-5 py-4 text-center text-[15px] font-medium leading-relaxed text-navy-900">
               {currentQuestion?.is_follow_up && (
                 <div className="text-[10px] font-bold uppercase tracking-wider text-amber-600 mb-1">
                   Follow-up question
@@ -6911,7 +7099,7 @@ recognitionRef.current?.stop();
                   disabled={processing || transcribing}
                   rows={4}
                   placeholder="Enter your answer if voice input is unavailable."
-                  className="min-h-24 w-full resize-y rounded-md bg-slate-50 border border-slate-200 px-4 py-3 focus:border-slate-400 outline-none text-sm placeholder-slate-500 disabled:opacity-70"
+                  className="min-h-24 w-full resize-y rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 focus:border-brand-400 focus:ring-4 focus:ring-brand-100 outline-none text-sm placeholder-slate-500 disabled:opacity-70"
                 />
               ) : (
                 <p className="min-h-20 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
@@ -6945,7 +7133,7 @@ recognitionRef.current?.stop();
                   <button
                     disabled={processing}
                     onClick={handleFollowUpYes}
-                    className="py-3 rounded-md bg-emerald-700 hover:bg-emerald-600 text-white font-semibold text-sm disabled:opacity-50"
+                    className="py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm disabled:opacity-50"
                   >
                     {processing ? "Processing..." : "YES — Ask Follow-up"}
                   </button>
@@ -6953,7 +7141,7 @@ recognitionRef.current?.stop();
                   <button
                     disabled={processing}
                     onClick={handleFollowUpNo}
-                    className="py-3 rounded-md bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold text-sm disabled:opacity-50"
+                    className="py-3 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-navy-800 font-semibold text-sm disabled:opacity-50"
                   >
                     NO — Next Question
                   </button>
@@ -6972,7 +7160,7 @@ recognitionRef.current?.stop();
                       Boolean(answer.trim())
                     }
                     onClick={() => void startListening()}
-                    className="w-full rounded-md bg-slate-200 px-5 py-3 font-semibold text-sm text-slate-800 hover:bg-slate-300 disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="w-full rounded-xl bg-white border border-slate-200 px-5 py-3 font-semibold text-sm text-navy-800 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Retry microphone
                   </button>
@@ -6989,7 +7177,7 @@ recognitionRef.current?.stop();
                         answerRecordingActive
                       }
                       onClick={() => submitAnswerWithText(answer)}
-                      className="w-full rounded-md bg-slate-700 px-5 py-3 text-white font-semibold text-sm hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="w-full rounded-xl bg-brand-600 px-5 py-3 text-white font-semibold text-sm hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       {processing ? "Processing answer..." : "Submit answer"}
                     </button>

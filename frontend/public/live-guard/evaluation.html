@@ -1,0 +1,96 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Proctor accuracy dashboard</title>
+<style>
+:root{--ink:#211d3d;--mut:#6b6785;--line:#ddd;--ok:#15965b;--bad:#d63b53;--warn:#b7791f}
+body{font:15px/1.5 system-ui,Arial;max-width:1100px;margin:24px auto;padding:0 16px;color:var(--ink)}
+h2{margin-bottom:4px}h3{margin:22px 0 6px}.m{color:var(--mut);font-size:13px}
+table{border-collapse:collapse;width:100%;margin-top:8px}td,th{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top}th{background:var(--ink);color:#fff}
+textarea{width:100%;height:96px;font:13px monospace;box-sizing:border-box}
+input,select,button{font:inherit;padding:5px 8px}button{cursor:pointer;background:var(--ink);color:#fff;border:0;border-radius:6px}button.s{background:#fff;color:var(--ink);border:1px solid var(--ink)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0}
+.rec{border:1px solid var(--line);border-radius:10px;padding:12px;margin:12px 0}
+.rec h4{margin:0 0 6px;display:flex;justify-content:space-between;gap:8px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:10px 0}
+.card{border:1px solid var(--line);border-radius:10px;padding:10px}.card b{display:block;font-size:24px}
+.v{padding:10px 14px;border-radius:8px;margin:10px 0;color:#fff}.v.OK{background:var(--ok)}.v.TUNE{background:var(--bad)}.v.TOO_FEW,.v.INCOMPLETE{background:var(--warn)}
+.tp{color:var(--ok);font-weight:700}.fp{color:var(--bad);font-weight:700}.fn{color:var(--warn);font-weight:700}
+</style></head><body>
+<h2>Live Interview Guard - accuracy dashboard (precision / recall / F1)</h2>
+<p class="m">Goal: measure how often the proctor is right, and how often it raises a false alarm on an honest candidate. Everything runs in this page; nothing is uploaded.<br>
+1) Record several consented mock interviews where YOU know what happened (normal thinking, phone beside the laptop, notes, second monitor, helper speaking, phone in hand). 2) Load each report <b>.json</b>. 3) Pick the scenario and write what really happened, one per line like <code>01:15 phone_beside_laptop</code> (leave EMPTY for an honest "normal thinking" recording: every flag then counts as a false alarm). 4) Calculate.</p>
+<div class="row">
+  <label>Reports (.json, several allowed): <input type="file" id="files" accept=".json" multiple></label>
+  <label>Session file: <input type="file" id="sessIn" accept=".json"></label>
+</div>
+<div class="row">
+  <label>Time tolerance (s) <input id="tol" type="number" value="6" min="1" style="width:64px"></label>
+  <label>Target precision % <input id="tp" type="number" value="80" style="width:64px"></label>
+  <label>Target recall % <input id="tr" type="number" value="70" style="width:64px"></label>
+  <label>Min recordings <input id="tn" type="number" value="5" style="width:64px"></label>
+</div>
+<p class="m">Flag types: <code id="types"></code></p>
+<div id="recs"></div>
+<div class="row"><button id="go">Calculate accuracy</button> <button class="s" id="csv" disabled>Download CSV</button> <button class="s" id="sess">Save session (labels + reports)</button> <button class="s" id="clr">Clear all</button></div>
+<div id="res"></div>
+<script src="evaluation.js"></script>
+<script>
+"use strict";
+const TYPES=["phone_detected","phone_use","phone_beside_laptop","second_monitor","reading_pattern","looking_down","looking_away","multiple_faces","face_not_found","voice_mismatch","second_voice","typing_sound","screen_change","challenge_fail"];
+const SCN={normal_thinking:"Normal thinking (honest, NO cheating)",phone_beside_laptop:"Phone beside laptop",phone_in_hand:"Phone in hand / lap",notes_on_laptop:"Notes / text on the laptop",second_monitor:"Second monitor",helper_speaking:"Helper speaking / earpiece",other:"Other"};
+const $=id=>document.getElementById(id), esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+$("types").textContent=TYPES.join("  ");
+let recs=[], last=null; const KEY="proctorEvalSession_v32";
+const mmss=s=>String(Math.floor(s/60)).padStart(2,"0")+":"+String(Math.floor(s%60)).padStart(2,"0");
+const pc=v=>v==null?"-":Math.round(v*100)+"%";
+function save(){try{localStorage.setItem(KEY,JSON.stringify(recs))}catch{}}
+function load(){try{const t=localStorage.getItem(KEY);if(t)recs=JSON.parse(t)||[]}catch{}}
+function durationOf(j){const m=String(j.duration||"").match(/(\d+)\s*min\s*(\d+)?/);let d=m?Number(m[1])*60+Number(m[2]||0):0;const mx=Math.max(0,...(j.timeline||[]).map(t=>t.s||0));return Math.max(d,mx)}
+function render(){
+  const box=$("recs");box.innerHTML="";
+  recs.forEach((r,i)=>{
+    const d=document.createElement("div");d.className="rec";
+    const hit=last&&last.recordings[i];
+    d.innerHTML=`<h4><span><b>${esc(r.name)}</b> <span class="m">· ${mmss(r.durationS||0)} · ${r.flags.length} flag(s)</span></span><button class="s" data-del="${i}">Remove</button></h4>
+    <div class="row"><label>Scenario <select data-scn="${i}">${Object.entries(SCN).map(([k,v])=>`<option value="${k}"${k===r.scenario?" selected":""}>${esc(v)}</option>`).join("")}</select></label>
+    <label>Add label <input data-t="${i}" placeholder="mm:ss" style="width:70px"> <select data-ty="${i}">${TYPES.map(t=>`<option>${t}</option>`).join("")}</select> <button class="s" data-add="${i}">Add</button></label></div>
+    <label class="m">What really happened (one per line, e.g. <code>01:15 phone_beside_laptop</code>)</label>
+    <textarea data-lab="${i}">${esc(r.labelText||"")}</textarea>
+    <table><tr><th>Time</th><th>Flag in the report</th><th>Detail</th><th>Result</th></tr>${
+      (hit?hit.flags:r.flags.map(f=>({...f,hit:null}))).map(f=>`<tr><td>${mmss(f.s)}</td><td>${esc(f.type)}</td><td>${esc(f.detail||"")}</td><td>${f.hit===null?"-":f.hit?'<span class="tp">TP (correct)</span>':'<span class="fp">FP (false alarm)</span>'}</td></tr>`).join("")||'<tr><td colspan="4" class="m">No flags in this report.</td></tr>'}
+      ${hit?hit.missed.map(m=>`<tr><td>${mmss(m.s)}</td><td>${esc(m.type)}</td><td class="m">(you labelled it, the proctor did not flag it)</td><td><span class="fn">FN (missed)</span></td></tr>`).join(""):""}</table>`;
+    box.appendChild(d);
+  });
+  box.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{recs.splice(+b.dataset.del,1);last=null;save();render()});
+  box.querySelectorAll("[data-scn]").forEach(s=>s.onchange=()=>{recs[+s.dataset.scn].scenario=s.value;save()});
+  box.querySelectorAll("[data-lab]").forEach(t=>t.oninput=()=>{recs[+t.dataset.lab].labelText=t.value;save()});
+  box.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>{const i=+b.dataset.add,t=box.querySelector(`[data-t="${i}"]`).value.trim(),ty=box.querySelector(`[data-ty="${i}"]`).value;if(!/^\d+(:\d+)?$/.test(t))return alert("Time like 01:15 or 75");recs[i].labelText=((recs[i].labelText||"").trim()+"\n"+t+" "+ty).trim();save();render()});
+}
+$("files").onchange=async e=>{
+  for(const f of e.target.files){
+    try{const j=JSON.parse(await f.text());const flags=(j.timeline||[]).map(t=>({s:Number(t.s)||0,type:t.type,detail:t.detail||""}));
+      recs.push({name:(j.candidate?j.candidate+" - ":"")+f.name,scenario:"other",durationS:durationOf(j),flags,labelText:""});}
+    catch(err){alert(f.name+": "+err.message)}
+  }
+  e.target.value="";last=null;save();render();
+};
+function calc(){
+  try{
+    const data=recs.map(r=>({name:r.name,scenario:r.scenario,durationS:r.durationS,flags:r.flags,labels:ProctorEval.parseLabels(r.labelText)}));
+    if(!data.length)return $("res").innerHTML='<p class="m">Load at least one report first.</p>';
+    const res=ProctorEval.evaluateMany(data,Number($("tol").value),{targetPrecision:Number($("tp").value)/100,targetRecall:Number($("tr").value)/100,minRecordings:Number($("tn").value)});
+    last=res;const o=res.overall;
+    const tbl=(h,rows)=>`<table><tr>${h.map(x=>`<th>${x}</th>`).join("")}</tr>${rows.join("")}</table>`;
+    $("res").innerHTML=`<h3>Result</h3><div class="v ${res.verdict.level}"><b>${{OK:"Targets met (on these recordings)",TUNE:"Needs tuning before client use",TOO_FEW:"Too few recordings to trust",INCOMPLETE:"Test set incomplete"}[res.verdict.level]}</b><br>${res.verdict.reasons.map(esc).join("<br>")}</div>
+    <div class="cards"><div class="card">Precision<b>${pc(o.precision)}</b><span class="m">flags that were real</span></div><div class="card">Recall<b>${pc(o.recall)}</b><span class="m">real events caught</span></div><div class="card">F1<b>${pc(o.f1)}</b><span class="m">balance of both</span></div><div class="card">False alarms / 10 min<b>${o.falsePer10Min==null?"-":o.falsePer10Min}</b><span class="m">all recordings</span></div><div class="card">Recordings<b>${o.recordings}</b><span class="m">${Math.round(o.durationS/60)} min total</span></div></div>
+    <h3>By flag type</h3>${tbl(["Flag type","TP","FP","FN","Precision","Recall","F1"],Object.entries(res.byType).map(([k,v])=>`<tr><td>${esc(k)}</td><td>${v.tp}</td><td>${v.fp}</td><td>${v.fn}</td><td>${pc(v.precision)}</td><td>${pc(v.recall)}</td><td>${pc(v.f1)}</td></tr>`))}
+    <h3>By scenario (normal thinking must stay at 0 false alarms)</h3>${tbl(["Scenario","Recordings","TP","FP","FN","Precision","Recall","False alarms / 10 min"],Object.entries(res.byScenario).map(([k,v])=>`<tr><td>${esc(SCN[k]||k)}</td><td>${v.recordings}</td><td>${v.tp}</td><td>${v.fp}</td><td>${v.fn}</td><td>${pc(v.precision)}</td><td>${pc(v.recall)}</td><td>${v.falsePer10Min==null?"-":v.falsePer10Min}</td></tr>`))}
+    <p class="m">Match rule: a flag is correct when a label of the same type is within ±${esc($("tol").value)} s. Each real event can be matched only once. Open each recording above to see which flags were TP / FP / missed.</p>`;
+    $("csv").disabled=false;render();
+  }catch(e){$("res").innerHTML='<p class="fp">Error: '+esc(e.message)+'</p>'}
+}
+$("go").onclick=calc;
+$("csv").onclick=()=>{if(!last)return;const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([ProctorEval.toCSV(last)],{type:"text/csv"}));a.download="proctor_accuracy.csv";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),5000)};
+$("sess").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify({proctorEvalSession:1,recs},null,1)],{type:"application/json"}));a.download="proctor_eval_session.json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),5000)};
+$("sessIn").onchange=async e=>{try{const j=JSON.parse(await e.target.files[0].text());if(!j.proctorEvalSession)throw new Error("Not a saved session file");recs=j.recs||[];last=null;save();render()}catch(err){alert(err.message)}e.target.value=""};
+$("clr").onclick=()=>{if(confirm("Remove all recordings and labels?")){recs=[];last=null;save();render();$("res").innerHTML="";$("csv").disabled=true}};
+load();render();
+</script></body></html>

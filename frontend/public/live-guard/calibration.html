@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Look at the number</title>
+<style>
+  html,body{margin:0;height:100%;background:#0d0b1a;color:#fff;font-family:system-ui,Segoe UI,Arial,sans-serif;overflow:hidden}
+  .n{position:absolute;width:11vmin;height:11vmin;border-radius:50%;display:flex;align-items:center;justify-content:center;
+     font-size:6.5vmin;font-weight:800;background:#241f45;color:#6f68a3;transform:translate(-50%,-50%);transition:all .15s}
+  .n.on{background:#ffd23f;color:#1b1530;box-shadow:0 0 0 1.6vmin #ffd23f55,0 0 6vmin #ffd23f;font-size:8vmin;width:14vmin;height:14vmin}
+  .n.done{background:#16794d;color:#d7ffe9}
+  #msg{position:absolute;left:50%;top:30%;transform:translate(-50%,-50%);text-align:center;font-size:3.2vmin;line-height:1.35;max-width:60vw;color:#cfcaf5}
+  #msg b{color:#fff}
+</style>
+</head>
+<body>
+<!-- Numbers sit at the 4 corners, 4 edge middles and the centre of THIS window. Interviewer: share this window in the meeting, the candidate views it FULL SCREEN. -->
+<div class="n" id="n1" style="left:6%;top:9%">1</div>
+<div class="n" id="n2" style="left:50%;top:9%">2</div>
+<div class="n" id="n3" style="left:94%;top:9%">3</div>
+<div class="n" id="n4" style="left:6%;top:50%">4</div>
+<div class="n" id="n5" style="left:50%;top:50%">5</div>
+<div class="n" id="n6" style="left:94%;top:50%">6</div>
+<div class="n" id="n7" style="left:6%;top:91%">7</div>
+<div class="n" id="n8" style="left:50%;top:91%">8</div>
+<div class="n" id="n9" style="left:94%;top:91%">9</div>
+<div id="msg"><b>Gaze calibration</b><br>Waiting for the interviewer to start…</div>
+<script>
+  const msg = document.getElementById("msg");
+  const set = (html) => { msg.innerHTML = html; };
+  let ch = null;
+  try { ch = new BroadcastChannel("proctor-gaze"); } catch (e) { set("<b>This browser cannot link the windows.</b><br>Use Chrome and open this page from the proctor page button."); }
+  const reset = () => document.querySelectorAll(".n").forEach((e) => e.className = "n");
+  if (ch) {
+    ch.onmessage = (e) => {
+      const m = e.data || {};
+      if (m.type === "step") {
+        reset();
+        for (let i = 1; i < m.n; i++) document.getElementById("n" + i).classList.add("done");
+        document.getElementById("n" + m.n).classList.add("on");
+        set("Look at the <b>glowing number</b><br>and say it out loud");
+      } else if (m.type === "done") { reset(); document.querySelectorAll(".n").forEach((e) => e.classList.add("done")); set("<b>Thank you.</b><br>Calibration finished. Please look at the interviewer normally now."); }
+      else if (m.type === "fail") { reset(); set("<b>Please sit straight in front of the camera</b><br>and keep your face fully visible. We will try again."); }
+      else if (m.type === "idle") { reset(); set("<b>Gaze calibration</b><br>Waiting for the interviewer to start…"); }
+    };
+    ch.postMessage({ type: "ready" });
+  }
+</script>
+</body>
+</html>

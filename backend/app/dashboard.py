@@ -73,11 +73,19 @@ def get_dashboard(
     # INTERVIEWER DASHBOARD
     # =====================================================
 
-    if current_user.role == "interviewer":
+    # Admin uses the same dashboard as an interviewer, but sees every
+    # interview (same rule as the /hiring endpoints).
+    if current_user.role in {"interviewer", "admin"}:
+
+        owner_filter = (
+            []
+            if current_user.role == "admin"
+            else [Interview.created_by == user_id]
+        )
 
         total_interviews = (
             db.query(func.count(Interview.id))
-            .filter(Interview.created_by == user_id)
+            .filter(*owner_filter)
             .scalar()
             or 0
         )
@@ -89,7 +97,7 @@ def get_dashboard(
                 Interview.id == InterviewSession.interview_id,
             )
             .filter(
-                Interview.created_by == user_id,
+                *owner_filter,
                 InterviewSession.status == "completed",
             )
             .scalar()
@@ -110,7 +118,7 @@ def get_dashboard(
                     Report.session_id == InterviewSession.id,
                 )
                 .filter(
-                    Interview.created_by == user_id,
+                    *owner_filter,
                     InterviewSession.status == "completed",
                     Report.session_id.is_(None),
                 )
@@ -134,13 +142,13 @@ def get_dashboard(
                 Interview,
                 Interview.id == InterviewSession.interview_id,
             )
-            .filter(Interview.created_by == user_id)
+            .filter(*owner_filter)
             .scalar()
         )
 
         interviews = (
             db.query(Interview)
-            .filter(Interview.created_by == user_id)
+            .filter(*owner_filter)
             .order_by(Interview.created_at.desc())
             .all()
         )

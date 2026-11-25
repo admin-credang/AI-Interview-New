@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import api from "../services/api";
+import WizardHeader from "../components/WizardHeader";
 import InterviewSettingsForm from "../components/dashboard/InterviewSettingsForm";
 import { FlowSteps } from "../components/dashboard/hiring";
 
@@ -39,30 +40,15 @@ export default function MonitoringSetup() {
   }, [interviewId]);
 
   return (
-    <div className="min-h-screen bg-white text-slate-900">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <div>
-            <h1 className="text-xl font-bold">AI Interview Agent</h1>
-            <p className="text-sm text-slate-500">Monitoring Setup</p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => navigate("/dashboard")}
-            className="rounded-xl border border-slate-200 px-4 py-2 text-sm transition hover:bg-slate-100"
-          >
-            Skip to Dashboard
-          </button>
-        </div>
-      </header>
+    <div className="min-h-screen bg-[#f5f7fa] text-navy-900">
+      <WizardHeader step="Monitoring Setup" backLabel="Skip to Dashboard" />
 
       <main className="mx-auto max-w-3xl px-6 py-10">
         <FlowSteps current={2} />
 
         <div className="mb-8">
-          <p className="text-sm font-medium text-slate-700">INTERVIEWER</p>
-          <h2 className="mt-2 text-4xl font-bold">Monitoring Setup</h2>
+          <p className="text-xs font-semibold uppercase tracking-wider text-brand-600">INTERVIEWER</p>
+          <h2 className="mt-1 text-3xl font-extrabold tracking-tight text-navy-900">Monitoring Setup</h2>
           <p className="mt-3 text-slate-500">
             {item ? `For "${item.title}". ` : ""}
             Choose whether eye and face monitoring is required, whether follow-up questions are asked, and what the candidate sees.
@@ -98,7 +84,7 @@ export default function MonitoringSetup() {
                 </button>
                 <button
                   onClick={() => navigate("/dashboard")}
-                  className="px-6 py-3 rounded-2xl font-bold border border-slate-200 hover:bg-slate-100 transition"
+                  className="bg-white text-navy-800 px-6 py-3 rounded-2xl font-bold border border-slate-200 hover:bg-slate-100 transition"
                 >
                   Go to dashboard
                 </button>

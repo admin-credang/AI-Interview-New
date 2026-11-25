@@ -197,7 +197,7 @@ export default function AddCandidateForm({ interviewId, role, t, onAdded, emailO
           type="button"
           onClick={submit}
           disabled={busy}
- className="w-full mt-4 py-4 rounded-2xl bg-slate-800 text-white font-black text-sm tracking-wide transition-all disabled:opacity-50 shadow-xl active:scale-[0.99]"
+ className="w-full mt-4 py-4 rounded-2xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm tracking-wide transition-all disabled:opacity-50 shadow-xl active:scale-[0.99]"
         >
           {busy ? "Registering Candidate..." : "+ Add & Invite Candidate"}
         </button>

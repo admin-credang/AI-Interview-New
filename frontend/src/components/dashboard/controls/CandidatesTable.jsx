@@ -267,7 +267,7 @@ export default function CandidatesTable({
                           <button
                             type="button"
                             onClick={() => review.openCandidate(rv.session_id)}
-                            className="px-3 h-8 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold transition whitespace-nowrap"
+                            className="bg-white px-3 h-8 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold transition whitespace-nowrap"
                           >
                             Review →
                           </button>
@@ -277,7 +277,7 @@ export default function CandidatesTable({
                             type="button"
                             disabled={sending}
                             onClick={() => onResend(inv)}
-                            className="px-3 h-8 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold transition disabled:opacity-50 whitespace-nowrap"
+                            className="bg-white px-3 h-8 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold transition disabled:opacity-50 whitespace-nowrap"
                           >
                             {sending
                               ? "Sending..."
@@ -346,7 +346,7 @@ export default function CandidatesTable({
             onClick={() => setPage(Math.max(1, current - 1))}
             disabled={current === 1}
             aria-label="Previous page"
-            className="px-3 py-2 bg-slate-50 rounded-xl disabled:opacity-30 hover:bg-slate-100 transition"
+            className="px-3 py-2 bg-slate-50 text-navy-800 rounded-xl disabled:opacity-30 hover:bg-slate-100 transition"
           >
             ‹ Prev
           </button>
@@ -356,7 +356,7 @@ export default function CandidatesTable({
                 key={n}
                 type="button"
                 onClick={() => setPage(n)}
-                className={n === current ? "font-black text-slate-700" : "opacity-60 hover:opacity-100"}
+                className={n === current ? "font-bold text-slate-700" : "opacity-60 hover:opacity-100"}
               >
                 {n}
               </button>
@@ -367,7 +367,7 @@ export default function CandidatesTable({
             onClick={() => setPage(Math.min(pages, current + 1))}
             disabled={current === pages}
             aria-label="Next page"
-            className="px-3 py-2 bg-slate-50 rounded-xl disabled:opacity-30 hover:bg-slate-100 transition"
+            className="px-3 py-2 bg-slate-50 text-navy-800 rounded-xl disabled:opacity-30 hover:bg-slate-100 transition"
           >
             Next ›
           </button>

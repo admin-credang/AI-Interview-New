@@ -26,3 +26,23 @@ export const IconShield = () => <svg className="w-5 h-5" fill="none" stroke="cur
 export const IconMail = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>;
 export const IconEye = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>;
 export const IconPhone = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>;
+
+// ---- added for the new SaaS layout ----
+const S = ({ children, className = "w-5 h-5" }) => (
+  <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">{children}</svg>
+);
+export const IconCalendar = (p) => <S {...p}><rect x="3" y="4.5" width="18" height="16" rx="2.5" /><path d="M8 3v3M16 3v3M3 10h18" /></S>;
+export const IconVideo = (p) => <S {...p}><rect x="2.5" y="6" width="13" height="12" rx="2.5" /><path d="M15.5 10.5 21 7.5v9l-5.5-3" /></S>;
+export const IconMic = (p) => <S {...p}><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></S>;
+export const IconFileText = (p) => <S {...p}><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M9 13h6M9 17h4" /></S>;
+export const IconPlus = (p) => <S {...p}><path d="M12 5v14M5 12h14" /></S>;
+export const IconX = (p) => <S {...p}><path d="M6 6l12 12M18 6 6 18" /></S>;
+export const IconChevronRight = (p) => <S {...p}><path d="m9 6 6 6-6 6" /></S>;
+export const IconArrowRight = (p) => <S {...p}><path d="M5 12h14M13 6l6 6-6 6" /></S>;
+export const IconSidebar = (p) => <S {...p}><rect x="3" y="4" width="18" height="16" rx="2.5" /><path d="M9 4v16" /></S>;
+export const IconSparkles = (p) => <S {...p}><path d="M12 3.5 13.6 8 18 9.6 13.6 11.2 12 15.7 10.4 11.2 6 9.6 10.4 8z" /><path d="M18.5 15v4M16.5 17h4M5.5 3.5v3M4 5h3" /></S>;
+export const IconAlertTriangle = (p) => <S {...p}><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /><path d="M12 9v4M12 17h.01" /></S>;
+export const IconRefresh = (p) => <S {...p}><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16" /><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8" /><path d="M21 3v5h-5M3 21v-5h5" /></S>;
+export const IconActivity = (p) => <S {...p}><path d="M3 12h4l3-8 4 16 3-8h4" /></S>;
+export const IconLock = (p) => <S {...p}><rect x="4.5" y="10.5" width="15" height="10" rx="2.5" /><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" /></S>;
+export const IconCheck = (p) => <S {...p}><path d="m5 12.5 4.5 4.5L19 7.5" /></S>;

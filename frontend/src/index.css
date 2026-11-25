@@ -1,4 +1,94 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap");
 @import "tailwindcss";
+
+/* ==========================================================
+   AI INTERVIEW – DESIGN SYSTEM
+   Theme: Purple + Navy + White (Supabase × Amazon cards)
+
+   brand / violet / purple = one purple scale, indigo = navy, so pages
+   that were not rewritten still pick up the new brand colours
+   automatically. No page logic depends on these values.
+   ========================================================== */
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  /* Navy – sidebar, headings, dark surfaces */
+  --color-navy-50: #f1f5fb;
+  --color-navy-100: #dfe8f5;
+  --color-navy-200: #bfd0ea;
+  --color-navy-300: #8faed8;
+  --color-navy-400: #5b82bd;
+  --color-navy-500: #3a619f;
+  --color-navy-600: #284a82;
+  --color-navy-700: #1d3866;
+  --color-navy-800: #142a4f;
+  --color-navy-900: #0d1f3c;
+  --color-navy-950: #081428;
+
+  /* Brand = purple */
+  --color-brand-50: #f6f3ff;
+  --color-brand-100: #ede8ff;
+  --color-brand-200: #ddd3ff;
+  --color-brand-300: #c4b5fd;
+  --color-brand-400: #a78bfa;
+  --color-brand-500: #8b5cf6;
+  --color-brand-600: #7c3aed;
+  --color-brand-700: #6d28d9;
+  --color-brand-800: #5b21b6;
+  --color-brand-900: #4c1d95;
+  --color-brand-950: #2e1065;
+
+  /* violet / purple = brand purple */
+  --color-violet-50: #f6f3ff;
+  --color-violet-100: #ede8ff;
+  --color-violet-200: #ddd3ff;
+  --color-violet-300: #c4b5fd;
+  --color-violet-400: #a78bfa;
+  --color-violet-500: #8b5cf6;
+  --color-violet-600: #7c3aed;
+  --color-violet-700: #6d28d9;
+  --color-violet-800: #5b21b6;
+  --color-violet-900: #4c1d95;
+  --color-violet-950: #2e1065;
+
+  --color-purple-50: #f6f3ff;
+  --color-purple-100: #ede8ff;
+  --color-purple-200: #ddd3ff;
+  --color-purple-300: #c4b5fd;
+  --color-purple-400: #a78bfa;
+  --color-purple-500: #8b5cf6;
+  --color-purple-600: #7c3aed;
+  --color-purple-700: #6d28d9;
+  --color-purple-800: #5b21b6;
+  --color-purple-900: #4c1d95;
+  --color-purple-950: #2e1065;
+
+  /* old indigo -> navy (pairs with purple in gradients) */
+  --color-indigo-50: #f1f5fb;
+  --color-indigo-100: #dfe8f5;
+  --color-indigo-200: #bfd0ea;
+  --color-indigo-300: #8faed8;
+  --color-indigo-400: #5b82bd;
+  --color-indigo-500: #3a619f;
+  --color-indigo-600: #1d3866;
+  --color-indigo-700: #142a4f;
+  --color-indigo-800: #0d1f3c;
+  --color-indigo-900: #081428;
+  --color-indigo-950: #050d1b;
+
+  /* layered "3D" shadows: contact shadow + ambient + top highlight */
+  --shadow-card:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 1px 2px rgba(13, 31, 60, 0.05),
+    0 4px 8px -2px rgba(13, 31, 60, 0.05),
+    0 12px 28px -12px rgba(13, 31, 60, 0.14);
+  --shadow-card-hover:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 2px 4px rgba(13, 31, 60, 0.06),
+    0 12px 24px -8px rgba(13, 31, 60, 0.14),
+    0 30px 60px -20px rgba(124,58,237, 0.25);
+}
 
 * {
   box-sizing: border-box;
@@ -12,31 +102,30 @@ body,
   width: 100%;
 }
 
+html { scroll-behavior: smooth; }
+
 body {
-  font-family:
-    Inter,
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
 }
 
-/* ==========================================================
-   THEME: one single white theme (no dark / bright switch)
-   ========================================================== */
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+}
+
 :root {
   color-scheme: light;
-  --app-bg: #ffffff;
-  --app-text: #0f172a;
+  --app-bg: #f5f7fa;
+  --app-text: #0d1f3c;
 
-  /* every button is violet ... */
+  /* every button is purple ... */
   --btn-bg: #7c3aed;
-  --btn-bg-hover: #4c1d95;
+  --btn-bg-hover: #6d28d9;
   --btn-text: #ffffff;
-  /* ... and turns dark violet when it is clicked */
-  --btn-click-bg: #3b0764;
+  /* ... and turns DARK purple when clicked */
+  --btn-click-bg: #3b0f86;
 }
 
 html,
@@ -46,9 +135,46 @@ body,
   color: var(--app-text);
 }
 
+/* soft 3D "mesh" light behind every page */
+body {
+  background:
+    radial-gradient(1200px 600px at 100% -10%, rgba(167,139,250, 0.10), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(40, 74, 130, 0.08), transparent 60%),
+    var(--app-bg);
+  background-attachment: fixed;
+}
+#root { background: transparent; }
+
+::selection {
+  background: #ede8ff;
+  color: #0d1f3c;
+}
+
+/* thin, quiet scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+@layer base {
+/* Calm purple focus state for every text field / select */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
+select:focus,
+textarea:focus {
+  border-color: #a78bfa;
+  box-shadow: 0 0 0 4px rgba(167,139,250, 0.15);
+  outline: none;
+}
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: #7c3aed;
+}
+
 /* ----------------------------------------------------------
-   BUTTONS  (all <button> are blue)
-   Opt out for list rows / tabs / icon buttons with data-plain
+   BUTTONS  (all <button> are purple, dark purple when clicked)
+   Opt out for list rows / tabs / icon buttons with data-plain.
+   Lives in @layer base so a Tailwind bg-* class on a button wins
+   (e.g. red "Reject", white "Cancel").
    ---------------------------------------------------------- */
 button:not([data-plain]):not([role="switch"]) {
   background: var(--btn-bg);
@@ -63,19 +189,21 @@ button:not([data-plain]):not([role="switch"]):hover:not(:disabled) {
   border-color: var(--btn-bg-hover);
 }
 
-/* dark violet while the button is pressed + for a moment after the click */
-button:not([data-plain]):not([role="switch"]):active:not(:disabled),
-button[data-clicked]:not([data-plain]):not([role="switch"]) {
-  background: var(--btn-click-bg);
-  border-color: transparent;
-  color: #ffffff;
-}
+/* click = darker: see "3D buttons" below (filter brightness) */
 
 button:not([data-plain]):not([role="switch"]):disabled {
   cursor: not-allowed;
 }
 
-/* same look for links that are styled like buttons (add class="btn-blue") */
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid #a78bfa;
+  outline-offset: 2px;
+}
+
+}
+
+/* same look for links styled like buttons (class="btn-blue") */
 .btn-blue {
   display: inline-flex;
   align-items: center;
@@ -88,6 +216,317 @@ button:not([data-plain]):not([role="switch"]):disabled {
 .btn-blue:active,
 .btn-blue[data-clicked] { background: var(--btn-click-bg); }
 
+/* ----------------------------------------------------------
+   REUSABLE UI CLASSES  (use in new pages)
+   ---------------------------------------------------------- */
+@utility ui-card {
+  border-radius: var(--radius-2xl);
+  border: 1px solid rgb(226 232 240 / 0.8);
+  background-color: #ffffff;
+  background-image: linear-gradient(180deg, #ffffff 0%, #fbfdfe 100%);
+  box-shadow: var(--shadow-card);
+}
+@utility ui-card-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  &:hover {
+    transform: translateY(-2px);
+    border-color: var(--color-brand-200);
+    box-shadow: var(--shadow-card-hover);
+  }
+}
+@utility ui-section-title {
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--color-navy-900);
+}
+@utility ui-muted {
+  font-size: 0.875rem;
+  color: var(--color-slate-500);
+}
+@utility ui-input {
+  width: 100%;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-slate-200);
+  background-color: #ffffff;
+  padding: 0.625rem 1rem;
+  font-size: 0.875rem;
+  color: var(--color-navy-900);
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  &::placeholder { color: var(--color-slate-400); }
+  &:focus {
+    border-color: var(--color-brand-400);
+    box-shadow: 0 0 0 4px var(--color-brand-100);
+  }
+}
+@utility ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: var(--radius-xl);
+  padding: 0.625rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+@utility ui-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-slate-200);
+  background-color: #ffffff;
+  padding: 0.625rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-navy-800);
+  transition: background-color 0.15s, border-color 0.15s;
+  &:hover {
+    border-color: var(--color-brand-300);
+    background-color: var(--color-brand-50);
+  }
+}
+@utility ui-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border-radius: 9999px;
+  padding: 0.25rem 0.625rem;
+  font-size: 11px;
+  font-weight: 600;
+}
+@utility ui-link {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-brand-600);
+  &:hover { color: var(--color-brand-700); }
+}
+
+/* ==========================================================
+   3D LAYER
+   ========================================================== */
+
+/* Mouse-tracked tilt: add data-tilt to any card (main.jsx moves it).
+   Children with data-depth="1|2" float above the card surface. */
+[data-tilt] {
+  --rx: 0deg;
+  --ry: 0deg;
+  --gx: 50%;
+  --gy: 0%;
+  transform: perspective(900px) rotateX(var(--rx)) rotateY(var(--ry)) translateZ(0);
+  transform-style: preserve-3d;
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.35s ease, border-color 0.35s ease,
+    opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), translate 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+/* keep absolute / fixed tilt elements where they are */
+[data-tilt]:not(.absolute):not(.fixed) { position: relative; }
+[data-tilt][data-tilting] {
+  transition: transform 0.08s linear, box-shadow 0.35s ease, border-color 0.35s ease, opacity 0.7s ease, translate 0.7s ease;
+  box-shadow: var(--shadow-card-hover);
+}
+[data-tilt]::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(420px circle at var(--gx) var(--gy), rgba(255, 255, 255, 0.55), transparent 45%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  mix-blend-mode: soft-light;
+}
+[data-tilt][data-tilting]::after { opacity: 1; }
+[data-tilt] [data-depth="1"] { transform: translateZ(18px); transition: transform 0.35s ease; }
+[data-tilt] [data-depth="2"] { transform: translateZ(34px); transition: transform 0.35s ease; }
+
+/* glossy 3D icon tile */
+.ui-icon-3d {
+  position: relative;
+  isolation: isolate;
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.8),
+    inset 0 -2px 4px rgba(13, 31, 60, 0.08),
+    0 6px 14px -6px rgba(13, 31, 60, 0.35);
+}
+/* glossy highlight on top of the tile's own gradient */
+.ui-icon-3d::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0) 55%);
+  pointer-events: none;
+}
+
+/* floating 3D spheres used in hero banners */
+@keyframes ui-float {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  50% { transform: translate3d(0, -14px, 0) rotate(6deg); }
+}
+.ui-orb {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 9999px;
+  animation: ui-float 7s ease-in-out infinite;
+  box-shadow: inset -10px -14px 24px rgba(0, 0, 0, 0.25), inset 8px 10px 18px rgba(255, 255, 255, 0.45),
+    0 20px 40px -12px rgba(0, 0, 0, 0.35);
+}
+.ui-orb--teal { background: radial-gradient(circle at 30% 30%, #ddd3ff, #8b5cf6 55%, #5b21b6); }
+.ui-orb--green { background: radial-gradient(circle at 30% 30%, #f5d0fe, #d946ef 55%, #a21caf); }
+.ui-orb--navy { background: radial-gradient(circle at 30% 30%, #8faed8, #284a82 55%, #0d1f3c); }
+.ui-orb--glass {
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.08) 60%);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+.ui-ring {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 9999px;
+  border: 10px solid rgba(196,181,253, 0.4);
+  box-shadow: inset 0 0 20px rgba(255, 255, 255, 0.15), 0 10px 30px -10px rgba(0, 0, 0, 0.4);
+  animation: ui-float 9s ease-in-out infinite;
+}
+
+/* 3D product mockup on the landing page */
+.ui-perspective { perspective: 1600px; }
+.ui-tilted {
+  transform: rotateX(14deg) scale(0.96);
+  transform-origin: 50% 0%;
+  transition: transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ui-perspective:hover .ui-tilted { transform: rotateX(0deg) scale(1); }
+
+/* ---------- 3D buttons ----------
+   Every real button (not data-plain / switches) is a raised key:
+   top highlight + darker bottom edge + soft drop shadow.
+   Hover lifts it, click presses it down and makes it DARK
+   (purple -> dark purple, white -> grey, red -> dark red ...). */
+button:not([data-plain]):not([role="switch"]):not(:disabled) {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 -3px 0 rgba(0, 0, 0, 0.2),
+    0 2px 3px rgba(17, 12, 46, 0.12),
+    0 10px 20px -10px rgba(91, 33, 182, 0.7);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease, background-color 0.15s ease;
+}
+button:not([data-plain]):not([role="switch"]):not(:disabled):hover {
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 -3px 0 rgba(0, 0, 0, 0.2),
+    0 4px 6px rgba(17, 12, 46, 0.12),
+    0 18px 30px -12px rgba(91, 33, 182, 0.75);
+}
+button:not([data-plain]):not([role="switch"]):not(:disabled):active,
+button[data-clicked]:not([data-plain]):not([role="switch"]) {
+  transform: translateY(1px);
+  filter: brightness(0.72) saturate(1.15);
+  box-shadow: inset 0 3px 8px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(17, 12, 46, 0.15);
+}
+/* plain buttons (rows, tabs, icon buttons) still darken a little */
+button[data-plain]:not(:disabled):active {
+  filter: brightness(0.9);
+}
+
+/* secondary / ghost buttons also get depth */
+.ui-btn-ghost {
+  box-shadow: inset 0 -2px 0 rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.06), 0 6px 14px -10px rgba(46, 16, 101, 0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+.ui-btn-ghost:hover { transform: translateY(-1px); }
+.ui-btn-ghost:active { transform: translateY(1px); box-shadow: inset 0 2px 5px rgba(15, 23, 42, 0.15); background-color: #ede8ff; }
+
+/* 3D section icon tile used by PageHeader / Card titles */
+.ui-title-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #fff;
+  border-radius: 0.75rem;
+  background-image: linear-gradient(145deg, #a78bfa, #6d28d9);
+}
+
+/* ---------- neon hero robot ---------- */
+@keyframes rb-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
+@keyframes rb-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.1); } }
+@keyframes rb-voice { 0%, 100% { transform: scaleY(0.4); } 50% { transform: scaleY(1.6); } }
+.rb-float { animation: rb-float 6s ease-in-out infinite; }
+.rb-chip { animation: rb-float 7s ease-in-out infinite; }
+.rb-eyes { transform-box: fill-box; transform-origin: center; animation: rb-blink 5s infinite; }
+.rb-voice { transform-box: fill-box; transform-origin: center; animation: rb-voice 0.9s ease-in-out infinite; }
+.reduce-motion .rb-float, .reduce-motion .rb-chip, .reduce-motion .rb-eyes, .reduce-motion .rb-voice { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .rb-float, .rb-chip, .rb-eyes, .rb-voice { animation: none; }
+}
+
+/* ---------- AI interviewer scene ---------- */
+@keyframes ai-spin { from { transform: rotateX(74deg) rotateZ(0deg); } to { transform: rotateX(74deg) rotateZ(360deg); } }
+@keyframes ai-spin-rev { from { transform: rotateX(70deg) rotateY(8deg) rotateZ(360deg); } to { transform: rotateX(70deg) rotateY(8deg) rotateZ(0deg); } }
+@keyframes ai-twinkle { 0%, 100% { opacity: 0.25; transform: scale(0.7) rotate(0deg); } 50% { opacity: 1; transform: scale(1.1) rotate(45deg); } }
+.ai-ring { transform: rotateX(74deg); animation: ai-spin 18s linear infinite; }
+.ai-ring--2 { animation: ai-spin-rev 26s linear infinite; }
+.ai-twinkle { animation: ai-twinkle 3.2s ease-in-out infinite; }
+.reduce-motion .ai-ring, .reduce-motion .ai-twinkle { animation: none; }
+@media (prefers-reduced-motion: reduce) { .ai-ring, .ai-twinkle { animation: none; } }
+
+/* small phones: no floating balls over the text */
+@media (max-width: 640px) {
+  .ui-orb, .ui-ring { display: none; }
+}
+
+/* ---------- Welcome page motion ---------- */
+@keyframes ui-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.ui-marquee { animation: ui-marquee 40s linear infinite; }
+.ui-marquee:hover { animation-play-state: paused; }
+
+@keyframes ui-gradient-pan { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+.ui-gradient-text { background-size: 200% auto; animation: ui-gradient-pan 6s ease-in-out infinite; }
+
+[data-reveal] {
+  opacity: 0;
+  translate: 0 24px;
+  transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), translate 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+[data-reveal].is-visible { opacity: 1; translate: 0 0; }
+
+/* user turned off animations in Settings */
+.reduce-motion [data-tilt] { transform: none !important; }
+.reduce-motion [data-tilt]::after { display: none; }
+.reduce-motion .ui-orb,
+.reduce-motion .ui-ring,
+.reduce-motion .ui-marquee,
+.reduce-motion .ui-gradient-text { animation: none; }
+.reduce-motion [data-reveal] { opacity: 1; translate: none; transition: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] { opacity: 1; translate: none; }
+  .ui-marquee, .ui-gradient-text { animation: none; }
+  [data-tilt] { transform: none !important; }
+  .ui-orb, .ui-ring { animation: none; }
+}
+
+/* page enter animation for the dashboard content */
+@keyframes ui-fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.ui-fade-up {
+  animation: ui-fade-up 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
 /* Print / Save as PDF for the candidate report */
 @media print {
   body {
@@ -95,7 +534,8 @@ button:not([data-plain]):not([role="switch"]):disabled {
   }
   nav,
   aside,
-  footer {
+  footer,
+  header[data-topbar] {
     display: none !important;
   }
   main * {
@@ -106,3 +546,44 @@ button:not([data-plain]):not([role="switch"]):disabled {
     backdrop-filter: none !important;
   }
 }
+
+/* live android fallback: pulsing eye glow */
+.android-eye{opacity:.55;animation:android-eye 2.6s ease-in-out infinite}
+@keyframes android-eye{0%,100%{opacity:.35}50%{opacity:.8}}
+.reduce-motion .android-eye{animation:none}
+
+/* Google sign-in box (Login / Register) */
+.g3-google{background:linear-gradient(180deg,#f5f0ff,#fff);border:1px solid #ede7fe;box-shadow:inset 0 1px 0 #fff,0 10px 24px -14px rgba(109,40,217,.55)}
+
+/* ---------- dashboard chrome: purple sidebar + lavender top bar ---------- */
+.dash-side{background:radial-gradient(420px 320px at 0% 0%,rgba(217,70,239,.22),transparent 60%),radial-gradient(360px 360px at 100% 100%,rgba(99,102,241,.28),transparent 60%),linear-gradient(180deg,#1e0b4b 0%,#2e1065 40%,#3b0d7a 100%)}
+.dash-side-glow{position:absolute;inset:0;pointer-events:none;background-image:radial-gradient(rgba(255,255,255,.12) 1px,transparent 1px);background-size:18px 18px;mask-image:linear-gradient(180deg,#000,transparent 70%)}
+.dash-top{background:linear-gradient(90deg,rgba(38,13,92,.96),rgba(59,13,122,.96) 50%,rgba(88,28,135,.96));box-shadow:0 1px 0 rgba(255,255,255,.08) inset,0 12px 30px -16px rgba(30,8,70,.7)}
+
+/* ---------- live monitoring ---------- */
+.lm-hero{background:radial-gradient(520px 320px at 85% 0%,rgba(217,70,239,.45),transparent 60%),radial-gradient(480px 340px at 0% 100%,rgba(99,102,241,.45),transparent 60%),linear-gradient(135deg,#3b0d7a,#4c1d95 45%,#701a75);box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 5px 0 #2e1065,0 30px 60px -25px rgba(46,16,101,.8)}
+.lm-grid{background-image:linear-gradient(rgba(255,255,255,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.08) 1px,transparent 1px);background-size:32px 32px;mask-image:radial-gradient(circle at 70% 50%,#000 20%,transparent 70%)}
+.lm-sweep{background:conic-gradient(from 0deg,rgba(255,255,255,.55),rgba(255,255,255,0) 70deg,rgba(255,255,255,0));animation:lm-spin 3.2s linear infinite}
+.lm-blip{animation:lm-blip 2.4s ease-in-out infinite}
+.lm-live-dot{animation:lm-pulse 1.4s ease-in-out infinite}
+.lm-scan{background:linear-gradient(180deg,transparent,rgba(139,92,246,.10) 50%,transparent);transform:translateY(-100%);animation:lm-scan 3.6s ease-in-out infinite}
+.lm-event{animation:lm-in .45s cubic-bezier(.22,1,.36,1) both}
+@keyframes lm-spin{to{transform:rotate(360deg)}}
+@keyframes lm-blip{0%,100%{opacity:.25;transform:scale(.7)}50%{opacity:1;transform:scale(1.15)}}
+@keyframes lm-pulse{0%,100%{box-shadow:0 0 0 0 rgba(244,63,94,.55)}50%{box-shadow:0 0 0 6px rgba(244,63,94,0)}}
+@keyframes lm-scan{0%{transform:translateY(-100%)}60%,100%{transform:translateY(100%)}}
+@keyframes lm-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* ---------- dashboard hero graphics ---------- */
+.hx-wave path{stroke-dasharray:14 10;animation:hx-flow 6s linear infinite}
+.hx-wave path:nth-child(2){animation-duration:9s;animation-direction:reverse}
+.hx-wave path:nth-child(3){animation-duration:12s}
+.hx-spark{animation:hx-twinkle 3s ease-in-out infinite}
+.hx-ring{animation:lm-spin 22s linear infinite}
+.hx-bar{transform-origin:bottom;animation:hx-bar 2.4s ease-in-out infinite}
+@keyframes hx-flow{to{stroke-dashoffset:-240}}
+@keyframes hx-twinkle{0%,100%{opacity:.2;transform:scale(.6)}50%{opacity:1;transform:scale(1)}}
+@keyframes hx-bar{0%,100%{transform:scaleY(.45)}50%{transform:scaleY(1)}}
+.reduce-motion .lm-sweep,.reduce-motion .lm-blip,.reduce-motion .lm-live-dot,.reduce-motion .lm-scan,.reduce-motion .lm-event,.reduce-motion .hx-wave path,.reduce-motion .hx-spark,.reduce-motion .hx-ring,.reduce-motion .hx-bar{animation:none}
+@media (prefers-reduced-motion:reduce){.lm-sweep,.lm-blip,.lm-live-dot,.lm-scan,.lm-event,.hx-wave path,.hx-spark,.hx-ring,.hx-bar{animation:none}}
+.g3-google-btn{box-shadow:0 3px 0 #e9e2fb,0 8px 18px -12px rgba(76,29,149,.45)}.g3-google-btn:active:not(:disabled){transform:translateY(2px);filter:brightness(.92);box-shadow:0 1px 0 #e9e2fb}

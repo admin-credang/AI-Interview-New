@@ -153,8 +153,8 @@ export function createAnswerRecorder() {
         recorder = new window.MediaRecorder(
           stream,
           mimeType
-            ? { mimeType, audioBitsPerSecond: 64000 }
-            : { audioBitsPerSecond: 64000 }
+            ? { mimeType, audioBitsPerSecond: 32000 }
+            : { audioBitsPerSecond: 32000 }
         );
 
         recorder.ondataavailable = (event) => {
@@ -244,7 +244,16 @@ export function createAnswerRecorder() {
 
   const hasRecording = () => isActive() || chunks.length > 0;
 
-  return { start, stop, cancel, isActive, hasRecording };
+  /** copy of the recording so far (recording keeps running) */
+  const snapshot = () => {
+    if (!isActive() || chunks.length < 2) {
+      return null;
+    }
+    const type = mimeType || recorder?.mimeType || "audio/webm";
+    return { blob: new Blob([...chunks], { type }), count: chunks.length };
+  };
+
+  return { start, stop, cancel, isActive, hasRecording, snapshot };
 }
 
 /** Sends one recorded answer to the server; returns the transcript. */

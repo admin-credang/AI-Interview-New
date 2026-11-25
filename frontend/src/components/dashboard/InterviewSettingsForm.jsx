@@ -34,6 +34,9 @@ export default function InterviewSettingsForm({
   // all follow it - they are not separate options.
   const [proctoring, setProctoring] = useState({
     enabled: Boolean(initialProctoring?.enabled),
+    gazeLevel: ["low", "medium", "high"].includes(initialProctoring?.gaze_level)
+      ? initialProctoring.gaze_level
+      : "medium",
   });
 
   // Follow-up questions: the interviewer decides (default = on, 2).
@@ -78,6 +81,7 @@ export default function InterviewSettingsForm({
                 face: proctoring.enabled,
                 eye: proctoring.enabled,
                 phone: proctoring.enabled,
+                gaze_level: proctoring.gazeLevel,
               },
               follow_ups: {
                 enabled: followUps.enabled,
@@ -148,6 +152,33 @@ export default function InterviewSettingsForm({
             />
           </div>
 
+
+          <div
+            className={`flex items-center justify-between gap-4 px-5 py-4 ${
+              proctoring.enabled ? "" : "opacity-40"
+            }`}
+          >
+            <div>
+              <p className="font-semibold text-sm">Eye detection level</p>
+              <p className="text-xs opacity-60">
+                Low = only clear look-aways are counted (fewest false alarms).
+                Medium = balanced. High = also small look-aways. The candidate
+                is asked to look at the screen, not the camera.
+              </p>
+            </div>
+            <select
+              disabled={!proctoring.enabled}
+              value={proctoring.gazeLevel}
+              onChange={(e) =>
+                setProctoring((p) => ({ ...p, gazeLevel: e.target.value }))
+              }
+              className={`px-3 py-2 rounded-xl border ${t.input} text-sm outline-none focus:ring-2 focus:ring-slate-400 disabled:cursor-not-allowed`}
+            >
+              <option value="low" className="bg-white text-slate-900">Low</option>
+              <option value="medium" className="bg-white text-slate-900">Medium</option>
+              <option value="high" className="bg-white text-slate-900">High</option>
+            </select>
+          </div>
         </div>
 
         {proctoring.enabled && (
@@ -297,7 +328,7 @@ export default function InterviewSettingsForm({
       <button
         onClick={save}
         disabled={saving}
- className="px-8 py-3.5 bg-slate-800 text-white rounded-2xl font-bold shadow-lg active:scale-95 transition disabled:opacity-50"
+ className="px-8 py-3.5 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl font-bold shadow-lg active:scale-95 transition disabled:opacity-50"
       >
         {saving ? "Saving..." : saveLabel}
       </button>

@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Live Interview Guard · Automatic Q&A</title>
+<style>
+:root{--ink:#211d3d;--muted:#6b6785;--line:#e8e5f0;--purple:#7042e8;--pink:#e72f88;--navy:#211d3d;--bg:#f5f6fb;--green:#15965b;--amber:#b7791f;--red:#d63b53}
+*{box-sizing:border-box}body{font:15px/1.55 Inter,system-ui,Arial,sans-serif;max-width:1100px;margin:24px auto;padding:0 18px 48px;color:var(--ink);background:var(--bg)}
+header{background:linear-gradient(120deg,#211d3d,#46317c 65%,#713b91);color:#fff;padding:25px 28px;border-radius:18px;margin-bottom:18px;box-shadow:0 9px 24px #25204420}header h1{margin:0;font-size:28px}header p{margin:5px 0 0;color:#e4defb}.eyebrow{text-transform:uppercase;letter-spacing:1.5px;font-size:10px;font-weight:800;color:#dfcfff;margin-bottom:6px}
+.box{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin:14px 0;box-shadow:0 3px 12px #24213d08}.box h2{font-size:17px;color:var(--purple);margin:0 0 12px;padding-left:10px;border-left:4px solid var(--pink)}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}input,select{width:100%;padding:11px 12px;border:1px solid #d7d2e2;border-radius:9px;font:inherit;color:var(--ink);background:#fff}input:focus,select:focus{outline:2px solid #d9cbff;border-color:var(--purple)}
+button{border:0;border-radius:9px;padding:11px 17px;background:var(--purple);color:#fff;font-weight:750;cursor:pointer;margin:4px 6px 4px 0;box-shadow:0 4px 12px #7042e826}button.secondary{background:#211d3d}button.end{background:#d63b53}button:disabled{background:#b9b7c0;cursor:not-allowed;box-shadow:none}
+.steps{margin:8px 0 10px;padding-left:22px}.steps li{padding:3px 0}.notice{font-size:13px;color:#635d7b;background:#f7f4ff;border-left:3px solid var(--purple);padding:11px 13px;border-radius:8px;margin-top:12px}.warning{background:#fff8eb;border-left-color:#d97706;color:#79520d}
+#wrap{display:none}#wrap canvas{width:100%;max-height:540px;object-fit:contain;border-radius:10px;background:#100e1b;cursor:crosshair}.muted{color:var(--muted);font-size:13px}.status-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.status-card{border:1px solid var(--line);background:#fbfaff;border-radius:10px;padding:11px}.status-card b{display:block;margin-bottom:3px}.pill{display:inline-block;padding:3px 9px;border-radius:99px;background:#f0eaff;color:#643ac8;margin:2px;font-size:12px;font-weight:700}.pill.good{background:#e8f7ee;color:#137847}.pill.bad{background:#fff0f1;color:#b4233b}
+.live-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.live-panel{border:1px solid var(--line);border-radius:11px;overflow:hidden;background:white;min-height:200px}.live-head{padding:11px 13px;background:#f7f5ff;border-bottom:1px solid var(--line);font-weight:800}.live-body{padding:11px 13px;max-height:300px;overflow:auto}.transcript-line{padding:8px 9px;margin:7px 0;border-radius:8px;background:#fbfaff;border:1px solid #eeeaf7;font-size:13px}.transcript-line .who.iv{color:#0e7490}.transcript-line .who.cd{color:#9d2a6b}.transcript-line .who{display:block;font-weight:800;color:var(--purple);font-size:11px;text-transform:uppercase;letter-spacing:.4px}.qa-card{padding:11px 12px;margin:8px 0;background:#fbfaff;border:1px solid #e9e3f7;border-radius:10px}.qa-card .qhead{font-size:11px;font-weight:800;color:#6d3beA;text-transform:uppercase;letter-spacing:.4px}.qa-card .answer{margin-top:8px;padding-top:8px;border-top:1px dashed #dcd4ee}.empty{padding:16px;color:var(--muted);text-align:center;border:1px dashed #d8d1e6;border-radius:9px;background:#fcfbff}
+#log{max-height:190px;overflow:auto;font-size:13px}footer{text-align:center;color:var(--muted);font-size:11px;padding:18px}@media(max-width:760px){.grid,.grid.two,.status-row,.live-grid{grid-template-columns:1fr}header{padding:20px}header h1{font-size:23px}.box{padding:14px}}
+</style>
+<link rel="stylesheet" href="theme.css?v=53">
+</head>
+<body>
+<header><div class="eyebrow">Interview analytics · no extension installation</div><h1><span class="pill" style="font-size:12px;margin-right:8px">Build v47</span><span id="sttStatus" class="pill" style="font-size:12px;margin-right:8px">Speech model: starting…</span>Live Interview Guard</h1><p>Automatic interviewer question detection · candidate answer capture · question-wise interview report</p></header>
+
+<section class="box">
+  <h2>How automatic Q&A works</h2>
+  <ol class="steps">
+    <li>Open this page from the AI Interview dashboard (Live Interview Guard), check the candidate details and select the speech language.</li>
+    <li>Click <b>Share meeting tab + audio</b>. Select the Meet / Zoom / Teams browser tab and enable <b>Share tab audio</b>.</li>
+    <li>The candidate's face is found automatically - nothing to draw.</li>
+    <li>Click <b>Start automatic analysis</b>. The page listens to your microphone and the meeting-tab audio, <b>detects who is the interviewer and who is the candidate</b> from who asks the questions, and starts a new question by itself whenever the interviewer asks the next one.</li>
+    <li>When the interview ends, click <b>End &amp; generate report</b>. The <b>PDF report</b> downloads automatically. No Next Question button is needed.</li>
+  </ol>
+  <div class="notice"><b>New in v31.1:</b> only <b>2. Start automatic analysis</b> and <b>End &amp; generate report</b> are needed. The report now also checks (a) <b>whether each answer is factually correct</b> (offline knowledge bank, or AI key for every question), (b) <b>another voice</b> on the audio, (c) <b>keyboard typing sounds</b> while the question / answer runs (Googling / chat), (d) <b>repeated looks to the same side</b> (phone beside the screen), (e) better <b>reading-pattern</b> detection. Looking down while thinking is no longer a flag.</div>
+  <div class="notice"><b>Automatic speaker detection:</b> the page learns from the first few sentences which audio source asks the questions (interviewer) and which one answers (candidate); if everything arrives on the meeting tab it separates the voices by wording. You can override it above. Use headphones to reduce microphone echo. Chrome must provide a tab-audio track; if not, the page will tell you that candidate audio is unavailable.</div>
+  <div class="notice warning"><b>Consent &amp; privacy:</b> tell the candidate that the interview audio is being transcribed and get their consent. Chrome's Web Speech recognition may process audio through its speech service; this is not offline transcription. The transcript and report are generated in this browser and are not sent to your own server by this page.</div>
+</section>
+
+<section class="box">
+  <h2>Candidate details</h2>
+  <div class="grid">
+    <input id="cname" placeholder="Candidate name">
+    <input id="cmail" type="email" placeholder="Candidate email (optional)">
+    <input id="crole" placeholder="Role (e.g. Data Analyst)">
+  </div>
+  <div class="grid two" style="margin-top:10px">
+    <label><span class="muted">Candidate level (answers are marked against this level)</span><select id="clevel"><option value="junior">Junior (0-2 years)</option><option value="intermediate" selected>Intermediate (2-5 years)</option><option value="senior">Senior (5+ years)</option></select></label>
+    <style>
+.idsw{display:flex;align-items:flex-start;gap:12px;cursor:pointer;margin:0}
+.idsw input{position:absolute;opacity:0;width:0;height:0}
+.idsw .track{flex:none;position:relative;width:46px;height:26px;border-radius:13px;background:#9ca3af;transition:background .15s;margin-top:2px}
+.idsw .track::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .15s;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.idsw input:checked + .track{background:#16a34a}
+.idsw input:checked + .track::after{transform:translateX(20px)}
+.idsw input:focus-visible + .track{outline:2px solid #6d28d9;outline-offset:2px}
+</style>
+    <label class="notice idsw"><input id="idAuto" type="checkbox" checked><span class="track"></span><span><b>ID proof check: <span id="idAutoTxt">ON</span></b><br><span class="muted">ON = candidate snapshot + spoken ID instruction + ID picture in the report. OFF = nothing is captured and the report has no identity section. You can switch it at any time, even during the interview (OFF stops it at once; ON starts it now).</span></span></label>
+  </div>
+  <div class="grid two" style="margin-top:10px">
+    <label><span class="muted">Speech recognition language</span><select id="lang"><option value="en-IN" selected>English (India)</option></select></label>
+    <label><span class="muted">Who is who (interviewer / candidate)</span><select id="roleMode"><option value="headset" selected>I use headphones (microphone hears only me)</option><option value="auto">Laptop speakers (auto-detect echo)</option></select></label>
+  </div>
+  <p class="muted" style="margin:6px 0 0">Tip: choose the language the CANDIDATE really speaks. Tamil answer = Tamil (India); English answer = English (India). Wrong language gives garbage words (e.g. "beta science"). Use headphones, speak in full sentences, and keep the candidate near the mic.</p>
+  <div class="grid two" style="margin-top:10px">
+    <label><span class="muted">Optional AI key (not needed if the site already has ANTHROPIC_API_KEY set in Netlify)</span><input id="apiKey" type="password" placeholder="sk-ant-… (leave empty for offline scoring)" autocomplete="off"></label>
+    <label><span class="muted">AI model</span><input id="apiModel" value="claude-haiku-5-5"></label>
+  </div>
+  <p class="muted" style="margin:6px 0 0">Without a key, scores are an offline estimate. With a key, the questions and answers (text only) are sent to the AI provider once, when you click End. The key stays in this page and is never saved.</p>
+  <label class="notice" style="display:block;cursor:pointer"><input id="consentConfirmed" type="checkbox" style="width:auto;margin-right:8px"> I confirm that the candidate has been informed about camera/audio analysis, transcription, optional screen sharing, the snapshot of the candidate and of their ID document, and report generation, and has agreed to proceed.</label>
+</section>
+
+<div style="margin:12px 0">
+  <button id="share">1. Share meeting WINDOW / TAB (candidate video)</button> <button id="shareAudio">1b. Share SYSTEM AUDIO (candidate voice)</button> <span class="muted">(you can click again any time to re-share)</span>
+</div>
+<section hidden style="display:none" class="box" id="advancedChecks">
+  <h2>Advanced optional monitoring</h2>
+  <p class="muted">These checks are optional. Start the interview first. They provide review signals, not proof of misconduct.</p>
+  <div>
+    <button id="pickScreen" type="button" disabled>1c. Monitor candidate-shared screen region</button>
+    <button id="clearScreen" class="secondary" type="button" style="display:none">Stop screen monitoring</button>
+    <span id="screenStatus" class="pill">Off</span>
+  </div>
+  <p class="muted">Screen-region monitor: candidate must share their ENTIRE desktop in the meeting. Then draw a box around the shared desktop area in the preview. Large visual changes in that box are flagged; normal page updates can also trigger a flag. If they share only the meeting tab, their other tabs and monitor are not visible.</p>
+  <div>
+    <button id="gazecal2" type="button" disabled>3. Candidate-side gaze calibration (recommended)</button>
+    <span id="gazeStatus" class="pill">Not done</span>
+    <button id="gazecal" class="secondary" type="button" disabled>3b. Shared-window calibration (fallback)</button>
+  </div>
+  <div class="row" style="margin:8px 0"><label>What did the candidate share in the meeting? <select id="shareKind"><option value="unknown">Not specified</option><option value="none">Nothing (camera only)</option><option value="browser">Meeting tab only</option><option value="window">One window</option><option value="monitor">Entire screen / monitor</option></select></label> <span class="muted">Used only to explain what the second-monitor check can and cannot see.</span></div>
+  <div id="insightLive" class="muted">Pattern watch (phone beside laptop): waiting…</div>
+  <p class="muted">Recommended calibration: send Candidate_Calibration.html to the candidate. They open it on their own device and follow the numbers; you do not need to share a calibration window.</p>
+  <div>
+    <button id="chalbtn" type="button" disabled>4. Random-number attention check</button>
+    <span id="chalStatus" class="pill">Not run</span>
+  </div>
+  <p class="muted">Send Candidate_Challenge.html and the 6-digit code to the candidate. The challenge checks whether gaze follows random positions and whether the displayed numbers are spoken. It is not a cheating detector.</p>
+  <div id="chalInfo" class="notice" style="display:none"></div>
+</section>
+<div id="wrap" class="box"><b>Meeting preview</b><p class="muted">The candidate's face is found automatically after you press Start (green box).</p><div style="margin:6px 0;display:none" aria-hidden="true"><button class="secondary" id="fullframe" type="button">Use whole area</button><button class="secondary" id="recal" type="button">Recalibrate (after candidate joins / box change)</button></div><canvas id="prev"></canvas></div>
+
+<section class="box">
+  <h2>Automatic interview capture</h2>
+  <div class="status-row">
+    <div class="status-card"><b>Meeting tab audio</b><span id="tabAudioStatus" class="pill">Not connected</span></div>
+    <div class="status-card"><b>Interviewer microphone</b><span id="micStatus" class="pill">Not connected</span></div>
+    <div class="status-card"><b>AI proctor models</b><span id="modelStatus" class="pill">Loading</span></div>
+  </div>
+  <div class="status-row" style="margin-top:9px">
+    <div class="status-card"><b>Voice check (lip-sync)</b><span id="voiceStatus" class="pill">Waiting for candidate audio</span></div>
+    <div class="status-card"><b>Second voice / typing check</b><span id="vgStatus" class="pill">Waiting</span></div>
+    <div class="status-card"><b>Answer correctness</b><span id="kbStatus" class="pill">Checked at the end</span></div>
+  </div>
+  <div class="status-row" style="margin-top:9px;grid-template-columns:1fr">
+    <div class="status-card"><b>Identity check (automatic)</b><span id="idPill" class="pill">Waiting for Start</span><div id="idPreview" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px"></div></div>
+  </div>
+  <div id="roleInfo" class="muted" style="margin-top:8px"></div>
+  <p id="status" class="notice" aria-live="polite">Share the meeting tab to begin. Automatic question and answer capture starts when you click Start.</p>
+  <div id="hearing" class="muted" style="min-height:20px"></div>
+  <div id="micLevel" class="muted" style="min-height:20px;font-family:monospace"></div>
+  <div id="diag" class="muted" style="min-height:18px;font-family:monospace;font-size:12px"></div>
+  <p id="videoStatus" class="muted">Webcam models are loading…</p>
+  <button id="start" disabled>2. Start automatic analysis</button>
+  <button id="end" class="end" disabled>End &amp; generate report</button>
+  <div class="grid" style="grid-template-columns:140px 1fr 120px;margin-top:8px"><select id="mRole"><option>Interviewer</option><option>Candidate</option></select><input id="mText" placeholder="Missed or wrongly heard? Type the line here"><button id="mAdd" type="button" style="margin:0">Add line</button></div>
+  <div id="qWarn" class="notice" style="display:none;margin-top:8px;border-color:#d63b53;color:#d63b53"></div>
+</section>
+
+<section class="box">
+  <h2>Live question analysis</h2>
+  <div class="live-grid">
+    <div class="live-panel"><div class="live-head">Detected questions &amp; answers</div><div id="qaLive" class="live-body"><div class="empty">Questions will appear automatically after the interviewer speaks.</div></div></div>
+    <div class="live-panel"><div class="live-head">Live transcript</div><div id="transcript" class="live-body"><div class="empty">Interviewer and candidate speech will appear here with speaker labels.</div></div></div>
+  </div>
+</section>
+
+<section class="box"><h2>Proctor monitoring flags</h2><div id="fusion" class="notice" style="margin:0 0 10px">Behaviour fusion: waiting for Start</div><div id="counts"></div><div id="log"></div></section>
+<p class="muted">This page does not need the Chrome extension. It does need Chrome / Edge with audio-track speech recognition support and permission to share the meeting tab's audio. If tab audio is unavailable, candidate answers cannot be transcribed automatically.</p>
+<footer>Live Interview Guard · For interviewer review only · Webcam indicators are not proof of misconduct.</footer>
+<iframe id="det" src="detector.html" style="display:none"></iframe>
+<script src="vendor/jspdf.umd.min.js?v=29"></script>
+<script src="vendor/jspdf.plugin.autotable.min.js?v=29"></script>
+<script src="knowledge.js?v=31"></script>
+<script src="speechFix.js?v=431"></script>
+<script src="analysis.js?v=52"></script>
+<script src="challengeCore.js?v=30"></script>
+<script src="voiceGuard.js?v=31"></script>
+<script src="whisper.js?v=52"></script>
+<script src="behaviourFusion.js?v=31"></script>
+<script src="report.js?v=47"></script>
+<script src="reviewPolicy.js?v=311"></script>
+<script src="candidateLevel.js?v=47"></script>
+<script src="idCheck.js?v=47"></script>
+<script src="insights.js?v=32"></script>
+<script src="aiAnswer.js?v=50"></script>
+<script src="riskModel.js?v=50"></script>
+<script src="app.js?v=52"></script>
+<script src="platform.js?v=1"></script>
+</body></html>

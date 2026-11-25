@@ -9,6 +9,7 @@ recording, word for word.
 import logging
 import os
 import tempfile
+import time
 from pathlib import Path
 
 from app.config import settings
@@ -22,7 +23,9 @@ logger = logging.getLogger(__name__)
 MAX_AUDIO_BYTES = 24 * 1024 * 1024  # OpenAI limit is 25 MB
 MIN_AUDIO_BYTES = 1200
 
-PRIMARY_MODEL = os.getenv("OPENAI_TRANSCRIBE_MODEL", "gpt-4o-transcribe")
+# gpt-4o-mini-transcribe is the fastest accurate model; set
+# OPENAI_TRANSCRIBE_MODEL=gpt-4o-transcribe for the larger one.
+PRIMARY_MODEL = os.getenv("OPENAI_TRANSCRIBE_MODEL", "gpt-4o-mini-transcribe")
 FALLBACK_MODEL = "whisper-1"
 
 # Shown to the model as "what the speaker said before". It biases the
@@ -101,12 +104,13 @@ def _best_transcript(path: str) -> str:
     """Try several models/settings; never accept a looping transcript."""
     attempts = [
         (PRIMARY_MODEL, {"temperature": 0.0, "use_prompt": True}),
-        (PRIMARY_MODEL, {"temperature": 0.0, "use_prompt": False}),
+        ("gpt-4o-transcribe", {"temperature": 0.0, "use_prompt": False}),
         (FALLBACK_MODEL, {"temperature": 0.2, "use_prompt": False}),
         (FALLBACK_MODEL, {"temperature": 0.4, "use_prompt": True}),
     ]
     candidates: list[str] = []
     any_succeeded = False
+    empty_results = 0
 
     for model, opts in attempts:
         try:
@@ -117,6 +121,9 @@ def _best_transcript(path: str) -> str:
 
         any_succeeded = True
         if not text:
+            empty_results += 1
+            if empty_results >= 2:
+                break  # two models heard nothing: it is silence
             continue
         if is_degenerate_transcript(text):
             logger.warning(
@@ -145,11 +152,19 @@ def transcribe_answer_audio(
     if len(audio_bytes) < MIN_AUDIO_BYTES:
         return ""
 
+    started = time.perf_counter()
+
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "answer" + audio_suffix(content_type, filename))
         with open(path, "wb") as handle:
             handle.write(audio_bytes)
 
         text = _best_transcript(path)
+
+    logger.info(
+        "Transcribed %d KB in %.1fs",
+        len(audio_bytes) // 1024,
+        time.perf_counter() - started,
+    )
 
     return normalize_transcript(text)

@@ -36,6 +36,18 @@ router = APIRouter(
 )
 
 
+def tts_credentials_configured() -> bool:
+    """True when a Google service account key is present in the env."""
+    return bool(
+        (os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON_BASE64") or "").strip()
+        or (os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON") or "").strip()
+    )
+
+
+# print the "not configured" notice only once, not on every question
+_TTS_NOTICE_SHOWN = False
+
+
 class SpeechRequest(BaseModel):
     text: str = Field(min_length=1, max_length=3000)
 
@@ -168,6 +180,29 @@ def generate_interview_speech(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Speech text cannot be empty",
+        )
+
+    # No Google key in .env -> no error, no traceback.
+    # 204 tells the frontend to use the browser voice instead.
+    if not tts_credentials_configured():
+        global _TTS_NOTICE_SHOWN
+        if not _TTS_NOTICE_SHOWN:
+            _TTS_NOTICE_SHOWN = True
+            logger.warning(
+                "Google Text-to-Speech is not configured "
+                "(GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 missing) - "
+                "candidates hear the browser voice."
+            )
+            print(
+                "TTS: Google Text-to-Speech not configured - "
+                "using the browser voice."
+            )
+        return Response(
+            status_code=status.HTTP_204_NO_CONTENT,
+            headers={
+                "Cache-Control": "no-store",
+                "X-TTS-Disabled": "1",
+            },
         )
 
     try:

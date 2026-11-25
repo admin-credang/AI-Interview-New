@@ -244,7 +244,7 @@ export default function CompanyIntroEditor({
           type="button"
           onClick={() => persist(true)}
           disabled={busy || !text.trim() || (saved.approved && !dirty)}
- className="px-6 py-3 bg-slate-800 text-white rounded-2xl text-sm font-bold shadow-lg active:scale-95 transition disabled:opacity-50"
+ className="px-6 py-3 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl text-sm font-bold shadow-lg active:scale-95 transition disabled:opacity-50"
         >
           {saving ? "Saving..." : "Approve & save"}
         </button>
@@ -253,7 +253,7 @@ export default function CompanyIntroEditor({
           type="button"
           onClick={() => persist(false)}
           disabled={busy || !text.trim()}
-          className="px-5 py-3 rounded-2xl border border-slate-200 text-sm font-semibold hover:bg-slate-50 transition disabled:opacity-50"
+          className="bg-white text-navy-800 px-5 py-3 rounded-2xl border border-slate-200 text-sm font-semibold hover:bg-slate-50 transition disabled:opacity-50"
         >
           Save as draft
         </button>
@@ -263,7 +263,7 @@ export default function CompanyIntroEditor({
             type="button"
             onClick={() => persist(false, "")}
             disabled={busy}
-            className="px-5 py-3 rounded-2xl border border-rose-500/30 text-rose-700 text-sm font-semibold hover:bg-rose-500/10 transition disabled:opacity-50"
+            className="bg-white px-5 py-3 rounded-2xl border border-rose-500/30 text-rose-700 text-sm font-semibold hover:bg-rose-500/10 transition disabled:opacity-50"
           >
             Remove
           </button>

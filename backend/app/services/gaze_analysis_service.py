@@ -18,32 +18,32 @@ report more sensitive, LARGER to make it more relaxed.
 # THRESHOLDS
 # ---------------------------------------------------------
 
-MIN_ANSWER_MS = 3000          # shorter answers are not assessed
+MIN_ANSWER_MS = 5000          # shorter answers are not assessed
 
 # a question counts as "reading" when this many slow sweeps
 # followed by a quick return were seen while answering
-READING_SWEEPS_FOR_FLAG = 2
+READING_SWEEPS_FOR_FLAG = 4
 
 # ---- per-question AI-answer risk points (add up to 100+) ----
-POINTS_READING_FLAG = 40
-POINTS_READING_PARTIAL = 25   # x reading score (0..1) when not flagged
+POINTS_READING_FLAG = 30
+POINTS_READING_PARTIAL = 10   # x reading score (0..1) when not flagged
 POINTS_OFFSCREEN_MAX = 40     # share of the answer spent off screen
 POINTS_GLANCES_MAX = 25       # glances per minute
 POINTS_DIRECTION_MAX = 10     # time looking sideways / down
 POINTS_PHONE_MAX = 50         # phone seen by the camera
 
-OFFSCREEN_SHARE_FOR_MAX = 0.40   # 40% off screen = full points
-GLANCES_PER_MIN_FOR_MAX = 4      # 4 glances a minute = full points
-DIRECTION_SHARE_FOR_MAX = 0.30
+OFFSCREEN_SHARE_FOR_MAX = 0.60   # 60% off screen = full points
+GLANCES_PER_MIN_FOR_MAX = 15     # 15 glances a minute = full points
+DIRECTION_SHARE_FOR_MAX = 0.50
 PHONE_MS_FOR_MAX = 2000          # phone visible 2 s = full points
 
 # risk levels
-RISK_HIGH_AT = 50
-RISK_MEDIUM_AT = 25
+RISK_HIGH_AT = 60
+RISK_MEDIUM_AT = 35
 
 # second-screen risk (overall, 0..100)
-SECOND_SCREEN_MEDIUM_AT = 30
-SECOND_SCREEN_HIGH_AT = 60
+SECOND_SCREEN_MEDIUM_AT = 40
+SECOND_SCREEN_HIGH_AT = 70
 
 
 def _level(points: float) -> str:
@@ -172,7 +172,7 @@ def analyse_question(raw: dict) -> dict:
             f"Looked off-screen {glances} time(s){extra}"
         )
 
-    if off_ratio >= 0.25:
+    if off_ratio >= 0.35:
         notes.append(
             f"Looked away from the screen for {round(off_ratio * 100)}% "
             f"of the answer, possible use of another device or notes"

@@ -23,25 +23,29 @@
  */
 
 export const GAZE_CONFIG = {
-  // ---- learning the candidate's normal ----
-  calibrationFrames: 30, // ~3 s of looking at the screen at 10 fps
+  // ---- learning where THIS candidate looks when reading the SCREEN ----
+  // (the candidate is told to look at the screen, NOT at the camera)
+  calibrationFrames: 40, // ~4 s at 10 fps
 
-  // ---- how far from normal counts as "off screen" ----
-  // (ratios from face landmarks; make the number SMALLER = more sensitive)
-  yawDev: 0.05, // head turned left / right
-  pitchDownDev: 0.035, // head tilted down (phone on the desk)
-  pitchUpDev: 0.08, // head tilted up (thinking, so less strict)
-  eyeDownDev: 0.1, // eyeballs pointing down (0..1 blendshape)
-  irisDev: 0.12, // eyeballs pointing far left / right
+  // ---- how far from the screen range counts as "off screen" ----
+  // MEDIUM values. Bigger number = more relaxed. Level multiplies them.
+  yawDev: 0.09, // head turned left / right
+  pitchDownDev: 0.06, // head tilted down (phone on the desk)
+  pitchUpDev: 0.14, // head tilted up (thinking, so very relaxed)
+  eyeDownDev: 0.22, // eyeballs pointing down (0..1 blendshape)
+  irisDev: 0.2, // eyeballs pointing far left / right
 
-  smooth: 0.5, // 0..1, higher = follows the face faster, more jitter
+  smooth: 0.35, // 0..1, higher = follows the face faster, more jitter
+  adapt: 0.003, // how fast the "normal" follows slow posture changes
 
   // ---- glances and warnings ----
-  glanceMinMs: 250, // a look away this long = one glance
-  warnAfterMs: 1000, // candidate sees "look at the screen" after this
+  offConfirmMs: 700, // must stay away this long before it counts at all
+  noFaceConfirmMs: 1500, // face missing this long = not visible
+  glanceMinMs: 600, // a look away this long = one glance
+  warnAfterMs: 2500, // candidate sees "look at the screen" after this
 
   // ---- reading sweep: slow drift one way, then a quick snap back ----
-  sweepMinRise: 0.08, // iris travel (0..1 of eye width)
+  sweepMinRise: 0.1, // iris travel (0..1 of eye width)
   sweepMinMs: 350, // slow part, at least
   sweepMaxMs: 3000, // slow part, at most
   sweepReturnMs: 450, // the snap back must be this fast
@@ -49,6 +53,27 @@ export const GAZE_CONFIG = {
 
   maxFrameGapMs: 500, // ignore gaps bigger than this (tab frozen etc.)
 };
+
+/*
+ * DETECTION LEVEL (the interviewer chooses it per interview)
+ *   low    : only very clear look-aways are counted
+ *   medium : default, balanced
+ *   high   : stricter, catches smaller look-aways (more false alarms)
+ * "tolerance" multiplies the limits above, "confirm" multiplies the
+ * time a look-away must last before it counts.
+ */
+export const GAZE_LEVELS = {
+  low: { tolerance: 1.6, confirm: 1.5 },
+  medium: { tolerance: 1.0, confirm: 1.0 },
+  high: { tolerance: 0.7, confirm: 0.7 },
+};
+
+export const DEFAULT_GAZE_LEVEL = "medium";
+
+export function normalizeGazeLevel(level) {
+  const key = String(level || "").toLowerCase();
+  return GAZE_LEVELS[key] ? key : DEFAULT_GAZE_LEVEL;
+}
 
 /*
  * Head angle from face landmarks (no extra model needed).
@@ -192,21 +217,51 @@ function emptyQuestion(question) {
   };
 }
 
-export function createGazeTracker() {
-  const C = GAZE_CONFIG;
+const percentile = (list, p) => {
+  const sorted = [...list].sort((a, b) => a - b);
+  if (!sorted.length) return 0;
+  const idx = Math.min(sorted.length - 1, Math.max(0, Math.round(p * (sorted.length - 1))));
+  return sorted[idx];
+};
+
+export function createGazeTracker(options = {}) {
+  let level = normalizeGazeLevel(options.level);
+  let C = { ...GAZE_CONFIG };
+
+  const applyLevel = () => {
+    const L = GAZE_LEVELS[level];
+    C = {
+      ...GAZE_CONFIG,
+      yawDev: GAZE_CONFIG.yawDev * L.tolerance,
+      pitchDownDev: GAZE_CONFIG.pitchDownDev * L.tolerance,
+      pitchUpDev: GAZE_CONFIG.pitchUpDev * L.tolerance,
+      eyeDownDev: GAZE_CONFIG.eyeDownDev * L.tolerance,
+      irisDev: GAZE_CONFIG.irisDev * L.tolerance,
+      offConfirmMs: GAZE_CONFIG.offConfirmMs * L.confirm,
+      noFaceConfirmMs: GAZE_CONFIG.noFaceConfirmMs * L.confirm,
+      glanceMinMs: GAZE_CONFIG.glanceMinMs * L.confirm,
+      warnAfterMs: GAZE_CONFIG.warnAfterMs * L.confirm,
+    };
+  };
+  applyLevel();
 
   const questions = new Map();
   let current = null;
 
-  // ---- the candidate's own "normal" ----
+  // ---- where the candidate looks when reading the screen ----
   const calib = { yaw: [], pitch: [], eyeDown: [], iris: [] };
-  let base = null;
+  let base = null; // centre of the screen range
+  let spread = { yaw: 0, pitch: 0, eyeDown: 0, iris: 0 }; // natural movement
 
   // smoothed live values
   const live = { yaw: null, pitch: null, eyeDown: null, iris: null };
 
-  // last decision, handy for the on-screen debug box
+  // how long the current "away" has lasted (raw, before confirmation)
+  let rawOffSince = null;
+  let rawNoFaceSince = null;
+
   const debug = {
+    level,
     calibrated: false,
     calibrationProgress: 0,
     off: false,
@@ -217,6 +272,7 @@ export function createGazeTracker() {
     irisDev: 0,
     phone: false,
     answering: false,
+    limits: {},
   };
 
   const get = (question) => {
@@ -239,29 +295,21 @@ export function createGazeTracker() {
     return live[key];
   };
 
-  /** learn the candidate's normal from the first frames */
+  /** learn the candidate's SCREEN range from the first frames */
   const calibrate = (frame) => {
     if (base || frame.faces !== 1 || frame.closed) {
       return;
     }
 
-    if (
-      typeof frame.yaw !== "number" ||
-      typeof frame.pitch !== "number"
-    ) {
+    if (typeof frame.yaw !== "number" || typeof frame.pitch !== "number") {
       return;
     }
 
     calib.yaw.push(frame.yaw);
     calib.pitch.push(frame.pitch);
 
-    if (typeof frame.eyeDown === "number") {
-      calib.eyeDown.push(frame.eyeDown);
-    }
-
-    if (typeof frame.irisX === "number") {
-      calib.iris.push(frame.irisX);
-    }
+    if (typeof frame.eyeDown === "number") calib.eyeDown.push(frame.eyeDown);
+    if (typeof frame.irisX === "number") calib.iris.push(frame.irisX);
 
     debug.calibrationProgress = Math.min(
       1,
@@ -269,6 +317,9 @@ export function createGazeTracker() {
     );
 
     if (calib.yaw.length >= C.calibrationFrames) {
+      const half = (list) =>
+        list.length ? (percentile(list, 0.9) - percentile(list, 0.1)) / 2 : 0;
+
       base = {
         yaw: median(calib.yaw),
         pitch: median(calib.pitch),
@@ -276,69 +327,131 @@ export function createGazeTracker() {
         iris: calib.iris.length ? median(calib.iris) : null,
       };
 
+      // people who naturally move more get a wider "on screen" range
+      spread = {
+        yaw: half(calib.yaw),
+        pitch: half(calib.pitch),
+        eyeDown: half(calib.eyeDown),
+        iris: half(calib.iris),
+      };
+
       debug.calibrated = true;
     }
   };
 
-  /** is this frame off screen, and why */
-  const classify = (frame) => {
+  /** raw (unconfirmed) decision: is this frame away from the screen */
+  const classifyRaw = (frame) => {
     if (frame.faces !== 1) {
-      return { off: true, side: false, down: false, reason: "face not visible" };
+      return { noFace: true, off: false, side: false, down: false, reason: "face not visible" };
     }
 
     if (frame.closed) {
-      // a blink still counts as looking at the screen
-      return { off: false, side: false, down: false, reason: "eyes closed" };
+      // a blink / thinking with closed eyes is NOT looking away
+      return { noFace: false, off: false, side: false, down: false, reason: "eyes closed" };
     }
 
-    let side = Boolean(frame.away);
-    let down = Boolean(frame.down);
-    let reason = side ? "eyes far to the side" : down ? "eyes down" : "";
+    // Until the screen range is learned nothing is flagged.
+    if (!base) {
+      return { noFace: false, off: false, side: false, down: false, reason: "learning" };
+    }
 
-    if (base) {
-      const yaw = smooth("yaw", frame.yaw);
-      const pitch = smooth("pitch", frame.pitch);
-      const eyeDown = smooth("eyeDown", frame.eyeDown);
-      const iris = smooth("iris", frame.irisX);
+    let side = false;
+    let down = false;
+    let reason = "";
 
-      debug.yawDev = yaw === null ? 0 : yaw - base.yaw;
-      debug.pitchDev = pitch === null ? 0 : pitch - base.pitch;
-      debug.eyeDownDev =
-        eyeDown === null || base.eyeDown === null
-          ? 0
-          : eyeDown - base.eyeDown;
-      debug.irisDev =
-        iris === null || base.iris === null ? 0 : iris - base.iris;
+    const yaw = smooth("yaw", frame.yaw);
+    const pitch = smooth("pitch", frame.pitch);
+    const eyeDown = smooth("eyeDown", frame.eyeDown);
+    const iris = smooth("iris", frame.irisX);
 
-      if (Math.abs(debug.yawDev) > C.yawDev) {
-        side = true;
-        reason = "head turned";
+    debug.yawDev = yaw === null ? 0 : yaw - base.yaw;
+    debug.pitchDev = pitch === null ? 0 : pitch - base.pitch;
+    debug.eyeDownDev =
+      eyeDown === null || base.eyeDown === null ? 0 : eyeDown - base.eyeDown;
+    debug.irisDev = iris === null || base.iris === null ? 0 : iris - base.iris;
+
+    const lim = {
+      yaw: C.yawDev + spread.yaw,
+      pitchDown: C.pitchDownDev + spread.pitch,
+      pitchUp: C.pitchUpDev + spread.pitch,
+      eyeDown: C.eyeDownDev + spread.eyeDown,
+      iris: C.irisDev + spread.iris,
+    };
+    debug.limits = lim;
+
+    if (Math.abs(debug.yawDev) > lim.yaw) {
+      side = true;
+      reason = "head turned";
+    }
+
+    if (debug.pitchDev > lim.pitchDown) {
+      down = true;
+      reason = "head down";
+    } else if (-debug.pitchDev > lim.pitchUp) {
+      side = true;
+      reason = "head up";
+    }
+
+    if (debug.eyeDownDev > lim.eyeDown) {
+      down = true;
+      reason = reason || "eyes down";
+    }
+
+    if (Math.abs(debug.irisDev) > lim.iris) {
+      side = true;
+      reason = reason || "eyes to the side";
+    }
+
+    // slowly follow posture changes while the candidate IS on screen
+    if (!side && !down) {
+      const a = C.adapt;
+      base.yaw += (yaw - base.yaw) * a;
+      base.pitch += (pitch - base.pitch) * a;
+      if (base.eyeDown !== null && eyeDown !== null) {
+        base.eyeDown += (eyeDown - base.eyeDown) * a;
       }
-
-      if (debug.pitchDev > C.pitchDownDev) {
-        down = true;
-        reason = "head down";
-      } else if (-debug.pitchDev > C.pitchUpDev) {
-        side = true;
-        reason = "head up";
-      }
-
-      if (debug.eyeDownDev > C.eyeDownDev) {
-        down = true;
-        reason = reason || "eyes down";
-      }
-
-      if (Math.abs(debug.irisDev) > C.irisDev) {
-        side = true;
-        reason = reason || "eyes to the side";
+      if (base.iris !== null && iris !== null) {
+        base.iris += (iris - base.iris) * a;
       }
     }
 
     return {
+      noFace: false,
       off: side || down,
       side,
       down,
       reason: reason || "on screen",
+    };
+  };
+
+  /** confirmed decision: a look-away must last before it counts */
+  const classify = (frame, t) => {
+    const raw = classifyRaw(frame);
+
+    if (raw.noFace) {
+      rawOffSince = null;
+      if (rawNoFaceSince === null) rawNoFaceSince = t;
+      const confirmed = t - rawNoFaceSince >= C.noFaceConfirmMs;
+      return { ...raw, off: confirmed, rawOff: true, confirmed };
+    }
+
+    rawNoFaceSince = null;
+
+    if (!raw.off) {
+      rawOffSince = null;
+      return { ...raw, rawOff: false, confirmed: false };
+    }
+
+    if (rawOffSince === null) rawOffSince = t;
+    const confirmed = t - rawOffSince >= C.offConfirmMs;
+
+    return {
+      ...raw,
+      off: confirmed,
+      side: confirmed && raw.side,
+      down: confirmed && raw.down,
+      rawOff: true,
+      confirmed,
     };
   };
 
@@ -370,7 +483,7 @@ export function createGazeTracker() {
       debug.answering = Boolean(answering);
       debug.phone = Boolean(frame.phone);
 
-      const decision = classify(frame);
+      const decision = classify(frame, t);
 
       debug.off = decision.off;
       debug.reason = decision.reason;
@@ -443,7 +556,10 @@ export function createGazeTracker() {
       }
 
       // ---- reading sweeps (eye moving along a line of text) ----
+      // reading sweeps only count while the eyes are away from the
+      // screen (reading the on-screen question is normal)
       if (
+        decision.rawOff &&
         !noFace &&
         !frame.closed &&
         typeof frame.irisX === "number"
@@ -480,6 +596,17 @@ export function createGazeTracker() {
       return [...questions.keys()]
         .map((n) => this.snapshot(n))
         .filter(Boolean);
+    },
+
+    /** change the detection level (low / medium / high) */
+    setLevel(next) {
+      level = normalizeGazeLevel(next);
+      debug.level = level;
+      applyLevel();
+    },
+
+    get level() {
+      return level;
     },
 
     get currentQuestion() {

@@ -58,7 +58,7 @@ export default function InterviewCard({ interview }) {
       border: "border-slate-200",
       text: "text-emerald-700",
  shadow: "shadow-md hover:shadow-md",
- button: "bg-slate-800 hover:bg-slate-700 ",
+ button: "bg-brand-600 hover:bg-brand-700 ",
       icon: IconCheckCircle,
       statusText: "Completed"
     },
@@ -66,7 +66,7 @@ export default function InterviewCard({ interview }) {
       border: "border-slate-200",
       text: "text-amber-700",
  shadow: "shadow-md hover:shadow-md",
- button: "bg-slate-800 hover:bg-slate-700 animate-pulse",
+ button: "bg-brand-600 hover:bg-brand-700 animate-pulse",
       icon: IconClock,
       statusText: "In Progress"
     },
@@ -74,7 +74,7 @@ export default function InterviewCard({ interview }) {
       border: "border-slate-200",
       text: "text-slate-700",
  shadow: "shadow-md hover:shadow-md",
- button: "bg-slate-800 hover:bg-slate-700 ",
+ button: "bg-brand-600 hover:bg-brand-700 ",
       icon: IconZap,
       statusText: "Not Started"
     }
@@ -88,13 +88,13 @@ export default function InterviewCard({ interview }) {
       ref={cardRef}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
-      className={`group relative overflow-hidden rounded-[2.5rem] border backdrop-blur-2xl transition-all duration-300 ease-out h-full flex flex-col
+      className={`group relative overflow-hidden rounded-2xl border backdrop-blur-2xl transition-all duration-300 ease-out h-full flex flex-col
  bg-slate-50 ${cfg.border} ${cfg.shadow}`}
       style={{ transformStyle: "preserve-3d" }}
     >
       <div className="relative z-10 p-8 flex flex-col flex-grow" style={{ transform: "translateZ(35px)" }}>
         <div className="flex items-start justify-between gap-4 mb-4">
-          <h3 className="text-2xl font-black leading-tight tracking-tight text-slate-900 drop-shadow-md line-clamp-2">
+          <h3 className="text-2xl font-bold leading-tight tracking-tight text-slate-900 drop-shadow-md line-clamp-2">
             {interview.title || interview.name}
           </h3>
           {!isInterviewer && (
@@ -117,7 +117,7 @@ export default function InterviewCard({ interview }) {
         {isInterviewer ? (
           <button
             onClick={() => navigate(`/interviews/${interview.id}/configuration`)}
-            className="mt-6 w-full flex items-center justify-center gap-2.5 px-6 py-4 bg-slate-800 hover:bg-slate-700 text-white rounded-2xl font-bold transition-all duration-300 active:scale-[0.98] shadow-xl"
+            className="mt-6 w-full flex items-center justify-center gap-2.5 px-6 py-4 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl font-bold transition-all duration-300 active:scale-[0.98] shadow-xl"
           >
             <IconBriefcase />
             Configure interview
@@ -142,7 +142,7 @@ export default function InterviewCard({ interview }) {
         )}
       </div>
 
-      <div className={`absolute -inset-px rounded-[2.5rem] opacity-0 group-hover:opacity-100 blur-2xl transition-opacity duration-700 pointer-events-none ${cfg.border}`}></div>
+      <div className={`absolute -inset-px rounded-2xl opacity-0 group-hover:opacity-100 blur-2xl transition-opacity duration-700 pointer-events-none ${cfg.border}`}></div>
     </div>
   );
 }
